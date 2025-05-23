@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: Grayskull
+
+server:
+  read-only:
+    enabled: false
+  error:
+    include-binding-errors: always
+    include-message: always
+
+grayskull:
+  crypto:
+    keys:
+        # These keys are encrypted using 74YlShtySBrQLeuhJD1w4bm+uYaR72tuicYHDjmelWE=
+      key1: Nm7EnPxqUQmGCtMX8Nhp5PzG3qaPXzSSsJcr6HKr83nBPBlAuqz0nVyHN2dx7/iwNOCLBc7KVrYtt2Aj
+      key2: nLM+ifBnwXyBKuNmWHz9q+NQnZ2uFfo/wTeBpVA6g0rD/yXTJGF3vTyllNH6IQkKIH+DqMKaAqpHmxNu
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
