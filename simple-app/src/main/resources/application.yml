@@ -12,13 +12,14 @@ server:
 grayskull:
   crypto:
     keys:
-        # These keys are encrypted using 74YlShtySBrQLeuhJD1w4bm+uYaR72tuicYHDjmelWE=
-      key1: Nm7EnPxqUQmGCtMX8Nhp5PzG3qaPXzSSsJcr6HKr83nBPBlAuqz0nVyHN2dx7/iwNOCLBc7KVrYtt2Aj
-      key2: nLM+ifBnwXyBKuNmWHz9q+NQnZ2uFfo/wTeBpVA6g0rD/yXTJGF3vTyllNH6IQkKIH+DqMKaAqpHmxNu
+      key1: wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4=
+      key2: LFptkQ/bTpTX4dCoGtZm2BcqMvoUTYJHTvyoF4t0X00=
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
-
+  observations:
+    annotations:
+      enabled: true

@@ -1,9 +1,10 @@
 ${AnsiStyle.BOLD}
-  ________                           __         .__  .__
- /  _____/___________  ___.__. _____|  | ____ __|  | |  |
-/   \  __\_  __ \__  \<   |  |/  ___/  |/ /  |  \  | |  |
-\    \_\  \  | \// __ \\___  |\___ \|    <|  |  /  |_|  |__
- \______  /__|  (____  / ____/____  >__|_ \____/|____/____/
-        \/           \/\/         \/     \/
+           ${AnsiStyle.NORMAL}   _____   ${AnsiStyle.BOLD}
+ _   |~  _ ${AnsiStyle.NORMAL}  /     \  ${AnsiStyle.BOLD}   ________                           __         .__  .__
+[_]--'--[_]${AnsiStyle.NORMAL} | () () | ${AnsiStyle.BOLD}  /  _____/___________  ___.__. _____|  | ____ __|  | |  |
+|'|""`""|'|${AnsiStyle.NORMAL}  \  ^  /  ${AnsiStyle.BOLD} /   \  __\_  __ \__  \<   |  |/  ___/  |/ /  |  \  | |  |
+| | /^\ | |${AnsiStyle.NORMAL}   |||||   ${AnsiStyle.BOLD} \    \_\  \  | \// __ \\___  |\___ \|    <|  |  /  |_|  |__
+|_|_|I|_|_|${AnsiStyle.NORMAL}   |||||   ${AnsiStyle.BOLD}  \______  /__|  (____  / ____/____  >__|_ \____/|____/____/
+           ${AnsiStyle.NORMAL}           ${AnsiStyle.BOLD}        \/           \/\/         \/     \/
 ${AnsiStyle.NORMAL}
 ${AnsiColor.GREEN}:: Running Spring Boot ${spring-boot.version} :: ${AnsiStyle.NORMAL}

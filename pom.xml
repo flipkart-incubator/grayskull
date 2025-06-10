@@ -3,7 +3,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.flipkart.security.grayskull</groupId>
+    <groupId>com.flipkart.grayskull</groupId>
     <artifactId>parent</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
@@ -24,7 +24,6 @@
         <module>server</module>
         <module>spi</module>
         <module>simple-app</module>
-        <module>simple-impl</module>
     </modules>
 
     <dependencyManagement>
@@ -53,18 +52,13 @@
             </dependency>
 
             <dependency>
-                <groupId>com.flipkart.security.grayskull</groupId>
+                <groupId>com.flipkart.grayskull</groupId>
                 <artifactId>spi</artifactId>
                 <version>${grayskull.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.flipkart.security.grayskull</groupId>
+                <groupId>com.flipkart.grayskull</groupId>
                 <artifactId>server</artifactId>
-                <version>${grayskull.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.flipkart.security.grayskull</groupId>
-                <artifactId>simple-impl</artifactId>
                 <version>${grayskull.version}</version>
             </dependency>
 

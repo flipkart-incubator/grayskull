@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>com.flipkart.security.grayskull</groupId>
+        <groupId>com.flipkart.grayskull</groupId>
         <artifactId>parent</artifactId>
         <version>0.0.1-SNAPSHOT</version>
     </parent>
@@ -19,16 +19,25 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.flipkart.security.grayskull</groupId>
+            <groupId>com.flipkart.grayskull</groupId>
             <artifactId>server</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.flipkart.security.grayskull</groupId>
-            <artifactId>simple-impl</artifactId>
         </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-jmx</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>dev.akkinoc.spring.boot</groupId>
+            <artifactId>logback-access-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback.access</groupId>
+            <artifactId>logback-access-tomcat</artifactId>
         </dependency>
 
         <dependency>
