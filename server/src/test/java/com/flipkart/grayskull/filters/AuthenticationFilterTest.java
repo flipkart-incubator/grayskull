@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.filters;
 
-import com.flipkart.grayskull.spi.AuthenticationProvider;
+import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,7 +20,7 @@ import static org.mockito.Mockito.*;
 
 class AuthenticationFilterTest {
 
-    private final AuthenticationProvider authenticationProvider = mock(AuthenticationProvider.class);
+    private final GrayskullAuthenticationProvider authenticationProvider = mock(GrayskullAuthenticationProvider.class);
 
     private final AuthenticationEntryPoint authenticationEntryPoint = mock(AuthenticationEntryPoint.class);
 

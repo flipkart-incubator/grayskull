@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.configuration;
 
-import com.flipkart.grayskull.spi.AuthenticationProvider;
+import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -12,7 +12,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfiguration {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, GrayskullAuthenticationProvider authenticationProvider) throws Exception {
 
         http
                 .sessionManagement(session -> session

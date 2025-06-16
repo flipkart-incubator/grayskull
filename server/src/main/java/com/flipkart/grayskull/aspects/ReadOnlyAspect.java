@@ -5,8 +5,9 @@ import io.micrometer.common.lang.Nullable;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.NotAcceptableStatusException;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * An aspect that checks if the application is read only and disallows API calls that are not GET or annotated ReadOnly.
@@ -15,10 +16,10 @@ import org.springframework.web.server.NotAcceptableStatusException;
 @Component
 public class ReadOnlyAspect {
 
-    private final boolean readOnly;
+    private final ReadOnlyAppProperties readOnlyAppProperties;
 
     public ReadOnlyAspect(ReadOnlyAppProperties readOnlyAppProperties) {
-        this.readOnly = readOnlyAppProperties.isEnabled();
+        this.readOnlyAppProperties = readOnlyAppProperties;
     }
 
     /**
@@ -26,14 +27,14 @@ public class ReadOnlyAspect {
      */
     @Around("@within(org.springframework.web.bind.annotation.RestController)" +
             " && !@annotation(org.springframework.web.bind.annotation.GetMapping)" +
-            " && !@annotation(com.flipkart.grayskull.spi.annotations.ReadOnly)" +
+            " && !@annotation(com.flipkart.grayskull.aspects.annotations.BypassReadOnly)" +
             " && execution(* *(..))")
     @Nullable
     public Object enforceReadOnlyMode(ProceedingJoinPoint pjp) throws Throwable {
-        if (!readOnly) {
+        if (!readOnlyAppProperties.isEnabled()) {
             return pjp.proceed();
         } else {
-            throw new NotAcceptableStatusException("The application server is read only. The specified operation is not allowed.");
+            throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "The application server is read only. The specified operation is not allowed.");
         }
     }
 }

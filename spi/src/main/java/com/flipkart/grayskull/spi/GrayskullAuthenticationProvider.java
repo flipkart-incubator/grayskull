@@ -6,11 +6,13 @@ import org.springframework.security.core.Authentication;
 
 /**
  * Interface for an authentication provider in the Grayskull security framework.
- * If there are multiple authentication providers, Grayskull will pick the bean with the lowest priority.
+ * If there are multiple authentication providers, Grayskull will pick the bean with {@code @Primary} annotation
  */
-public interface AuthenticationProvider {
+public interface GrayskullAuthenticationProvider {
 
-    void initialize(AuthenticationManager authenticationManager);
+    default void initialize(AuthenticationManager authenticationManager) {
+        // no-op; override if you need the manager
+    }
 
     /**
      * Authenticate the request.

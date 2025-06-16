@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.spimpl.authn;
 
-import com.flipkart.grayskull.spi.AuthenticationProvider;
+import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.web.authentication.AuthenticationConverter;
@@ -11,7 +11,7 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationCo
  * A simple implementation of the AuthenticationProvider interface that uses Basic Authentication.
  * The actual authentication is done by the AuthenticationManager so that spring's UserDetailsService can be used for authentication.
  */
-public class SimpleAuthenticationProvider implements AuthenticationProvider {
+public class SimpleAuthenticationProvider implements GrayskullAuthenticationProvider {
 
     private final AuthenticationConverter authenticationConverter = new BasicAuthenticationConverter();
     private AuthenticationManager authenticationManager;

@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.spimpl.authn;
 
-import com.flipkart.grayskull.spi.AuthenticationProvider;
+import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springdoc.core.customizers.OpenApiCustomizer;
@@ -8,27 +8,24 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 
 import static io.swagger.v3.oas.models.security.SecurityScheme.In.HEADER;
 import static io.swagger.v3.oas.models.security.SecurityScheme.Type.HTTP;
 
 @Configuration
-@ConditionalOnMissingBean(AuthenticationProvider.class)
+@ConditionalOnMissingBean(GrayskullAuthenticationProvider.class)
 public class AuthenticationConfiguration {
 
     @Bean
-    public AuthenticationProvider authenticationProvider() {
+    public GrayskullAuthenticationProvider authenticationProvider() {
         return new SimpleAuthenticationProvider();
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
+        return new DummyPasswordEncoder();
     }
 
     @Bean
@@ -40,20 +37,29 @@ public class AuthenticationConfiguration {
     }
 
     /**
-     * A default implementation of the UserDetailsService interface that uses InMemoryUserDetailsManager.
+     * A default implementation of the UserDetailsService interface that returns true for any username and password combination
      * Spring's AuthenticationManager will use this UserDetailsService to authenticate users which will be used by the SimpleAuthenticationProvider.
      */
     @Bean
     public UserDetailsService userDetailsService() {
-        UserDetails user = User.withUsername("user1")
-                // password: "password"
-                .password("$argon2id$v=19$m=16384,t=2,p=1$XgbDosOMGMKqwpEzc8OXwq3ChsKZdsO0w4o$QER2I+HnPAxaX8SOt9/WW3ZvAqsMXwK7X8+CHYkkM9A")
+        return username -> User.withUsername(username)
                 .roles("USER")
+                .password("")
                 .build();
-        UserDetails admin = User.withUsername("user2")
-                .password("$argon2id$v=19$m=16384,t=2,p=1$XgbDosOMGMKqwpEzc8OXwq3ChsKZdsO0w4o$QER2I+HnPAxaX8SOt9/WW3ZvAqsMXwK7X8+CHYkkM9A")
-                .roles("USER")
-                .build();
-        return new InMemoryUserDetailsManager(user, admin);
+    }
+
+    /**
+     * A password encoder which treats every password as valid password
+     */
+    public static class DummyPasswordEncoder implements PasswordEncoder {
+        @Override
+        public String encode(CharSequence rawPassword) {
+            return rawPassword.toString();
+        }
+
+        @Override
+        public boolean matches(CharSequence rawPassword, String encodedPassword) {
+            return true;
+        }
     }
 }

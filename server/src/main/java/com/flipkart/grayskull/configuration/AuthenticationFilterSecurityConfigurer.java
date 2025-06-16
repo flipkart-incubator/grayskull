@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.configuration;
 
 import com.flipkart.grayskull.filters.AuthenticationFilter;
-import com.flipkart.grayskull.spi.AuthenticationProvider;
+import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -14,7 +14,7 @@ import org.springframework.security.web.context.SecurityContextHolderFilter;
 @AllArgsConstructor
 public class AuthenticationFilterSecurityConfigurer implements SecurityConfigurer<DefaultSecurityFilterChain, HttpSecurity> {
 
-    private final AuthenticationProvider authenticationProvider;
+    private final GrayskullAuthenticationProvider authenticationProvider;
 
     @Override
     public void init(HttpSecurity builder) {

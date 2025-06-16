@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.filters;
 
-import com.flipkart.grayskull.spi.AuthenticationProvider;
+import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,7 +20,7 @@ import java.io.IOException;
 @AllArgsConstructor
 public class AuthenticationFilter extends OncePerRequestFilter {
 
-    private final AuthenticationProvider authenticationProvider;
+    private final GrayskullAuthenticationProvider authenticationProvider;
     private final AuthenticationEntryPoint authenticationEntryPoint;
 
     @Override

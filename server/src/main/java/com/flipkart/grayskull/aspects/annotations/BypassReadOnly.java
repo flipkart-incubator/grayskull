@@ -1,19 +1,17 @@
-package com.flipkart.grayskull.spi.annotations;
+package com.flipkart.grayskull.aspects.annotations;
 
 import java.lang.annotation.*;
 
 /**
- * Annotation to mark rest controller methods as read-only.
- * This can be used to indicate that the API does not modify any state
- * and is safe to call in a read-only context.
- *
+ * Annotation that allows controller methods to execute write operations even when the system is in read-only mode.
+ *<br/>
  * Example usage:
  * <pre>
  * {@code
  * @RestController
  * public class MyController {
  *     @PostMapping("/data")
- *     @ReadOnly
+ *     @BypassReadOnly
  *     public String createData() {
  *         // method implementation
  *     }
@@ -26,5 +24,5 @@ import java.lang.annotation.*;
 @Inherited
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface ReadOnly {
+public @interface BypassReadOnly {
 }
