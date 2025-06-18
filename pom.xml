@@ -3,7 +3,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.flipkart.security.grayskull</groupId>
+    <groupId>com.flipkart.grayskull</groupId>
     <artifactId>parent</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
@@ -14,7 +14,66 @@
         <java.version>21</java.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
+        <logback-access-starter.version>4.5.2</logback-access-starter.version>
+        <logback-access-tomcat.version>2.0.6</logback-access-tomcat.version>
+        <swagger.openapi.version>2.8.8</swagger.openapi.version>
+        <grayskull.version>0.0.1-SNAPSHOT</grayskull.version>
+        <spring-cloud.version>2025.0.0</spring-cloud.version>
+        <spring-boot.version>3.5.0</spring-boot.version>
     </properties>
+
+    <modules>
+        <module>server</module>
+        <module>spi</module>
+        <module>simple-app</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>dev.akkinoc.spring.boot</groupId>
+                <artifactId>logback-access-spring-boot-starter</artifactId>
+                <version>${logback-access-starter.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback.access</groupId>
+                <artifactId>logback-access-tomcat</artifactId>
+                <version>${logback-access-tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${swagger.openapi.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.flipkart.grayskull</groupId>
+                <artifactId>spi</artifactId>
+                <version>${grayskull.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.flipkart.grayskull</groupId>
+                <artifactId>server</artifactId>
+                <version>${grayskull.version}</version>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
     <build>
         <plugins>
             <plugin>
@@ -27,7 +86,31 @@
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                         </path>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                        </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.3</version>
+                <configuration>
+                    <argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine>
                 </configuration>
             </plugin>
             <plugin>
