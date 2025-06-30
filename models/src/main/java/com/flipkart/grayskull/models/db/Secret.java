@@ -1,0 +1,114 @@
+package com.flipkart.grayskull.models.db;
+
+import com.flipkart.grayskull.models.enums.SecretState;
+
+import java.time.Instant;
+import java.util.Map;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
+import org.springframework.data.annotation.Id;
+
+/**
+ * Represents a secret managed by the Grayskull system.
+ * A secret is a logical entity that holds sensitive information, which can have multiple versions ({@link SecretData}).
+ */
+@Getter
+@Setter
+@ToString
+@EqualsAndHashCode
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Secret {
+
+    /**
+     * The unique identifier for the secret. This is the primary key.
+     */
+    @Id
+    private String id;
+
+    /**
+     * The identifier of the {@link Project} this secret is associated with in the resource hierarchy.
+     */
+    private String projectId;
+
+    /**
+     * The user-defined name of the secret (e.g., "database_password", "api_key").
+     * This name should be unique within its associated {@code projectId}.
+     */
+    private String name;
+
+    /**
+     * System-defined labels for categorization and filtering of this secret.
+     * Examples: "environment: production", "data_sensitivity: high", "owner_team: security_platform".
+     */
+    private Map<String, String> systemLabels;
+
+    /**
+     * The version number of the currently active {@link SecretData} associated with this secret.
+     */
+    private Integer currentDataVersion;
+
+    /**
+     * Timestamp of when the secret's {@link SecretData} was last successfully rotated.
+     * Can be null if the secret has never been rotated.
+     */
+    private Instant lastRotated;
+
+    /**
+     * The current lifecycle state of the secret (e.g., "ACTIVE", "INACTIVE", "PENDING_DELETION").
+     */
+    private SecretState state;
+
+    /**
+     * The name of the {@link SecretProviderConfig} responsible for managing this secret (e.g., "DBCREDS").
+     * If null or empty, Grayskull manages the secret directly.
+     */
+    private String provider;
+
+    /**
+     * Metadata specific to the provider used for this secret.
+     * The structure of this map depends on the {@code provider}.
+     * Examples: {"db_instance_id": "prod-db-123"} for a database credential provider.
+     */
+    private Map<String, Object> providerMeta;
+
+    /**
+     * The version of this secret metadata entity itself.
+     * This is incremented when fields like {@code name}, {@code systemLabels} are modified,
+     * distinguishing it from {@code currentDataVersion} which tracks changes to the secret's value.
+     */
+    private Integer metadataVersion;
+
+    /**
+     * The timestamp when this secret was created.
+     */
+    private Instant creationTime;
+
+    /**
+     * The timestamp when this secret was last updated.
+     */
+    private Instant updatedTime;
+
+    /**
+     * The identifier of the user or system principal that created this secret.
+     */
+    private String createdBy;
+
+    /**
+     * The identifier of the user or system principal that last updated this secret.
+     */
+    private String updatedBy;
+
+    /**
+     * The latest (current) {@link SecretData} associated with this secret.
+     * This field might not always be populated depending on the query to avoid fetching sensitive data unnecessarily.
+     */
+    private SecretData data;
+
+} 
