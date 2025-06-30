@@ -1,0 +1,9 @@
+spring:
+  data:
+    mongodb:
+      database: grayskull-test
+      uri: mongodb://admin:password@host.docker.internal:37017/grayskull-test?authSource=admin
+grayskull:
+  crypto:
+    keys:
+      test-key: "MfDeylVH3ZmvnrK+XJv259fzjFB55+9yZaUr1OYvNVE=" 

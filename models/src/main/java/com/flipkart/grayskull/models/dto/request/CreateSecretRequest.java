@@ -27,7 +27,7 @@ public class CreateSecretRequest {
     /**
      * The name of the provider responsible for managing this secret.
      */
-    @NotBlank
+    @NotNull
     private SecretProvider provider;
 
     /**

@@ -1,6 +1,13 @@
 spring:
   application:
     name: Grayskull
+  data:
+    mongodb:
+      database: grayskull
+      uri: mongodb://admin:password@host.docker.internal:37017/admin
+      maxConnectionLifeTime: 60 # in minutes
+      maxConnectionIdleTime: 10 # in minutes
+      maxConnecting: 100
 
 server:
   read-only:
@@ -23,3 +30,11 @@ management:
   observations:
     annotations:
       enabled: true
+
+swagger:
+  ui:
+    path: /swagger-ui.html
+    enabled: true
+    version: 1.0.0
+    title: Grayskull API
+    description: API for managing secrets in Grayskull
