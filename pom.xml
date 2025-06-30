@@ -26,6 +26,7 @@
         <module>server</module>
         <module>spi</module>
         <module>simple-app</module>
+        <module>models</module>
     </modules>
 
     <dependencyManagement>
