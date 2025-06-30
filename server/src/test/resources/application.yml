@@ -1,0 +1,25 @@
+grayskull:
+  authorization:
+    rules:
+      - user: admin
+        project: "*"
+        actions:
+          - "*"
+      - user: user1
+        project: "*"
+        actions:
+          - "*"
+      - user: editor
+        project: "test-project"
+        actions:
+          - "CREATE_SECRET"
+          - "READ_SECRET_METADATA"
+          - "READ_SECRET_VALUE"
+          - "ADD_SECRET_VERSION"
+          - "DELETE_SECRET"
+          - "LIST_SECRETS"
+      - user: viewer
+        project: "test-project"
+        actions:
+          - "LIST_SECRETS"
+          - "READ_SECRET_METADATA" 

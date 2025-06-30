@@ -16,7 +16,7 @@ import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
 /**
@@ -36,9 +36,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @AutoConfigureMockMvc
 public abstract class BaseIntegrationTest {
 
-    protected static final String USER = "user1";
-    protected static final String PASSWORD = "password";
-
     @Container
     static MongoDBContainer mongoDBContainer = new MongoDBContainer("mongo:latest");
 
@@ -57,50 +54,50 @@ public abstract class BaseIntegrationTest {
 
     // region Helper Methods
 
-    protected ResultActions performCreateSecret(String projectId, String secretName, String secretValue) throws Exception {
+    protected ResultActions performCreateSecret(String projectId, String secretName, String secretValue, String username) throws Exception {
         CreateSecretRequest createRequest = buildCreateSecretRequest(secretName, secretValue);
         return mockMvc.perform(post("/v1/project/{projectId}/secrets", projectId)
-                .with(httpBasic(USER, PASSWORD))
+                .with(user(username))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)));
     }
 
-    protected ResultActions performReadSecretValue(String projectId, String secretName) throws Exception {
+    protected ResultActions performReadSecretValue(String projectId, String secretName, String username) throws Exception {
         return mockMvc.perform(get("/v1/project/{projectId}/secrets/{secretName}/data", projectId, secretName)
-                .with(httpBasic(USER, PASSWORD)));
+                .with(user(username)));
     }
 
-    protected ResultActions performReadSecretMetadata(String projectId, String secretName) throws Exception {
+    protected ResultActions performReadSecretMetadata(String projectId, String secretName, String username) throws Exception {
         return mockMvc.perform(get("/v1/project/{projectId}/secrets/{secretName}", projectId, secretName)
-                .with(httpBasic(USER, PASSWORD)));
+                .with(user(username)));
     }
 
-    protected ResultActions performListSecrets(String projectId, String... queryParams) throws Exception {
+    protected ResultActions performListSecrets(String projectId, String username, String... queryParams) throws Exception {
         String url = "/v1/project/{projectId}/secrets";
         if (queryParams.length > 0) {
             url += "?" + String.join("&", queryParams);
         }
         return mockMvc.perform(get(url, projectId)
-                .with(httpBasic(USER, PASSWORD)));
+                .with(user(username)));
     }
 
-    protected ResultActions performUpgradeSecret(String projectId, String secretName, String newSecretValue) throws Exception {
+    protected ResultActions performUpgradeSecret(String projectId, String secretName, String newSecretValue, String username) throws Exception {
         UpgradeSecretDataRequest upgradeRequest = new UpgradeSecretDataRequest();
         upgradeRequest.setPrivatePart(newSecretValue);
         return mockMvc.perform(post("/v1/project/{projectId}/secrets/{secretName}/data", projectId, secretName)
-                .with(httpBasic(USER, PASSWORD))
+                .with(user(username))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(upgradeRequest)));
     }
 
-    protected ResultActions performDeleteSecret(String projectId, String secretName) throws Exception {
+    protected ResultActions performDeleteSecret(String projectId, String secretName, String username) throws Exception {
         return mockMvc.perform(delete("/v1/project/{projectId}/secrets/{secretName}", projectId, secretName)
-                .with(httpBasic(USER, PASSWORD)));
+                .with(user(username)));
     }
 
-    protected ResultActions performGetSecretByVersion(String projectId, String secretName, int version) throws Exception {
-        return mockMvc.perform(get("/v1/admin/project/{projectId}/secrets/{secretName}/data/{version}", projectId, secretName, version)
-                .with(httpBasic(USER, PASSWORD)));
+    protected ResultActions performGetSecretByVersion(String projectId, String secretName, int version, String username) throws Exception {
+        return mockMvc.perform(get("/v1/admin/project/{projectId}/secrets/{secretName}/versions/{version}", projectId, secretName, version)
+                .with(user(username)));
     }
 
     private CreateSecretRequest buildCreateSecretRequest(String name, String value) {
