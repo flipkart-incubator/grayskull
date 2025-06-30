@@ -5,6 +5,7 @@ import com.flipkart.grayskull.models.db.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
+import com.flipkart.grayskull.models.enums.AuditAction;
 import com.flipkart.grayskull.models.exceptions.DuplicateSecretException;
 import com.flipkart.grayskull.models.exceptions.InvalidProjectConfigurationException;
 import com.flipkart.grayskull.models.exceptions.SecretNotFoundException;
@@ -25,9 +26,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.flipkart.grayskull.audit.Auditable;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional(readOnly = true)
 public class SecretServiceImpl implements SecretService {
 
     private static final String SYSTEM_USER = "system";
@@ -66,6 +70,7 @@ public class SecretServiceImpl implements SecretService {
      */
     @Override
     @Transactional
+    @Auditable(action = AuditAction.CREATE_SECRET)
     public CreateSecretResponse createSecret(String projectId, CreateSecretRequest request) {
         secretRepository.findByProjectIdAndName(projectId, request.getName())
                 .ifPresent(s -> {
@@ -129,6 +134,7 @@ public class SecretServiceImpl implements SecretService {
      */
     @Override
     @Transactional
+    @Auditable(action = AuditAction.UPGRADE_SECRET_DATA)
     public UpgradeSecretDataResponse upgradeSecretData(String projectId, String secretName, UpgradeSecretDataRequest request) {
         Secret secret = findSecretOrThrow(projectId, secretName);
 
@@ -157,6 +163,7 @@ public class SecretServiceImpl implements SecretService {
      */
     @Override
     @Transactional
+    @Auditable(action = AuditAction.DELETE_SECRET)
     public void deleteSecret(String projectId, String secretName) {
         Secret secret = findSecretOrThrow(projectId, secretName);
         secretRepository.delete(secret);
