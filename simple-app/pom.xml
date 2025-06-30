@@ -34,6 +34,12 @@
         <dependency>
             <groupId>dev.akkinoc.spring.boot</groupId>
             <artifactId>logback-access-spring-boot-starter</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback.access</groupId>
