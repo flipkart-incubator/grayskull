@@ -1,5 +1,8 @@
 package com.flipkart.grayskull.audit;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
@@ -38,6 +41,7 @@ public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
     private static final String DEFAULT_USER = "system";
+    private static final ObjectMapper objectMapper = SanitizingObjectMapper.create();
 
     /**
      * Defines the pointcut for all methods annotated with {@link Auditable}.
@@ -111,6 +115,8 @@ public class AuditAspect {
 
     /**
      * Builds a metadata map containing all relevant information about the audited event.
+     * This method serializes the method arguments and results into a JSON format,
+     * masking any fields that are annotated with {@link com.flipkart.grayskull.models.audit.AuditMask}.
      *
      * @param arguments the arguments passed to the intercepted method.
      * @param result    the result returned by the method.
@@ -121,7 +127,11 @@ public class AuditAspect {
         Map<String, String> metadata = new HashMap<>();
         arguments.forEach((key, value) -> {
             if (value != null) {
-                metadata.put(key, value.toString());
+                try {
+                    metadata.put(key, objectMapper.writeValueAsString(value));
+                } catch (JsonProcessingException e) {
+                    metadata.put(key, "Error serializing object: " + e.getMessage());
+                }
             }
         });
 
@@ -130,7 +140,11 @@ public class AuditAspect {
             metadata.put("errorType", exception.getClass().getName());
         }
         if (result != null) {
-            metadata.put("result", result.toString());
+            try {
+                metadata.put("result", objectMapper.writeValueAsString(result));
+            } catch (JsonProcessingException e) {
+                metadata.put("result", "Error serializing object: " + e.getMessage());
+            }
         }
         return metadata;
     }

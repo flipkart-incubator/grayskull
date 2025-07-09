@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.util.Map;
 
+import com.flipkart.grayskull.models.audit.AuditMask;
 import com.flipkart.grayskull.models.enums.SecretProvider;
 
 import jakarta.validation.Valid;
@@ -54,6 +55,7 @@ public class CreateSecretRequest {
         /**
          * The private, sensitive part of the secret.
          */
+        @AuditMask
         @NotBlank
         String privatePart;
     }
