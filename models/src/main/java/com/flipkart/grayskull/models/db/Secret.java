@@ -11,7 +11,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
 
 /**
  * Represents a secret managed by the Grayskull system.
@@ -24,7 +28,7 @@ import org.springframework.data.annotation.Id;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Secret {
+public class Secret implements Persistable<String> {
 
     /**
      * The unique identifier for the secret. This is the primary key.
@@ -88,11 +92,13 @@ public class Secret {
     /**
      * The timestamp when this secret was created.
      */
+    @CreatedDate
     private Instant creationTime;
 
     /**
      * The timestamp when this secret was last updated.
      */
+    @LastModifiedDate
     private Instant updatedTime;
 
     /**
@@ -111,4 +117,21 @@ public class Secret {
      */
     private SecretData data;
 
+    /**
+     * Overrides Spring Data's default new-entity detection.
+     * <p>
+     * By default, Spring Data checks if the entity's {@code @Id} field is null to determine
+     * if it's a new entity. However, since we assign the ID manually before the first save,
+     * this default mechanism would incorrectly treat all new secrets as existing ones.
+     * <p>
+     * This implementation checks if {@code creationTime} is null. This field is only populated
+     * by the database on the initial insert, making it a reliable indicator of a new entity.
+     *
+     * @return {@code true} if the entity is new (creationTime is null), {@code false} otherwise.
+     */
+    @Override
+    @Transient
+    public boolean isNew() {
+        return creationTime == null;
+    }
 } 

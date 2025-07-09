@@ -20,7 +20,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -96,7 +95,7 @@ public class AuditAspect {
         Map<String, String> metadata = buildMetadata(arguments, result, exception);
 
         AuditEntry entry = new AuditEntry(null, projectId, secretName, secretVersion,
-                auditable.action().name(), status.name(), getUserId(), Instant.now(), metadata);
+                auditable.action().name(), status.name(), getUserId(), null, metadata);
 
         auditEntryRepository.save(entry);
     }

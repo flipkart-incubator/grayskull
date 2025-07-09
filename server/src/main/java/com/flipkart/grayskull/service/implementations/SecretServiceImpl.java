@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -145,7 +144,6 @@ public class SecretServiceImpl implements SecretService {
         secretDataRepository.save(secretData);
 
         secret.setCurrentDataVersion(newVersion);
-        secret.setUpdatedTime(Instant.now());
         secret.setUpdatedBy(SYSTEM_USER);
         secretRepository.save(secret);
 

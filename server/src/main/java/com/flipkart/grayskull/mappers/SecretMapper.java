@@ -35,8 +35,6 @@ public interface SecretMapper {
     @Mapping(target = "state", expression = "java(SecretState.ACTIVE)")
     @Mapping(target = "metadataVersion", constant = "1")
     @Mapping(target = "currentDataVersion", constant = "1")
-    @Mapping(target = "creationTime", expression = "java(Instant.now())")
-    @Mapping(target = "updatedTime", expression = "java(Instant.now())")
     @Mapping(target = "createdBy", source = "systemUser")
     @Mapping(target = "updatedBy", source = "systemUser")
     Secret requestToSecret(CreateSecretRequest request, String projectId, String systemUser);
