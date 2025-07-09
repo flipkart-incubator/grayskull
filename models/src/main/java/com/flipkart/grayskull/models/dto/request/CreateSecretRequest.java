@@ -47,12 +47,14 @@ public class CreateSecretRequest {
     @AllArgsConstructor
     public static class SecretDataPayload {
         /**
-         * The public part of the secret, if any.
+         * The public part of the secret.
          */
+        @NotBlank
         String publicPart;
         /**
          * The private, sensitive part of the secret.
          */
+        @NotBlank
         String privatePart;
     }
 } 

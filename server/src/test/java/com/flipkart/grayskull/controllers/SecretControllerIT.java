@@ -3,7 +3,10 @@ package com.flipkart.grayskull.controllers;
 import com.flipkart.grayskull.BaseIntegrationTest;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
 import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,13 +39,15 @@ class SecretControllerIT extends BaseIntegrationTest {
             // Act & Assert: Create the secret
             performCreateSecret(projectId, secretName, secretValue, ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.name").value(secretName))
-                    .andExpect(jsonPath("$.currentDataVersion").value(1));
+                    .andExpect(jsonPath("$.data.name").value(secretName))
+                    .andExpect(jsonPath("$.data.currentDataVersion").value(1))
+                    .andExpect(jsonPath("$.message").value("Successfully created secret."));
 
             // Act & Assert: Read the secret's value
             performReadSecretValue(projectId, secretName, ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.privatePart").value(secretValue));
+                    .andExpect(jsonPath("$.data.privatePart").value(secretValue))
+                    .andExpect(jsonPath("$.message").value("Successfully read secret value."));
         }
 
         @Test
@@ -55,12 +60,13 @@ class SecretControllerIT extends BaseIntegrationTest {
             // Act & Assert: Upgrade the secret
             performUpgradeSecret(projectId, secretName, upgradedValue, ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.dataVersion").value(2));
+                    .andExpect(jsonPath("$.data.dataVersion").value(2))
+                    .andExpect(jsonPath("$.message").value("Successfully upgraded secret data."));
 
             // Act & Assert: Verify the new value is active
             performReadSecretValue(projectId, secretName, ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.privatePart").value(upgradedValue));
+                    .andExpect(jsonPath("$.data.privatePart").value(upgradedValue));
         }
 
         @Test
@@ -72,13 +78,15 @@ class SecretControllerIT extends BaseIntegrationTest {
             // Act & Assert: List secrets
             performListSecrets(projectId, ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.secrets", hasSize(2)));
+                    .andExpect(jsonPath("$.data.secrets", hasSize(2)))
+                    .andExpect(jsonPath("$.message").value("Successfully listed secrets."));
 
             // Act & Assert: Read metadata of one secret
             performReadSecretMetadata(projectId, "list-secret-1", ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.name").value("list-secret-1"))
-                    .andExpect(jsonPath("$.metadataVersion").exists());
+                    .andExpect(jsonPath("$.data.name").value("list-secret-1"))
+                    .andExpect(jsonPath("$.data.metadataVersion").exists())
+                    .andExpect(jsonPath("$.message").value("Successfully read secret metadata."));
         }
 
         @Test
@@ -89,7 +97,8 @@ class SecretControllerIT extends BaseIntegrationTest {
 
             // Act & Assert: Delete the secret
             performDeleteSecret(projectId, secretName, ADMIN_USER)
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("Successfully deleted secret."));
 
             // Act & Assert: Verify it's gone
             performReadSecretMetadata(projectId, secretName, ADMIN_USER)
@@ -106,18 +115,29 @@ class SecretControllerIT extends BaseIntegrationTest {
             // Act & Assert: Test limit
             performListSecrets(projectId, ADMIN_USER, "limit=2")
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.secrets", hasSize(2)));
+                    .andExpect(jsonPath("$.data.secrets", hasSize(2)));
 
-            // Act & Assert: Test offset (Spring PageRequest uses page number, not item offset)
+            // Act & Assert: Test offset
             performListSecrets(projectId, ADMIN_USER, "limit=2", "offset=1")
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.secrets", hasSize(1)))
-                    .andExpect(jsonPath("$.secrets[0].name").value("secret-3"));
+                    .andExpect(jsonPath("$.data.secrets", hasSize(1)))
+                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-3"));
 
             // Act & Assert: Test empty project
             performListSecrets("empty-project", ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.secrets", hasSize(0)));
+                    .andExpect(jsonPath("$.data.secrets", hasSize(0)));
+        }
+
+        @Test
+        void shouldReturnEmptyListForOutOfBoundsOffset() throws Exception {
+            final String projectId = "project-pagination-offset";
+            performCreateSecret(projectId, "secret-1", "v1", ADMIN_USER);
+
+            // Act & Assert: Query with an offset equal to the total number of items
+            performListSecrets(projectId, ADMIN_USER, "offset=1")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.secrets", hasSize(0)));
         }
     }
 
@@ -138,9 +158,17 @@ class SecretControllerIT extends BaseIntegrationTest {
             final String projectId = "project-not-found";
             final String secretName = "non-existent-secret";
 
-            performReadSecretMetadata(projectId, secretName, ADMIN_USER).andExpect(status().isNotFound());
-            performReadSecretValue(projectId, secretName, ADMIN_USER).andExpect(status().isNotFound());
-            performUpgradeSecret(projectId, secretName, "some-value", ADMIN_USER).andExpect(status().isNotFound());
+            performReadSecretMetadata(projectId, secretName, ADMIN_USER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+
+            performReadSecretValue(projectId, secretName, ADMIN_USER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+
+            performUpgradeSecret(projectId, secretName, "some-value", ADMIN_USER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
         }
 
         @Test
@@ -151,22 +179,38 @@ class SecretControllerIT extends BaseIntegrationTest {
 
             // Act & Assert: Try to create it again
             performCreateSecret(projectId, secretName, "value2", ADMIN_USER)
-                    .andExpect(status().isConflict());
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("CONFLICT"));
         }
 
         @Test
         void shouldReturnBadRequestForInvalidInput() throws Exception {
             // Act & Assert: Test with a blank projectId
             performListSecrets(" ", ADMIN_USER)
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
 
             // Act & Assert: Test with invalid limit
             performListSecrets("some-project", ADMIN_USER, "limit=101")
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
 
             // Act & Assert: Test create with blank name
             performCreateSecret("some-project", " ", "value", ADMIN_USER)
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        }
+
+        @Test
+        void shouldReturnBadRequestForInvalidUpgradeRequest() throws Exception {
+            final String projectId = "project-invalid-upgrade";
+            final String secretName = "secret-to-upgrade";
+            performCreateSecret(projectId, secretName, "initial-value", ADMIN_USER);
+
+            // Act & Assert: Attempt to upgrade with a blank privatePart
+            performUpgradeSecret(projectId, secretName, " ", ADMIN_USER)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         }
     }
 
@@ -183,10 +227,14 @@ class SecretControllerIT extends BaseIntegrationTest {
             performReadSecretMetadata(TEST_PROJECT, secretName, VIEWER_USER).andExpect(status().isOk());
 
             // Forbidden actions
-            performReadSecretValue(TEST_PROJECT, secretName, VIEWER_USER).andExpect(status().isForbidden());
-            performUpgradeSecret(TEST_PROJECT, secretName, "new-value", VIEWER_USER).andExpect(status().isForbidden());
-            performCreateSecret(TEST_PROJECT, "new-secret", "value", VIEWER_USER).andExpect(status().isForbidden());
-            performDeleteSecret(TEST_PROJECT, secretName, VIEWER_USER).andExpect(status().isForbidden());
+            performReadSecretValue(TEST_PROJECT, secretName, VIEWER_USER).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            performUpgradeSecret(TEST_PROJECT, secretName, "new-value", VIEWER_USER).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            performCreateSecret(TEST_PROJECT, "new-secret", "value", VIEWER_USER).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            performDeleteSecret(TEST_PROJECT, secretName, VIEWER_USER).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         }
 
         @Test
@@ -199,7 +247,7 @@ class SecretControllerIT extends BaseIntegrationTest {
             performReadSecretMetadata(TEST_PROJECT, secretName, EDITOR_USER).andExpect(status().isOk());
             performReadSecretValue(TEST_PROJECT, secretName, EDITOR_USER).andExpect(status().isOk());
             performUpgradeSecret(TEST_PROJECT, secretName, "new-value", EDITOR_USER).andExpect(status().isOk());
-            performDeleteSecret(TEST_PROJECT, secretName, EDITOR_USER).andExpect(status().isNoContent());
+            performDeleteSecret(TEST_PROJECT, secretName, EDITOR_USER).andExpect(status().isOk());
         }
 
         @Test
@@ -208,9 +256,92 @@ class SecretControllerIT extends BaseIntegrationTest {
             performCreateSecret(OTHER_PROJECT, secretName, "value", ADMIN_USER);
 
             // Forbidden actions for editor/viewer on a project they don't have access to
-            performListSecrets(OTHER_PROJECT, EDITOR_USER).andExpect(status().isForbidden());
-            performListSecrets(OTHER_PROJECT, VIEWER_USER).andExpect(status().isForbidden());
-            performReadSecretMetadata(OTHER_PROJECT, secretName, VIEWER_USER).andExpect(status().isForbidden());
+            performListSecrets(OTHER_PROJECT, EDITOR_USER).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            performListSecrets(OTHER_PROJECT, VIEWER_USER).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            performReadSecretMetadata(OTHER_PROJECT, secretName, VIEWER_USER).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        }
+    }
+
+    @Nested
+    class AdminActionsTests {
+        @Test
+        void shouldGetSpecificSecretVersion() throws Exception {
+            final String projectId = "project-admin-version";
+            final String secretName = "versioned-secret";
+            performCreateSecret(projectId, secretName, "value-v1", ADMIN_USER);
+            performUpgradeSecret(projectId, secretName, "value-v2", ADMIN_USER);
+
+            // Act & Assert: Use the admin endpoint to get the first version
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1", projectId, secretName))
+                .with(user(ADMIN_USER)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.privatePart").value("value-v1"))
+                .andExpect(jsonPath("$.data.dataVersion").value(1))
+                .andExpect(jsonPath("$.message").value("Successfully retrieved secret version."));
+        }
+
+        @Test
+        void shouldReturnNotFoundForNonExistentVersion() throws Exception {
+            final String projectId = "project-admin-not-found";
+            final String secretName = "secret-with-one-version";
+            performCreateSecret(projectId, secretName, "v1", ADMIN_USER);
+
+            // Act & Assert: Try to get a version that doesn't exist
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/99", projectId, secretName))
+                .with(user(ADMIN_USER)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        }
+
+        @Test
+        void nonAdminUsersAreForbiddenFromAdminEndpoints() throws Exception {
+            final String secretName = "admin-auth-secret";
+            performCreateSecret(TEST_PROJECT, secretName, "v1", ADMIN_USER);
+            performUpgradeSecret(TEST_PROJECT, secretName, "v2", ADMIN_USER);
+
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1", TEST_PROJECT, secretName))
+                .with(user(EDITOR_USER)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        }
+    }
+
+    /**
+     * Tests covering web-layer exceptions handled by the GlobalExceptionHandler.
+     */
+    @Nested
+    class WebLayerExceptionTests {
+
+        @Test
+        void shouldReturnMethodNotAllowedForUnsupportedHttpVerb() throws Exception {
+            mockMvc.perform(put(String.format("/v1/project/%s/secrets/%s/data", TEST_PROJECT, "some-secret"))
+                    .with(user(ADMIN_USER))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"privatePart\": \"some-value\"}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+        }
+
+        @Test
+        void shouldReturnBadRequestForMalformedJson() throws Exception {
+            mockMvc.perform(post(String.format("/v1/project/%s/secrets", TEST_PROJECT))
+                    .with(user(ADMIN_USER))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"name\": \"test-secret\", \"privatePart\": }")) // Invalid JSON
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message").value("Malformed JSON request"));
+        }
+
+        @Test
+        void shouldReturnBadRequestForArgumentTypeMismatch() throws Exception {
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/%s", TEST_PROJECT, "some-secret", "not-a-number"))
+                    .with(user(ADMIN_USER)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         }
     }
 } 

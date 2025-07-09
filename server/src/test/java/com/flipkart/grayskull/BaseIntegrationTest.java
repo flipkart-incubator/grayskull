@@ -96,7 +96,7 @@ public abstract class BaseIntegrationTest {
     }
 
     protected ResultActions performGetSecretByVersion(String projectId, String secretName, int version, String username) throws Exception {
-        return mockMvc.perform(get("/v1/admin/project/{projectId}/secrets/{secretName}/versions/{version}", projectId, secretName, version)
+        return mockMvc.perform(get("/v1/project/{projectId}/secrets/{secretName}/versions/{version}", projectId, secretName, version)
                 .with(user(username)));
     }
 

@@ -6,9 +6,6 @@ import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
 import com.flipkart.grayskull.models.enums.AuditAction;
-import com.flipkart.grayskull.models.exceptions.DuplicateSecretException;
-import com.flipkart.grayskull.models.exceptions.InvalidProjectConfigurationException;
-import com.flipkart.grayskull.models.exceptions.SecretNotFoundException;
 import com.flipkart.grayskull.mappers.SecretMapper;
 import com.flipkart.grayskull.configuration.CryptoConfig;
 import com.flipkart.grayskull.repositories.SecretDataRepository;
@@ -19,8 +16,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
@@ -74,7 +73,7 @@ public class SecretServiceImpl implements SecretService {
     public CreateSecretResponse createSecret(String projectId, CreateSecretRequest request) {
         secretRepository.findByProjectIdAndName(projectId, request.getName())
                 .ifPresent(s -> {
-                    throw new DuplicateSecretException(request.getName());
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "A secret with the same name " + request.getName() + " already exists.");
                 });
 
         String keyId = getKeyIdForProject(projectId);
@@ -117,7 +116,7 @@ public class SecretServiceImpl implements SecretService {
         Secret secret = findSecretOrThrow(projectId, secretName);
 
         SecretData secretData = secretDataRepository.findBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
-                .orElseThrow(() -> new SecretNotFoundException("Secret data not found for secret: " + secret.getId()));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret data not found for secret: " + secret.getId()));
         secretEncryptionUtil.decryptSecretData(secretData);
 
         return secretMapper.toSecretDataResponse(secret, secretData);
@@ -183,7 +182,7 @@ public class SecretServiceImpl implements SecretService {
         Secret secret = findSecretOrThrow(projectId, secretName);
 
         SecretData secretData = secretDataRepository.findBySecretIdAndDataVersion(secret.getId(), version)
-                .orElseThrow(() -> new SecretNotFoundException("Secret with name " + secretName + " and version " + version + " not found."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret with name " + secretName + " and version " + version + " not found."));
         secretEncryptionUtil.decryptSecretData(secretData);
 
         return secretMapper.secretDataToSecretDataVersionResponse(secret, secretData);
@@ -191,13 +190,13 @@ public class SecretServiceImpl implements SecretService {
 
     private Secret findSecretOrThrow(String projectId, String secretName) {
         return secretRepository.findByProjectIdAndName(projectId, secretName)
-                .orElseThrow(() -> new SecretNotFoundException("Secret not found with name: " + secretName));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret not found with name: " + secretName));
     }
 
     private String getKeyIdForProject(String projectId) {
         // TODO: Implement a proper key selection strategy based on the project
         log.warn("Using default key for project {}. A proper key selection strategy should be implemented.", projectId);
         return cryptoConfig.getKeys().keySet().stream().findFirst()
-            .orElseThrow(() -> new InvalidProjectConfigurationException("No crypto keys configured."));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No crypto keys configured."));
     }
 } 
