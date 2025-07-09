@@ -83,6 +83,7 @@ public abstract class BaseIntegrationTest {
 
     protected ResultActions performUpgradeSecret(String projectId, String secretName, String newSecretValue, String username) throws Exception {
         UpgradeSecretDataRequest upgradeRequest = new UpgradeSecretDataRequest();
+        upgradeRequest.setPublicPart("public-part");
         upgradeRequest.setPrivatePart(newSecretValue);
         return mockMvc.perform(post("/v1/project/{projectId}/secrets/{secretName}/data", projectId, secretName)
                 .with(user(username))
@@ -101,7 +102,7 @@ public abstract class BaseIntegrationTest {
     }
 
     private CreateSecretRequest buildCreateSecretRequest(String name, String value) {
-        CreateSecretRequest.SecretDataPayload payload = new CreateSecretRequest.SecretDataPayload(null, value);
+        CreateSecretRequest.SecretDataPayload payload = new CreateSecretRequest.SecretDataPayload("public-part", value);
         CreateSecretRequest createRequest = new CreateSecretRequest();
         createRequest.setName(name);
         createRequest.setProvider(SecretProvider.SELF);

@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class ResponseTemplate<T> {
+public final class ResponseTemplate<T> {
     private T data;
     private String message;
     private String code;

@@ -41,7 +41,7 @@ public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
     private static final String DEFAULT_USER = "system";
-    private static final ObjectMapper objectMapper = SanitizingObjectMapper.create();
+    private static final ObjectMapper OBJECT_MAPPER = SanitizingObjectMapper.create();
 
     /**
      * Defines the pointcut for all methods annotated with {@link Auditable}.
@@ -128,7 +128,7 @@ public class AuditAspect {
         arguments.forEach((key, value) -> {
             if (value != null) {
                 try {
-                    metadata.put(key, objectMapper.writeValueAsString(value));
+                    metadata.put(key, OBJECT_MAPPER.writeValueAsString(value));
                 } catch (JsonProcessingException e) {
                     metadata.put(key, "Error serializing object: " + e.getMessage());
                 }
@@ -141,7 +141,7 @@ public class AuditAspect {
         }
         if (result != null) {
             try {
-                metadata.put("result", objectMapper.writeValueAsString(result));
+                metadata.put("result", OBJECT_MAPPER.writeValueAsString(result));
             } catch (JsonProcessingException e) {
                 metadata.put("result", "Error serializing object: " + e.getMessage());
             }
