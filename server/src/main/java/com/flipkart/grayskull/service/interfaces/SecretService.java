@@ -8,6 +8,9 @@ import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
+import com.flipkart.grayskull.models.enums.SecretState;
+
+import java.util.Optional;
 
 public interface SecretService {
 
@@ -54,7 +57,7 @@ public interface SecretService {
     UpgradeSecretDataResponse upgradeSecretData(String projectId, String secretName, UpgradeSecretDataRequest request);
 
     /**
-     * Deletes a secret from a project. Deletes all the versions of the secret.
+     * Disables a secret, marking it as soft-deleted.
      * @param projectId The ID of the project.
      * @param secretName The name of the secret to delete.
      */
@@ -65,7 +68,8 @@ public interface SecretService {
      * @param projectId The ID of the project.
      * @param secretName The name of the secret.
      * @param version The version of the secret data to retrieve.
+     * @param state Optional state of secret
      * @return A {@link SecretDataVersionResponse} containing the secret data for the specified version.
      */
-    SecretDataVersionResponse getSecretDataVersion(String projectId, String secretName, int version);
+    SecretDataVersionResponse getSecretDataVersion(String projectId, String secretName, int version, Optional<SecretState> state);
 } 

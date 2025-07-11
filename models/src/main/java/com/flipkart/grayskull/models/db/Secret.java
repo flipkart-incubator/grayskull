@@ -15,7 +15,6 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.annotation.Transient;
-import org.springframework.data.domain.Persistable;
 
 /**
  * Represents a secret managed by the Grayskull system.
@@ -28,7 +27,7 @@ import org.springframework.data.domain.Persistable;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Secret implements Persistable<String> {
+public class Secret {
 
     /**
      * The unique identifier for the secret. This is the primary key.
@@ -67,7 +66,8 @@ public class Secret implements Persistable<String> {
     /**
      * The current lifecycle state of the secret (e.g., "ACTIVE", "INACTIVE", "PENDING_DELETION").
      */
-    private SecretState state;
+    @Builder.Default
+    private SecretState state = SecretState.ACTIVE;
 
     /**
      * The name of the {@link SecretProviderConfig} responsible for managing this secret (e.g., "DBCREDS").
@@ -115,23 +115,6 @@ public class Secret implements Persistable<String> {
      * The latest (current) {@link SecretData} associated with this secret.
      * This field might not always be populated depending on the query to avoid fetching sensitive data unnecessarily.
      */
-    private SecretData data;
-
-    /**
-     * Overrides Spring Data's default new-entity detection.
-     * <p>
-     * By default, Spring Data checks if the entity's {@code @Id} field is null to determine
-     * if it's a new entity. However, since we assign the ID manually before the first save,
-     * this default mechanism would incorrectly treat all new secrets as existing ones.
-     * <p>
-     * This implementation checks if {@code creationTime} is null. This field is only populated
-     * by the database on the initial insert, making it a reliable indicator of a new entity.
-     *
-     * @return {@code true} if the entity is new (creationTime is null), {@code false} otherwise.
-     */
-    @Override
     @Transient
-    public boolean isNew() {
-        return creationTime == null;
-    }
+    private SecretData data;
 } 

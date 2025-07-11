@@ -100,9 +100,15 @@ class SecretControllerIT extends BaseIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.message").value("Successfully deleted secret."));
 
-            // Act & Assert: Verify it's gone
+            // Act & Assert: Verify it's gone from public APIs
             performReadSecretMetadata(projectId, secretName, ADMIN_USER)
                     .andExpect(status().isNotFound());
+
+            // Act & Assert: Verify it can be fetched by an admin by specifying state
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.state").value("DISABLED"));
         }
 
         @Test
@@ -177,8 +183,14 @@ class SecretControllerIT extends BaseIntegrationTest {
             final String secretName = "duplicate-secret";
             performCreateSecret(projectId, secretName, "value1", ADMIN_USER);
 
-            // Act & Assert: Try to create it again
+            // Act & Assert: Try to create it again while it's active
             performCreateSecret(projectId, secretName, "value2", ADMIN_USER)
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("CONFLICT"));
+
+            // Act & Assert: Soft-delete the secret and try to create it again
+            performDeleteSecret(projectId, secretName, ADMIN_USER).andExpect(status().isOk());
+            performCreateSecret(projectId, secretName, "value3", ADMIN_USER)
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code").value("CONFLICT"));
         }
@@ -211,6 +223,40 @@ class SecretControllerIT extends BaseIntegrationTest {
             performUpgradeSecret(projectId, secretName, " ", ADMIN_USER)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        }
+
+        @Test
+        void shouldReturnNotFoundWhenUpgradingDisabledSecret() throws Exception {
+            final String projectId = "project-upgrade-disabled";
+            final String secretName = "secret-to-upgrade-disabled";
+            performCreateSecret(projectId, secretName, "initial-value", ADMIN_USER);
+            performDeleteSecret(projectId, secretName, ADMIN_USER).andExpect(status().isOk());
+
+            // Act & Assert: Attempt to upgrade a disabled secret
+            performUpgradeSecret(projectId, secretName, "new-value", ADMIN_USER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        }
+
+        @Test
+        void shouldReturnNotFoundWhenDeletingAlreadyDisabledSecret() throws Exception {
+            final String projectId = "project-delete-disabled";
+            final String secretName = "secret-to-delete-disabled";
+            performCreateSecret(projectId, secretName, "some-value", ADMIN_USER);
+            performDeleteSecret(projectId, secretName, ADMIN_USER).andExpect(status().isOk());
+
+            // Act & Assert: Attempt to delete it again
+            performDeleteSecret(projectId, secretName, ADMIN_USER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        }
+
+        @Test
+        void shouldReturnNotFoundWhenDeletingNonExistentSecret() throws Exception {
+            // Act & Assert: Attempt to delete a secret that was never created
+            performDeleteSecret("project-delete-non-existent", "non-existent-secret", ADMIN_USER)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
         }
     }
 
@@ -281,6 +327,56 @@ class SecretControllerIT extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.data.privatePart").value("value-v1"))
                 .andExpect(jsonPath("$.data.dataVersion").value(1))
                 .andExpect(jsonPath("$.message").value("Successfully retrieved secret version."));
+
+            // Act & Assert: Get the second version
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/2", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.privatePart").value("value-v2"));
+        }
+
+        @Test
+        void shouldGetSpecificSecretVersionWithActiveState() throws Exception {
+            final String projectId = "project-admin-active";
+            final String secretName = "active-secret";
+            performCreateSecret(projectId, secretName, "value-v1", ADMIN_USER);
+
+            // Act & Assert: Get a version of an active secret by specifying state=ACTIVE
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=ACTIVE", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.privatePart").value("value-v1"))
+                    .andExpect(jsonPath("$.data.state").value("ACTIVE"));
+
+            // Act & Assert: Fail to get a version of an active secret when specifying wrong state
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        void shouldGetSpecificSecretVersionOfDisabledSecret() throws Exception {
+            final String projectId = "project-admin-disabled";
+            final String secretName = "disabled-secret";
+            performCreateSecret(projectId, secretName, "value-v1", ADMIN_USER);
+            performDeleteSecret(projectId, secretName, ADMIN_USER).andExpect(status().isOk());
+
+            // Act & Assert: Get a version of a disabled secret without specifying state (should fail)
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isNotFound());
+
+            // Act & Assert: Get a version of a disabled secret by specifying state
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.privatePart").value("value-v1"))
+                    .andExpect(jsonPath("$.data.state").value("DISABLED"));
+
+            // Act & Assert: Fail to get a version of a disabled secret when specifying wrong state
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=ACTIVE", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isNotFound());
         }
 
         @Test
@@ -306,6 +402,19 @@ class SecretControllerIT extends BaseIntegrationTest {
                 .with(user(EDITOR_USER)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        }
+
+        @Test
+        void shouldReturnBadRequestForInvalidVersionNumber() throws Exception {
+            final String projectId = "project-admin-invalid-version";
+            final String secretName = "secret-for-invalid-version";
+            performCreateSecret(projectId, secretName, "v1", ADMIN_USER);
+
+            // Act & Assert: Try to get version 0, which is invalid
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/0", projectId, secretName))
+                            .with(user(ADMIN_USER)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         }
     }
 

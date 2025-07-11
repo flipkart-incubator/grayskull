@@ -9,6 +9,7 @@ import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
+import com.flipkart.grayskull.models.enums.SecretState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -27,6 +28,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Optional;
 
 
 @RestController
@@ -79,7 +82,7 @@ public class SecretController {
         return ResponseTemplate.success(response, "Successfully upgraded secret data.");
     }
 
-    @Operation(summary = "Deletes a secret from a project. Deletes all the versions of the secret.")
+    @Operation(summary = "Disables a secret, marking it as soft-deleted.")
     @DeleteMapping("/{secretName}")
     @PreAuthorize("hasPermission(#projectId, T(com.flipkart.grayskull.models.authz.GrayskullActions).DELETE_SECRET)")
     public ResponseTemplate<Void> deleteSecret(@PathVariable("projectId") @NotBlank @Size(max = 255) String projectId, @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
@@ -92,8 +95,9 @@ public class SecretController {
     @PreAuthorize("hasPermission(#projectId, T(com.flipkart.grayskull.models.authz.GrayskullActions).READ_SECRET_VERSION_VALUE)")
     public ResponseTemplate<SecretDataVersionResponse> getSecretDataVersion(@PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
                                                                             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
-                                                                            @PathVariable("version") @Min(1) int version) {
-        SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version);
+                                                                            @PathVariable("version") @Min(1) int version,
+                                                                            @RequestParam(name = "state", required = false) Optional<SecretState> state) {
+        SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         return ResponseTemplate.success(response, "Successfully retrieved secret version.");
     }
 } 

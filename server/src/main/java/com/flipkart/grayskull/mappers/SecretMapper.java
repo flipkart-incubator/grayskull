@@ -31,8 +31,6 @@ public interface SecretMapper {
      * Maps a {@link CreateSecretRequest} to a {@link Secret} entity.
      * Sets default values for metadata and timestamps.
      */
-    @Mapping(target = "id", expression = "java(UUID.randomUUID().toString())")
-    @Mapping(target = "state", expression = "java(SecretState.ACTIVE)")
     @Mapping(target = "metadataVersion", constant = "1")
     @Mapping(target = "currentDataVersion", constant = "1")
     @Mapping(target = "createdBy", source = "systemUser")
@@ -45,7 +43,6 @@ public interface SecretMapper {
     @Mapping(target = "privatePart", source = "request.data.privatePart")
     @Mapping(target = "publicPart", source = "request.data.publicPart")
     @Mapping(target = "dataVersion", constant = "1L")
-    @Mapping(target = "state", expression = "java(SecretState.ACTIVE)")
     @Mapping(target = "secretId", source = "secretId")
     SecretData requestToSecretData(CreateSecretRequest request, String secretId);
 
@@ -54,7 +51,6 @@ public interface SecretMapper {
      */
     @Mapping(target = "secretId", source = "secret.id")
     @Mapping(target = "dataVersion", source = "newVersion")
-    @Mapping(target = "state", expression = "java(SecretState.ACTIVE)")
     SecretData upgradeRequestToSecretData(UpgradeSecretDataRequest request, Secret secret, int newVersion);
 
     /**
@@ -78,7 +74,7 @@ public interface SecretMapper {
     @Mapping(target = "dataVersion", source = "secretData.dataVersion")
     @Mapping(target = "publicPart", source = "secretData.publicPart")
     @Mapping(target = "privatePart", source = "secretData.privatePart")
-    @Mapping(target = "state", source = "secretData.state")
+    @Mapping(target = "state", source = "secret.state")
     @Mapping(target = "lastRotated", source = "secret.lastRotated")
     @Mapping(target = "creationTime", source = "secret.creationTime")
     @Mapping(target = "updatedTime", source = "secret.updatedTime")
@@ -90,12 +86,12 @@ public interface SecretMapper {
      * Maps a {@link SecretData} entity to a {@link SecretDataVersionResponse} DTO.
      */
     @InheritConfiguration(name = "toSecretDataResponse")
-    @Mapping(target = "state", source = "secretData.state")
+    @Mapping(target = "state", source = "secret.state")
     SecretDataVersionResponse secretDataToSecretDataVersionResponse(Secret secret, SecretData secretData);
 
     /**
      * Converts a {@link SecretState} enum to its string representation.
-     * This method is used by MapStruct automatically for any State -> String mapping.
+     * This method is used by MapStruct automatically for any SecretState -> String mapping.
      *
      * @param state The enum to convert.
      * @return The uppercase name of the enum (e.g., "ACTIVE").
