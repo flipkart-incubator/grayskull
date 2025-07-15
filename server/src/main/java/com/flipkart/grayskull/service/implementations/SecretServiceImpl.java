@@ -1,8 +1,9 @@
 package com.flipkart.grayskull.service.implementations;
 
 import com.flipkart.grayskull.audit.Auditable;
-import com.flipkart.grayskull.configuration.CryptoConfig;
+import com.flipkart.grayskull.configuration.DefaultProjectConfig;
 import com.flipkart.grayskull.mappers.SecretMapper;
+import com.flipkart.grayskull.models.db.Project;
 import com.flipkart.grayskull.models.db.Secret;
 import com.flipkart.grayskull.models.db.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
@@ -15,9 +16,11 @@ import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.models.enums.AuditAction;
 import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.repositories.ProjectRepository;
 import com.flipkart.grayskull.repositories.SecretDataRepository;
 import com.flipkart.grayskull.repositories.SecretRepository;
 import com.flipkart.grayskull.service.interfaces.SecretService;
+import com.flipkart.grayskull.service.utils.AuthnUtil;
 import com.flipkart.grayskull.service.utils.SecretEncryptionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,12 +41,13 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class SecretServiceImpl implements SecretService {
 
-    private static final String SYSTEM_USER = "system";
     private final SecretRepository secretRepository;
     private final SecretDataRepository secretDataRepository;
     private final SecretMapper secretMapper;
     private final SecretEncryptionUtil secretEncryptionUtil;
-    private final CryptoConfig cryptoConfig;
+    private final DefaultProjectConfig defaultProjectConfig;
+    private final ProjectRepository projectRepository;
+    private final AuthnUtil authnUtil;
 
     /**
      * Lists secrets for a given project with pagination.
@@ -80,9 +84,9 @@ public class SecretServiceImpl implements SecretService {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "A secret with the same name " + request.getName() + " already exists.");
                 });
 
-        String keyId = getKeyIdForProject(projectId);
+        String keyId = resolveKmsKeyId(projectId);
 
-        Secret secret = secretMapper.requestToSecret(request, projectId, SYSTEM_USER);
+        Secret secret = secretMapper.requestToSecret(request, projectId, authnUtil.getCurrentUsername());
         Secret savedSecret = secretRepository.save(secret);
 
         SecretData secretData = secretMapper.requestToSecretData(request, savedSecret.getId());
@@ -139,7 +143,7 @@ public class SecretServiceImpl implements SecretService {
     public UpgradeSecretDataResponse upgradeSecretData(String projectId, String secretName, UpgradeSecretDataRequest request) {
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
 
-        String keyId = getKeyIdForProject(projectId);
+        String keyId = resolveKmsKeyId(projectId);
         int newVersion = secret.getCurrentDataVersion() + 1;
 
         SecretData secretData = secretMapper.upgradeRequestToSecretData(request, secret, newVersion);
@@ -147,7 +151,7 @@ public class SecretServiceImpl implements SecretService {
         secretDataRepository.save(secretData);
 
         secret.setCurrentDataVersion(newVersion);
-        secret.setUpdatedBy(SYSTEM_USER);
+        secret.setUpdatedBy(authnUtil.getCurrentUsername());
         secretRepository.save(secret);
 
         UpgradeSecretDataResponse response = new UpgradeSecretDataResponse();
@@ -167,6 +171,7 @@ public class SecretServiceImpl implements SecretService {
     public void deleteSecret(String projectId, String secretName) {
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
         secret.setState(SecretState.DISABLED);
+        secret.setUpdatedBy(authnUtil.getCurrentUsername());
         secretRepository.save(secret);
     }
 
@@ -192,20 +197,49 @@ public class SecretServiceImpl implements SecretService {
         return secretMapper.secretDataToSecretDataVersionResponse(secret, secretData);
     }
 
-    private Secret findSecretOrThrow(String projectId, String secretName) {
-        return secretRepository.findByProjectIdAndName(projectId, secretName)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret not found with name: " + secretName));
-    }
-
+    /**
+     * Finds an active secret for a given project and secret name or throws a 404 Not Found exception.
+     *
+     * @param projectId The ID of the project.
+     * @param secretName The name of the secret.
+     * @return The {@link Secret} if found.
+     * @throws ResponseStatusException if no active secret is found.
+     */
     private Secret findActiveSecretOrThrow(String projectId, String secretName) {
         return secretRepository.findByProjectIdAndNameAndState(projectId, secretName, SecretState.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active secret not found with name: " + secretName));
     }
 
-    private String getKeyIdForProject(String projectId) {
-        // TODO: Implement a proper key selection strategy based on the project
-        log.warn("Using default key for project {}. A proper key selection strategy should be implemented.", projectId);
-        return cryptoConfig.getKeys().keySet().stream().findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No crypto keys configured."));
+    /**
+     * Retrieves a project by its ID. If the project does not exist, it creates a new one
+     * with the default KMS key, saves it, and returns the new instance.
+     *
+     * @param projectId The ID of the project to get or create.
+     * @return The existing or newly created {@link Project}.
+     */
+    @Transactional
+    private Project getOrCreateProject(String projectId) {
+        return projectRepository.findById(projectId).orElseGet(() -> {
+            String defaultKeyId = defaultProjectConfig.getDefaultProject().getKmsKeyId();
+            Project newProject = new Project(projectId, defaultKeyId);
+            return projectRepository.save(newProject);
+        });
+    }
+
+    /**
+     * Resolves the KMS key ID to be used for encryption for a given project.
+     * It first checks for a project-specific key. If one is not defined, it falls back
+     * to the default KMS key.
+     *
+     * @param projectId The ID of the project.
+     * @return The resolved KMS key ID as a String.
+     */
+    private String resolveKmsKeyId(String projectId) {
+        Project project = getOrCreateProject(projectId);
+        String keyId = project.getKmsKeyId();
+        if (keyId == null || keyId.isEmpty()) {
+            return defaultProjectConfig.getDefaultProject().getKmsKeyId();
+        }
+        return keyId;
     }
 } 

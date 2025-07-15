@@ -28,10 +28,4 @@ public class Project {
      */
     private String kmsKeyId;
 
-    /**
-     * The organization or tenant this project belongs to (e.g., "FLIPKART", "FLIPKART/CT").
-     * This is crucial for multi-tenancy, ensuring data isolation.
-     */
-    private String org;
-
 } 

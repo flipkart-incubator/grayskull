@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +35,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @SpringBootTest(classes = TestGrayskullApplication.class)
 @Testcontainers
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
 public abstract class BaseIntegrationTest {
 
     @Container
@@ -43,7 +45,7 @@ public abstract class BaseIntegrationTest {
     static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.data.mongodb.uri", mongoDBContainer::getReplicaSetUrl);
         registry.add("spring.data.mongodb.database", () -> "test");
-        registry.add("grayskull.crypto.keys.test-key", () -> "VGhpcnR5VHdvQnl0ZUxvbmdDcnlwdG9LZXkwMTIzNDU=");
+        registry.add("grayskull.crypto.keys.test-key", () -> "wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4=");
     }
 
     @Autowired

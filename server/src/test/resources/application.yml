@@ -1,4 +1,11 @@
 grayskull:
+  projects:
+    defaultProject:
+      id: "default-project"
+      kmsKeyId: "test-key"
+  crypto:
+    keys:
+      test-key: "wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4="
   authorization:
     rules:
       - user: admin
