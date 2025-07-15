@@ -23,10 +23,10 @@
     </properties>
 
     <modules>
-        <module>server</module>
-        <module>spi</module>
-        <module>simple-app</module>
         <module>models</module>
+        <module>spi</module>
+        <module>server</module>
+        <module>simple-app</module>
     </modules>
 
     <dependencyManagement>

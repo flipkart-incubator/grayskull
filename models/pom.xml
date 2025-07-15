@@ -10,7 +10,6 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <groupId>com.flipkart.grayskull.models</groupId>
     <artifactId>models</artifactId>
 
     <properties>
