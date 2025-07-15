@@ -11,13 +11,13 @@ import java.util.Optional;
  */
 public interface SecretDataRepository extends CrudRepository<SecretData, String> {
 
-  /**
-   * Finds a specific version of a secret's data.
-   *
-   * @param secretId    The ID of the parent {@link com.flipkart.grayskull.models.db.Secret}.
-   * @param dataVersion The version of the data to retrieve.
-   * @return An {@link Optional} containing the secret data if found.
-   */
-  Optional<SecretData> findBySecretIdAndDataVersion(String secretId, long dataVersion);
+    /**
+     * Finds a specific version of a secret's data.
+     *
+     * @param secretId    The ID of the parent {@link com.flipkart.grayskull.models.db.Secret}.
+     * @param dataVersion The version of the data to retrieve.
+     * @return An {@link Optional} containing the secret data if found.
+     */
+    Optional<SecretData> findBySecretIdAndDataVersion(String secretId, long dataVersion);
 
 } 
