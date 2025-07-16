@@ -36,6 +36,11 @@ public class AuthorizationProperties {
          */
         private String project;
         /**
+         * The name of the secret to which the rule applies. Can be a specific secret name or "*" to match any secret.
+         * If not specified, the rule applies at the project level.
+         */
+        private String secret;
+        /**
          * A set of actions that the user is permitted to perform on the project.
          * The actions are defined in {@link com.flipkart.grayskull.models.authz.GrayskullActions}.
          * Can contain specific actions or "*" to grant all actions.

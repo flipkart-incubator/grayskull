@@ -160,21 +160,21 @@ class SecretControllerIT extends BaseIntegrationTest {
         }
 
         @Test
-        void shouldReturnNotFoundForNonExistentOperations() throws Exception {
+        void shouldReturnForbiddenForNonExistentOperations() throws Exception {
             final String projectId = "project-not-found";
             final String secretName = "non-existent-secret";
 
             performReadSecretMetadata(projectId, secretName, ADMIN_USER)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
 
             performReadSecretValue(projectId, secretName, ADMIN_USER)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
 
             performUpgradeSecret(projectId, secretName, "some-value", ADMIN_USER)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         }
 
         @Test
@@ -252,11 +252,11 @@ class SecretControllerIT extends BaseIntegrationTest {
         }
 
         @Test
-        void shouldReturnNotFoundWhenDeletingNonExistentSecret() throws Exception {
+        void shouldReturnForbiddenWhenDeletingNonExistentSecret() throws Exception {
             // Act & Assert: Attempt to delete a secret that was never created
             performDeleteSecret("project-delete-non-existent", "non-existent-secret", ADMIN_USER)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         }
     }
 

@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.spi;
 
-import org.springframework.security.core.Authentication;
+import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 
 /**
  * Interface for an authorization provider in the Grayskull security framework.
@@ -9,13 +9,13 @@ import org.springframework.security.core.Authentication;
 public interface GrayskullAuthorizationProvider {
 
     /**
-     * Checks if the authenticated user is authorized to perform a given action on a specific project.
+     * Checks if the authenticated user is authorized to perform a given action on a specific resource.
+     * The resource and security context is provided via the {@link AuthorizationContext}.
      *
-     * @param authentication The authentication object representing the user.
-     * @param projectId      The ID of the project being accessed.
-     * @param action         The action being performed (e.g., from {@link com.flipkart.grayskull.models.authz.GrayskullActions}).
+     * @param authorizationContext The context object containing information about the resource and principal.
+     * @param action               The action being performed (e.g., from {@link com.flipkart.grayskull.models.authz.GrayskullActions}).
      * @return {@code true} if the user is authorized, {@code false} otherwise.
      */
-    boolean isAuthorized(Authentication authentication, String projectId, String action);
+    boolean isAuthorized(AuthorizationContext authorizationContext, String action);
 
 } 

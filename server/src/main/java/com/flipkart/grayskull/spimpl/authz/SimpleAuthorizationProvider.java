@@ -2,7 +2,9 @@ package com.flipkart.grayskull.spimpl.authz;
 
 import com.flipkart.grayskull.configuration.AuthorizationProperties;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
+import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +16,7 @@ import java.util.Optional;
  * This implementation is intended for basic use cases and testing environments. It supports wildcard matching
  * for users, projects, and actions.
  */
+
 @Component
 @RequiredArgsConstructor
 public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvider {
@@ -21,7 +24,8 @@ public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvid
     private final AuthorizationProperties authorizationProperties;
 
     @Override
-    public boolean isAuthorized(Authentication authentication, String projectId, String action) {
+    public boolean isAuthorized(AuthorizationContext authorizationContext, String action) {
+        Authentication authentication = authorizationContext.getAuthentication();
         if (authentication == null) {
             return false;
         }
@@ -32,9 +36,10 @@ public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvid
         }
 
         return authorizationProperties.getRules().stream()
-                .filter(rule -> userMatches(rule, username))
-                .filter(rule -> projectMatches(rule, projectId))
-                .anyMatch(rule -> actionMatches(rule, action));
+            .filter(rule -> userMatches(rule, username))
+            .filter(rule -> projectMatches(rule, authorizationContext.getProjectId()))
+            .filter(rule -> secretMatches(rule, authorizationContext.getSecretName().orElse(null)))
+            .anyMatch(rule -> actionMatches(rule, action));
     }
 
     private boolean userMatches(AuthorizationProperties.Rule rule, String username) {
@@ -45,9 +50,18 @@ public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvid
         return "*".equals(rule.getProject()) || rule.getProject().equals(projectId);
     }
 
+    private boolean secretMatches(AuthorizationProperties.Rule rule, String secretName) {
+        // If the rule doesn't specify a secret, it's a project-level rule and should match any secret context.
+        if (rule.getSecret() == null) {
+            return true;
+        }
+        // If the rule specifies a secret, it must match the context's secret name or be a wildcard.
+        return "*".equals(rule.getSecret()) || rule.getSecret().equals(secretName);
+    }
+
     private boolean actionMatches(AuthorizationProperties.Rule rule, String action) {
         return Optional.ofNullable(rule.getActions())
-                .map(actions -> actions.contains("*") || actions.contains(action))
-                .orElse(false);
+            .map(actions -> actions.contains("*") || actions.contains(action))
+            .orElse(false);
     }
 } 
