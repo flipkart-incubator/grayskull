@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.authz;
 
+import com.flipkart.grayskull.models.db.Project;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
@@ -8,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import com.flipkart.grayskull.models.db.Project;
 
 /**
  * A security facade bean that centralizes authorization logic for use in Spring Security's
@@ -41,7 +41,7 @@ public class GrayskullSecurity {
     public boolean hasPermission(String projectId, String action) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Project project = projectRepository.findById(projectId)
-            .orElse(new Project(projectId, null)); // Create a transient project if not found
+                .orElse(new Project(projectId, null)); // Create a transient project if not found
 
         AuthorizationContext context = AuthorizationContext.forProject(authentication, project);
         return authorizationProvider.isAuthorized(context, action);
@@ -68,17 +68,17 @@ public class GrayskullSecurity {
     public boolean hasPermission(String projectId, String secretName, String action) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return projectRepository.findById(projectId)
-            .map(project -> secretRepository.findByProjectIdAndName(project.getId(), secretName)
-                .map(secret -> {
-                    // Secret exists, check with secret context
-                    AuthorizationContext context = AuthorizationContext.forSecret(authentication, project, secret);
-                    return authorizationProvider.isAuthorized(context, action);
-                })
-                .orElseGet(() -> {
-                    // Secret does not exist, fall back to a project-level check.
-                    AuthorizationContext context = AuthorizationContext.forProject(authentication, project);
-                    return authorizationProvider.isAuthorized(context, action);
-                }))
-            .orElse(false);
+                .map(project -> secretRepository.findByProjectIdAndName(project.getId(), secretName)
+                        .map(secret -> {
+                            // Secret exists, check with secret context
+                            AuthorizationContext context = AuthorizationContext.forSecret(authentication, project, secret);
+                            return authorizationProvider.isAuthorized(context, action);
+                        })
+                        .orElseGet(() -> {
+                            // Secret does not exist, fall back to a project-level check.
+                            AuthorizationContext context = AuthorizationContext.forProject(authentication, project);
+                            return authorizationProvider.isAuthorized(context, action);
+                        }))
+                .orElse(false);
     }
-} 
+}
