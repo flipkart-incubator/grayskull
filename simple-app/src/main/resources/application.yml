@@ -4,10 +4,7 @@ spring:
   data:
     mongodb:
       database: grayskull
-      uri: mongodb://admin:password@host.docker.internal:37017/admin
-      maxConnectionLifeTime: 60 # in minutes
-      maxConnectionIdleTime: 10 # in minutes
-      maxConnecting: 100
+      uri: mongodb://admin:password@host.docker.internal:37017/admin?maxLifeTimeMs=3600000&maxIdleTimeMs=600000&maxConnecting=100&readPreference=secondaryPreferred&w=majority
 
 server:
   read-only:
@@ -32,7 +29,8 @@ grayskull:
         actions:
           - "*"
       - user: user1
-        project: "*"
+        project: "test-project"
+        secret: "*"
         actions:
           - "*"
       - user: editor
@@ -44,6 +42,7 @@ grayskull:
           - "ADD_SECRET_VERSION"
           - "DELETE_SECRET"
           - "LIST_SECRETS"
+          - "READ_SECRET_VERSION_VALUE"
       - user: viewer
         project: "test-project"
         actions:

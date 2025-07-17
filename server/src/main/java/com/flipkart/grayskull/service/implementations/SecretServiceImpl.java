@@ -218,7 +218,7 @@ public class SecretServiceImpl implements SecretService {
      * @return The existing or newly created {@link Project}.
      */
     @Transactional
-    private Project getOrCreateProject(String projectId) {
+    public Project getOrCreateProject(String projectId) {
         return projectRepository.findById(projectId).orElseGet(() -> {
             String defaultKeyId = defaultProjectConfig.getDefaultProject().getKmsKeyId();
             Project newProject = new Project(projectId, defaultKeyId);
