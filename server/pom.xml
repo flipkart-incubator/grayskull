@@ -83,7 +83,14 @@
 
         <dependency>
             <groupId>com.flipkart.grayskull</groupId>
-            <artifactId>models</artifactId>
+            <artifactId>models-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.flipkart.grayskull</groupId>
+            <artifactId>models-db</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <dependency>

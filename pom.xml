@@ -23,7 +23,8 @@
     </properties>
 
     <modules>
-        <module>models</module>
+        <module>models-api</module>
+        <module>models-db</module>
         <module>spi</module>
         <module>server</module>
         <module>simple-app</module>
@@ -68,7 +69,12 @@
             </dependency>
             <dependency>
                 <groupId>com.flipkart.grayskull</groupId>
-                <artifactId>models</artifactId>
+                <artifactId>models-api</artifactId>
+                <version>${grayskull.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.flipkart.grayskull</groupId>
+                <artifactId>models-db</artifactId>
                 <version>${grayskull.version}</version>
             </dependency>
             <dependency>
