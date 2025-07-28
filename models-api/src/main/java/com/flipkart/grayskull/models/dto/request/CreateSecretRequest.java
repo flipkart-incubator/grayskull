@@ -13,47 +13,56 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-
+/**
+ * Request to create a new secret.
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateSecretRequest {
+    
     /**
-     * The user-defined name of the secret. Must be unique within a project.
+     * Secret name, unique within project (max 255 chars).
      */
     @NotBlank
     @Size(max = 255)
     private String name;
 
     /**
-     * The name of the provider responsible for managing this secret.
+     * Provider managing this secret.
      */
     @NotNull
     private SecretProvider provider;
 
     /**
-     * Metadata specific to the provider.
+     * Provider-specific metadata.
+     * Examples: {"environment": "prod", "team": "backend", "db_instance": "mysql-01", "description": "API keys for payment service", "rotation_days": 30}
      */
     private Map<String, Object> providerMeta;
 
     /**
-     * The actual secret data payload.
+     * Initial secret data (becomes version 1).
      */
     @NotNull
     @Valid
     private SecretDataPayload data;
 
+    /**
+     * Secret data containing public and private parts.
+     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     public static class SecretDataPayload {
+        
         /**
-         * The public part of the secret.
+         * Public part (non-sensitive).
          */
         @NotBlank
         String publicPart;
+        
         /**
-         * The private, sensitive part of the secret.
+         * Private part (sensitive, masked in audit logs).
          */
         @AuditMask
         @NotBlank

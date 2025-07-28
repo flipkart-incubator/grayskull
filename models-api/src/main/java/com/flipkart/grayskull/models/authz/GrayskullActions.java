@@ -3,8 +3,8 @@ package com.flipkart.grayskull.models.authz;
 import lombok.experimental.UtilityClass;
 
 /**
- * A utility class that defines constant string values for authorization actions within Grayskull.
- * These actions are used to enforce permissions for various operations.
+ * Defines all authorization actions available in the Grayskull system.
+ * This is the central registry for permission-based access control operations.
  */
 @UtilityClass
 public class GrayskullActions {

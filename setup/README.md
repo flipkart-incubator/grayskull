@@ -10,20 +10,21 @@ This directory contains scripts to setup Grayskull in local environment.
 
 ## Setup
 
-1. **Configure Environment Variables**:
+1. **Configure Environment Variables** (Optional):
    * Navigate to the `setup` directory:
      ```bash
      cd setup
      ```
    
-   * Create and configure environment file:
+   * Edit environment file if needed:
      ```bash
-     cp .env.example .env
+     # Optional: customize MongoDB credentials
+     nano .env
      ```
    
-   * Required environment variables in `.env`:
-     * `MONGO_ROOT_USERNAME` - MongoDB root user username
-     * `MONGO_ROOT_PASSWORD` - MongoDB root user password
+   * Environment variables in `.env`:
+     * `MONGO_ROOT_USERNAME` - MongoDB root user username (default: admin)
+     * `MONGO_ROOT_PASSWORD` - MongoDB root user password (default: password)
 
 2. **Run the Setup Script**:
    * Ensure you are in the `setup` directory
@@ -47,6 +48,17 @@ This directory contains scripts to setup Grayskull in local environment.
 * **Start the Environment**: Run `./setup.sh`
 * **Stop and Remove DB containers**: Run `./teardown.sh` (This will remove all containers and data volumes)
 * **Connect to MongoDB**:
+  
+  **Simple connection (recommended for development):**
+  ```bash
+  # Using default credentials
+  mongosh --host host.docker.internal --port 37017 -u admin -p password --authenticationDatabase admin
+  
+  # Or using environment variables from .env
+  mongosh --host host.docker.internal --port 37017 -u $MONGO_ROOT_USERNAME -p $MONGO_ROOT_PASSWORD --authenticationDatabase admin
+  ```
+  
+  **Full replica set connection:**
   ```bash
   mongosh "mongodb://grayskull-local-mongo1:37017,grayskull-local-mongo2:37018,grayskull-local-mongo3:37019/grayskull?replicaSet=rs0" \
     --username $MONGO_ROOT_USERNAME \

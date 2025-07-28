@@ -78,7 +78,7 @@ public class Secret {
     /**
      * Metadata specific to the provider used for this secret.
      * The structure of this map depends on the {@code provider}.
-     * Examples: {"db_instance_id": "prod-db-123"} for a database credential provider.
+     * Examples: {"environment": "prod", "team": "backend", "db_instance": "mysql-01", "description": "API keys for payment service", "rotation_days": 30}
      */
     private Map<String, Object> providerMeta;
 

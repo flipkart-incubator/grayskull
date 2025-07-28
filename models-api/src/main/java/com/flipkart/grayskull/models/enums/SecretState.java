@@ -1,21 +1,22 @@
 package com.flipkart.grayskull.models.enums;
 
 /**
- * Represents the lifecycle state of a secret.
+ * Secret lifecycle state.
  */
 public enum SecretState {
+    
     /**
-     * The secret is active and can be used.
+     * Secret is active and available for use.
      */
     ACTIVE,
 
     /**
-     * The secret has been deleted and is no longer accessible.
+     * Secret is deleted (soft delete, retained for audit).
      */
     DELETED,
 
     /**
-     * The secret is temporarily disabled and cannot be used.
+     * Secret is temporarily disabled.
      */
     DISABLED
 } 
