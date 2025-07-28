@@ -10,6 +10,7 @@ import org.springframework.data.annotation.Id;
 
 /**
  * Represents an audit log entry in the Grayskull system.
+ * Only successful operations are audited.
  */
 @Data
 @NoArgsConstructor
@@ -41,14 +42,9 @@ public class AuditEntry {
     private Integer secretVersion;
 
     /**
-     * The type of action performed (e.g., "SECRET_CREATE", "SECRET_READ", "SECRET_ROTATE").
+     * The type of action performed (e.g., "CREATE_SECRET", "UPGRADE_SECRET_DATA", "DELETE_SECRET").
      */
     private String action;
-
-    /**
-     * The outcome status of the action (e.g., "SUCCESS", "FAILURE", "PENDING").
-     */
-    private String status;
 
     /**
      * The identifier of the user or system principal that performed the action.

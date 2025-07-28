@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * <p>
  * The {@link AuditAspect} intercepts methods annotated with {@code @Auditable}
  * to create and persist an {@link com.flipkart.grayskull.models.db.AuditEntry}
- * upon method success or failure.
+ * upon successful method completion. Only successful operations are audited.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
@@ -19,8 +19,9 @@ public @interface Auditable {
 
     /**
      * Specifies the type of action being performed.
+     * 
      * @return The {@link AuditAction} representing the method's purpose.
      */
     AuditAction action();
 
-} 
+}

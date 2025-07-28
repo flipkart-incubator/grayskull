@@ -7,14 +7,11 @@ import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
-import com.flipkart.grayskull.models.enums.AuditStatus;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
-import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,6 +29,8 @@ import java.util.Optional;
  * (arguments, return values, exceptions), and persisting a detailed {@link AuditEntry}.
  * The auditing is performed within the same transaction as the intercepted method,
  * ensuring strong consistency between the business operation and the audit log.
+ * 
+ * Only successful operations are audited - failures are not tracked.
  */
 @Aspect
 @Component
@@ -43,59 +42,36 @@ public class AuditAspect {
     private static final ObjectMapper OBJECT_MAPPER = SanitizingObjectMapper.create();
 
     /**
-     * Defines the pointcut for all methods annotated with {@link Auditable}.
-     * This allows the advice methods to bind to the annotation instance.
-     *
-     * @param auditable the instance of the {@link Auditable} annotation on the intercepted method.
-     */
-    @Pointcut("@annotation(auditable)")
-    public void auditableMethod(Auditable auditable) {
-    }
-
-    /**
      * Advice that runs after an audited method returns successfully.
+     * Only successful operations are audited.
      *
      * @param joinPoint the join point representing the intercepted method.
-     * @param auditable the {@link Auditable} annotation from the method.
      * @param result    the object returned by the intercepted method.
      */
-    @AfterReturning(pointcut = "auditableMethod(auditable)", returning = "result")
-    public void auditSuccess(JoinPoint joinPoint, Auditable auditable, Object result) {
-        audit(joinPoint, auditable, AuditStatus.SUCCESS, result, null);
+    @AfterReturning(pointcut = "@annotation(com.flipkart.grayskull.audit.Auditable)", returning = "result")
+    public void auditSuccess(JoinPoint joinPoint, Object result) {
+        Auditable auditable = ((MethodSignature) joinPoint.getSignature()).getMethod().getAnnotation(Auditable.class);
+        audit(joinPoint, auditable, result);
     }
 
     /**
-     * Advice that runs after an audited method throws an exception.
-     *
-     * @param joinPoint the join point representing the intercepted method.
-     * @param auditable the {@link Auditable} annotation from the method.
-     * @param exception the exception thrown by the intercepted method.
-     */
-    @AfterThrowing(pointcut = "auditableMethod(auditable)", throwing = "exception")
-    public void auditFailure(JoinPoint joinPoint, Auditable auditable, Throwable exception) {
-        audit(joinPoint, auditable, AuditStatus.FAILURE, null, exception);
-    }
-
-    /**
-     * Core auditing logic. Constructs and saves an {@link AuditEntry}.
+     * Core auditing logic for successful operations only.
      *
      * @param joinPoint the join point representing the intercepted method.
      * @param auditable the annotation instance.
-     * @param status    the outcome of the method execution (SUCCESS or FAILURE).
-     * @param result    the method's return value (on success).
-     * @param exception the exception thrown by the method (on failure).
+     * @param result    the method's return value.
      */
-    private void audit(JoinPoint joinPoint, Auditable auditable, AuditStatus status, Object result, Throwable exception) {
+    private void audit(JoinPoint joinPoint, Auditable auditable, Object result) {
         Map<String, Object> arguments = getMethodArguments(joinPoint);
 
         String projectId = (String) arguments.getOrDefault("projectId", "UNKNOWN");
         String secretName = extractSecretName(joinPoint, arguments);
         Integer secretVersion = extractSecretVersion(result);
 
-        Map<String, String> metadata = buildMetadata(arguments, result, exception);
+        Map<String, String> metadata = buildMetadata(arguments, result);
 
         AuditEntry entry = new AuditEntry(null, projectId, secretName, secretVersion,
-                auditable.action().name(), status.name(), getUserId(), null, metadata);
+                auditable.action().name(), getUserId(), null, metadata);
 
         auditEntryRepository.save(entry);
     }
@@ -115,14 +91,14 @@ public class AuditAspect {
     /**
      * Builds a metadata map containing all relevant information about the audited event.
      * This method serializes the method arguments and results into a JSON format,
-     * masking any fields that are annotated with {@link com.flipkart.grayskull.models.audit.AuditMask}.
+     * masking any fields that are annotated with
+     * {@link com.flipkart.grayskull.models.audit.AuditMask}.
      *
      * @param arguments the arguments passed to the intercepted method.
      * @param result    the result returned by the method.
-     * @param exception the exception thrown by the method.
      * @return A map of metadata for the audit entry.
      */
-    private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result, Throwable exception) {
+    private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) {
         Map<String, String> metadata = new HashMap<>();
         arguments.forEach((key, value) -> {
             if (value != null) {
@@ -134,10 +110,6 @@ public class AuditAspect {
             }
         });
 
-        if (exception != null) {
-            metadata.put("errorMessage", exception.getMessage());
-            metadata.put("errorType", exception.getClass().getName());
-        }
         if (result != null) {
             try {
                 metadata.put("result", OBJECT_MAPPER.writeValueAsString(result));
@@ -202,4 +174,4 @@ public class AuditAspect {
         }
         return argsMap;
     }
-} 
+}
