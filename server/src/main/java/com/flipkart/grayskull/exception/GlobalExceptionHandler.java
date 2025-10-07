@@ -1,4 +1,4 @@
-package com.flipkart.grayskull.controllers;
+package com.flipkart.grayskull.exception;
 
 import com.flipkart.grayskull.models.dto.response.ResponseTemplate;
 import jakarta.validation.ConstraintViolationException;
@@ -133,4 +133,4 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ResponseTemplate<Void> errorResponse = ResponseTemplate.error(message, HttpStatus.BAD_REQUEST.name());
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
-} 
+}

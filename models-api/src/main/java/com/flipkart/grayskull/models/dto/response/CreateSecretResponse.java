@@ -26,7 +26,9 @@ public class CreateSecretResponse {
     String name;
     
     /**
-     * System labels.
+     * System-managed labels assigned to the newly created secret.
+     * Used for environment classification, access policies, and automated governance.
+     * Examples: "environment: production", "data_sensitivity: high", "owner_team: security_platform".
      */
     Map<String, String> systemLabels;
     

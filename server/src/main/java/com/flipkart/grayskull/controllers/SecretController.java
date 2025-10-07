@@ -3,7 +3,7 @@ package com.flipkart.grayskull.controllers;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
-import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -82,7 +82,7 @@ public class SecretController {
     public ResponseTemplate<SecretDataVersionResponse> getSecretDataVersion(@PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
                                                                             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
                                                                             @PathVariable("version") @Min(1) int version,
-                                                                            @RequestParam(name = "state", required = false) Optional<SecretState> state) {
+                                                                            @RequestParam(name = "state", required = false) Optional<LifecycleState> state) {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         return ResponseTemplate.success(response, "Successfully retrieved secret version.");
     }

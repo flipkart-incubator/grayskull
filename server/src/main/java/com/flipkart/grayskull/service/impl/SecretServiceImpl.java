@@ -1,4 +1,4 @@
-package com.flipkart.grayskull.service.implementations;
+package com.flipkart.grayskull.service.impl;
 
 import com.flipkart.grayskull.audit.Auditable;
 import com.flipkart.grayskull.configuration.DefaultProjectConfig;
@@ -15,7 +15,7 @@ import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.models.enums.AuditAction;
-import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.models.enums.LifecycleState;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
 import com.flipkart.grayskull.spi.repositories.SecretDataRepository;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
@@ -60,8 +60,8 @@ public class SecretServiceImpl implements SecretService {
     @Override
     public ListSecretsResponse listSecrets(String projectId, int offset, int limit) {
         Pageable pageable = PageRequest.of(offset, limit);
-        List<Secret> secrets = secretRepository.findByProjectIdAndState(projectId, SecretState.ACTIVE, pageable);
-        long total = secretRepository.countByProjectIdAndState(projectId, SecretState.ACTIVE);
+        List<Secret> secrets = secretRepository.findByProjectIdAndState(projectId, LifecycleState.ACTIVE, pageable);
+        long total = secretRepository.countByProjectIdAndState(projectId, LifecycleState.ACTIVE);
         List<SecretMetadata> secretMetadata = secrets.stream()
                 .map(secretMapper::secretToSecretMetadata)
                 .collect(Collectors.toList());
@@ -122,7 +122,7 @@ public class SecretServiceImpl implements SecretService {
     public SecretDataResponse readSecretValue(String projectId, String secretName) {
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
 
-        SecretData secretData = secretDataRepository.findBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
+        SecretData secretData = secretDataRepository.getBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret data not found for secret: " + secret.getId()));
         secretEncryptionUtil.decryptSecretData(secretData);
 
@@ -170,7 +170,7 @@ public class SecretServiceImpl implements SecretService {
     @Auditable(action = AuditAction.DELETE_SECRET)
     public void deleteSecret(String projectId, String secretName) {
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
-        secret.setState(SecretState.DISABLED);
+        secret.setState(LifecycleState.DISABLED);
         secret.setUpdatedBy(authnUtil.getCurrentUsername());
         secretRepository.save(secret);
     }
@@ -185,12 +185,12 @@ public class SecretServiceImpl implements SecretService {
      * @return A {@link SecretDataVersionResponse} containing the secret data for the specified version.
      */
     @Override
-    public SecretDataVersionResponse getSecretDataVersion(String projectId, String secretName, int version, Optional<SecretState> state) {
+    public SecretDataVersionResponse getSecretDataVersion(String projectId, String secretName, int version, Optional<LifecycleState> state) {
         Secret secret = state.map(secretState -> secretRepository.findByProjectIdAndNameAndState(projectId, secretName, secretState)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret with name " + secretName + " and state " + secretState + " not found.")))
                 .orElseGet(() -> findActiveSecretOrThrow(projectId, secretName));
 
-        SecretData secretData = secretDataRepository.findBySecretIdAndDataVersion(secret.getId(), version)
+        SecretData secretData = secretDataRepository.getBySecretIdAndDataVersion(secret.getId(), version)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret with name " + secretName + " and version " + version + " not found."));
         secretEncryptionUtil.decryptSecretData(secretData);
 
@@ -206,7 +206,7 @@ public class SecretServiceImpl implements SecretService {
      * @throws ResponseStatusException if no active secret is found.
      */
     private Secret findActiveSecretOrThrow(String projectId, String secretName) {
-        return secretRepository.findByProjectIdAndNameAndState(projectId, secretName, SecretState.ACTIVE)
+        return secretRepository.findByProjectIdAndNameAndState(projectId, secretName, LifecycleState.ACTIVE)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active secret not found with name: " + secretName));
     }
 
@@ -242,4 +242,4 @@ public class SecretServiceImpl implements SecretService {
         }
         return keyId;
     }
-} 
+}

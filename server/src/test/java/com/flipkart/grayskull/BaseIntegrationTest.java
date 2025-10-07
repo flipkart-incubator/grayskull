@@ -2,6 +2,7 @@ package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
+import com.flipkart.grayskull.models.dto.request.SecretDataPayload;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.enums.SecretProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -104,7 +105,7 @@ public abstract class BaseIntegrationTest {
     }
 
     private CreateSecretRequest buildCreateSecretRequest(String name, String value) {
-        CreateSecretRequest.SecretDataPayload payload = new CreateSecretRequest.SecretDataPayload("public-part", value);
+        SecretDataPayload payload = new SecretDataPayload("public-part", value);
         CreateSecretRequest createRequest = new CreateSecretRequest();
         createRequest.setName(name);
         createRequest.setProvider(SecretProvider.SELF);

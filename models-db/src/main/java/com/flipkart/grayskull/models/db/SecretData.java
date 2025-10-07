@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.models.db;
 
-import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.models.enums.LifecycleState;
 
 import java.time.Instant;
 import lombok.AllArgsConstructor;
@@ -65,6 +65,6 @@ public class SecretData {
     /**
      * The current lifecycle state of this secret data (e.g., "ACTIVE", "EXPIRED", "REVOKED").
      */
-    private SecretState state;
+    private LifecycleState state;
 
 } 

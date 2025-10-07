@@ -5,7 +5,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.util.Map;
 
-import com.flipkart.grayskull.models.audit.AuditMask;
 import com.flipkart.grayskull.models.enums.SecretProvider;
 
 import jakarta.validation.Valid;
@@ -46,26 +45,4 @@ public class CreateSecretRequest {
     @NotNull
     @Valid
     private SecretDataPayload data;
-
-    /**
-     * Secret data containing public and private parts.
-     */
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class SecretDataPayload {
-        
-        /**
-         * Public part (non-sensitive).
-         */
-        @NotBlank
-        String publicPart;
-        
-        /**
-         * Private part (sensitive, masked in audit logs).
-         */
-        @AuditMask
-        @NotBlank
-        String privatePart;
-    }
 } 

@@ -9,7 +9,8 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 
 /**
- * Represents an audit log entry in the Grayskull system.
+ * Represents a generic audit log entry in the Grayskull system.
+ * Can be used to audit operations on any type of resource (secrets, projects, etc.).
  * Only successful operations are audited.
  */
 @Data
@@ -30,19 +31,26 @@ public class AuditEntry {
     private String projectId;
 
     /**
-     * The name of the {@link Secret} related to this audit event, if applicable.
-     * Combined with {@code projectId} and {@code secretVersion}, this precisely identifies the subject of the audit.
+     * The type of resource being audited (e.g., "SECRET", "PROJECT", "SECRET_DATA").
+     * This allows the audit system to handle different types of entities generically.
      */
-    private String secretName;
+    private String resourceType;
 
     /**
-     * The version of the {@link SecretData} involved in the action, if applicable.
+     * The name or identifier of the specific resource being audited.
+     * For secrets, this would be the secret name. For projects, the project ID.
+     */
+    private String resourceName;
+
+    /**
+     * The version of the resource involved in the action, if applicable.
      * For example, if a secret value was read, this would indicate which version was accessed.
+     * This field is optional and may be null for resources that don't have versions.
      */
-    private Integer secretVersion;
+    private Integer resourceVersion;
 
     /**
-     * The type of action performed (e.g., "CREATE_SECRET", "UPGRADE_SECRET_DATA", "DELETE_SECRET").
+     * The type of action performed (e.g., "CREATE", "READ", "UPDATE", "DELETE").
      */
     private String action;
 
@@ -60,6 +68,7 @@ public class AuditEntry {
 
     /**
      * Additional metadata related to the audit event, stored as key-value pairs.
+     * This can contain resource-specific information and operation details.
      */
     private Map<String, String> metadata;
 

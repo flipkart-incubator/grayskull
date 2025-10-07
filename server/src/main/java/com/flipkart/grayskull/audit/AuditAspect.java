@@ -22,6 +22,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.flipkart.grayskull.audit.AuditConstants.*;
+
 /**
  * Aspect for auditing methods annotated with {@link Auditable}.
  * <p>
@@ -38,7 +40,6 @@ import java.util.Optional;
 public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
-    private static final String DEFAULT_USER = "system";
     private static final ObjectMapper OBJECT_MAPPER = SanitizingObjectMapper.create();
 
     /**
@@ -64,14 +65,14 @@ public class AuditAspect {
     private void audit(JoinPoint joinPoint, Auditable auditable, Object result) {
         Map<String, Object> arguments = getMethodArguments(joinPoint);
 
-        String projectId = (String) arguments.getOrDefault("projectId", "UNKNOWN");
-        String secretName = extractSecretName(joinPoint, arguments);
-        Integer secretVersion = extractSecretVersion(result);
+        String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
+        String resourceName = extractResourceName(joinPoint, arguments);
+        Integer resourceVersion = extractResourceVersion(result);
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntry entry = new AuditEntry(null, projectId, secretName, secretVersion,
-                auditable.action().name(), getUserId(), null, metadata);
+        AuditEntry entry = new AuditEntry(null, projectId, RESOURCE_TYPE_SECRET, resourceName, 
+                resourceVersion, auditable.action().name(), getUserId(), null, metadata);
 
         auditEntryRepository.save(entry);
     }
@@ -112,21 +113,21 @@ public class AuditAspect {
 
         if (result != null) {
             try {
-                metadata.put("result", OBJECT_MAPPER.writeValueAsString(result));
+                metadata.put(RESULT_METADATA_KEY, OBJECT_MAPPER.writeValueAsString(result));
             } catch (JsonProcessingException e) {
-                metadata.put("result", "Error serializing object: " + e.getMessage());
+                metadata.put(RESULT_METADATA_KEY, "Error serializing object: " + e.getMessage());
             }
         }
         return metadata;
     }
 
     /**
-     * Extracts the secret version from the method's result object.
+     * Extracts the resource version from the method's result object.
      *
      * @param result the object returned by the intercepted method.
-     * @return The secret version, or {@code null} if not applicable.
+     * @return The resource version, or {@code null} if not applicable.
      */
-    private Integer extractSecretVersion(Object result) {
+    private Integer extractResourceVersion(Object result) {
         if (result instanceof CreateSecretResponse) {
             return 1;
         } else if (result instanceof UpgradeSecretDataResponse) {
@@ -136,15 +137,16 @@ public class AuditAspect {
     }
 
     /**
-     * Extracts the secret name from the method's arguments.
-     * Handles both direct string arguments and {@link CreateSecretRequest} objects.
+     * Extracts the resource name from the method's arguments.
+     * For secret operations, this extracts the secret name from either direct string arguments 
+     * or {@link CreateSecretRequest} objects.
      *
      * @param joinPoint the join point of the intercepted method.
      * @param arguments the extracted arguments of the method.
-     * @return The secret name, or "UNKNOWN" if not found.
+     * @return The resource name, or "UNKNOWN" if not found.
      */
-    private String extractSecretName(JoinPoint joinPoint, Map<String, Object> arguments) {
-        Object name = arguments.get("secretName");
+    private String extractResourceName(JoinPoint joinPoint, Map<String, Object> arguments) {
+        Object name = arguments.get(SECRET_NAME_PARAM);
         if (name instanceof String) {
             return (String) name;
         }
@@ -154,7 +156,7 @@ public class AuditAspect {
                 .map(CreateSecretRequest.class::cast)
                 .map(CreateSecretRequest::getName)
                 .findFirst()
-                .orElse("UNKNOWN");
+                .orElse(UNKNOWN_VALUE);
     }
 
     /**

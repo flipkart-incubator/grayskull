@@ -8,7 +8,7 @@ import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
-import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.models.enums.LifecycleState;
 
 import java.util.Optional;
 
@@ -71,5 +71,5 @@ public interface SecretService {
      * @param state Optional state of secret
      * @return A {@link SecretDataVersionResponse} containing the secret data for the specified version.
      */
-    SecretDataVersionResponse getSecretDataVersion(String projectId, String secretName, int version, Optional<SecretState> state);
+    SecretDataVersionResponse getSecretDataVersion(String projectId, String secretName, int version, Optional<LifecycleState> state);
 } 

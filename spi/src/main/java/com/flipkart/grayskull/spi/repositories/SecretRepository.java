@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.spi.repositories;
 
 import com.flipkart.grayskull.models.db.Secret;
-import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.models.enums.LifecycleState;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.PagingAndSortingRepository;
 
@@ -30,7 +30,7 @@ public interface SecretRepository extends PagingAndSortingRepository<Secret, Str
      * @param pageable  The pagination information.
      * @return A list of secrets.
      */
-    List<Secret> findByProjectIdAndState(String projectId, SecretState state, Pageable pageable);
+    List<Secret> findByProjectIdAndState(String projectId, LifecycleState state, Pageable pageable);
 
     /**
      * Counts the total number of secrets for a given project ID and state.
@@ -39,7 +39,7 @@ public interface SecretRepository extends PagingAndSortingRepository<Secret, Str
      * @param state     The state of the secrets to count.
      * @return The total number of secrets.
      */
-    long countByProjectIdAndState(String projectId, SecretState state);
+    long countByProjectIdAndState(String projectId, LifecycleState state);
 
     /**
      * Finds a secret by its project ID and name.
@@ -58,6 +58,6 @@ public interface SecretRepository extends PagingAndSortingRepository<Secret, Str
      * @param state     The state of the secret.
      * @return An {@link Optional} containing the secret if found.
      */
-    Optional<Secret> findByProjectIdAndNameAndState(String projectId, String name, SecretState state);
+    Optional<Secret> findByProjectIdAndNameAndState(String projectId, String name, LifecycleState state);
 
 }

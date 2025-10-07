@@ -35,7 +35,9 @@ public class SecretProviderConfig {
     private String org;
 
     /**
-     * System-defined labels for this provider configuration.
+     * System-managed labels for provider categorization and operational control.
+     * Used for environment scoping, security classification, and configuration management.
+     * Examples: "environment: production", "provider_type: database", "security_level: high".
      */
     private Map<String, String> systemLabels;
 

@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.models.db;
 
-import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.models.enums.LifecycleState;
 
 import java.time.Instant;
 import java.util.Map;
@@ -47,7 +47,8 @@ public class Secret {
     private String name;
 
     /**
-     * System-defined labels for categorization and filtering of this secret.
+     * System-managed labels for secret categorization and operational control.
+     * Used for environment classification, access policies, and automated governance.
      * Examples: "environment: production", "data_sensitivity: high", "owner_team: security_platform".
      */
     private Map<String, String> systemLabels;
@@ -67,7 +68,7 @@ public class Secret {
      * The current lifecycle state of the secret (e.g., "ACTIVE", "INACTIVE", "PENDING_DELETION").
      */
     @Builder.Default
-    private SecretState state = SecretState.ACTIVE;
+    private LifecycleState state = LifecycleState.ACTIVE;
 
     /**
      * The name of the {@link SecretProviderConfig} responsible for managing this secret (e.g., "DBCREDS").

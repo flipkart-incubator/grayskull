@@ -26,7 +26,9 @@ public class SecretMetadata {
     String name;
     
     /**
-     * System labels for categorization and filtering.
+     * System-managed labels for secret categorization and operational control.
+     * Used for environment classification, access policies, and automated governance.
+     * Examples: "environment: production", "data_sensitivity: high", "owner_team: security_platform".
      */
     Map<String, String> systemLabels;
     

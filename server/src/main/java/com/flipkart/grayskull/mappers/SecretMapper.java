@@ -8,7 +8,7 @@ import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
-import com.flipkart.grayskull.models.enums.SecretState;
+import com.flipkart.grayskull.models.enums.LifecycleState;
 import org.mapstruct.InheritConfiguration;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -24,7 +24,7 @@ import java.util.UUID;
  * ensuring high performance and type safety.
  */
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE,
-        imports = {UUID.class, Instant.class, SecretState.class})
+        imports = {UUID.class, Instant.class, LifecycleState.class})
 public interface SecretMapper {
 
     /**
@@ -90,13 +90,13 @@ public interface SecretMapper {
     SecretDataVersionResponse secretDataToSecretDataVersionResponse(Secret secret, SecretData secretData);
 
     /**
-     * Converts a {@link SecretState} enum to its string representation.
-     * This method is used by MapStruct automatically for any SecretState -> String mapping.
+     * Converts a {@link LifecycleState} enum to its string representation.
+     * This method is used by MapStruct automatically for any LifecycleState -> String mapping.
      *
      * @param state The enum to convert.
      * @return The uppercase name of the enum (e.g., "ACTIVE").
      */
-    default String secretStateToString(SecretState state) {
+    default String lifecycleStateToString(LifecycleState state) {
         return state == null ? null : state.name();
     }
 } 
