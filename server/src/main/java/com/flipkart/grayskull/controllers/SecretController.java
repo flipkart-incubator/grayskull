@@ -1,10 +1,15 @@
 package com.flipkart.grayskull.controllers;
 
+import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
+import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
+import com.flipkart.grayskull.models.enums.AuditAction;
 import com.flipkart.grayskull.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
+import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -13,9 +18,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -25,6 +33,7 @@ import java.util.Optional;
 public class SecretController {
 
     private final SecretService secretService;
+    private final AsyncAuditLogger asyncAuditLogger;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -57,6 +66,10 @@ public class SecretController {
     @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, #secretName, 'READ_SECRET_VALUE')")
     public ResponseTemplate<SecretDataResponse> readSecretValue(@PathVariable("projectId") @NotBlank @Size(max = 255) String projectId, @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
+        Map<String, String> auditMetadata = new HashMap<>();
+        SanitizingObjectMapper.addToMap(auditMetadata, "result", response);
+        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        asyncAuditLogger.log(new AuditEntry(projectId, AuditConstants.RESOURCE_TYPE_SECRET, secretName, response.getDataVersion(), AuditAction.READ_SECRET.name(), userId, auditMetadata));
         return ResponseTemplate.success(response, "Successfully read secret value.");
     }
 

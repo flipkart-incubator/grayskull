@@ -9,6 +9,10 @@ public enum AuditAction {
      */
     CREATE_SECRET,
     /**
+     * Represent the action of reading private part of a secret
+     */
+    READ_SECRET,
+    /**
      * Represents the update (upgrade) of an existing secret's data, creating a new version.
      */
     UPGRADE_SECRET_DATA,

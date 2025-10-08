@@ -1,7 +1,5 @@
 package com.flipkart.grayskull.audit;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
@@ -40,7 +38,6 @@ import static com.flipkart.grayskull.audit.AuditConstants.*;
 public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
-    private static final ObjectMapper OBJECT_MAPPER = SanitizingObjectMapper.create();
 
     /**
      * Advice that runs after an audited method returns successfully.
@@ -103,20 +100,12 @@ public class AuditAspect {
         Map<String, String> metadata = new HashMap<>();
         arguments.forEach((key, value) -> {
             if (value != null) {
-                try {
-                    metadata.put(key, OBJECT_MAPPER.writeValueAsString(value));
-                } catch (JsonProcessingException e) {
-                    metadata.put(key, "Error serializing object: " + e.getMessage());
-                }
+                SanitizingObjectMapper.addToMap(metadata, key, value);
             }
         });
 
         if (result != null) {
-            try {
-                metadata.put(RESULT_METADATA_KEY, OBJECT_MAPPER.writeValueAsString(result));
-            } catch (JsonProcessingException e) {
-                metadata.put(RESULT_METADATA_KEY, "Error serializing object: " + e.getMessage());
-            }
+            SanitizingObjectMapper.addToMap(metadata, "result", result);
         }
         return metadata;
     }
@@ -130,8 +119,8 @@ public class AuditAspect {
     private Integer extractResourceVersion(Object result) {
         if (result instanceof CreateSecretResponse) {
             return 1;
-        } else if (result instanceof UpgradeSecretDataResponse) {
-            return ((UpgradeSecretDataResponse) result).getDataVersion();
+        } else if (result instanceof UpgradeSecretDataResponse secretResponse) {
+            return secretResponse.getDataVersion();
         }
         return null;
     }
@@ -147,8 +136,8 @@ public class AuditAspect {
      */
     private String extractResourceName(JoinPoint joinPoint, Map<String, Object> arguments) {
         Object name = arguments.get(SECRET_NAME_PARAM);
-        if (name instanceof String) {
-            return (String) name;
+        if (name instanceof String s) {
+            return s;
         }
 
         return Arrays.stream(joinPoint.getArgs())
