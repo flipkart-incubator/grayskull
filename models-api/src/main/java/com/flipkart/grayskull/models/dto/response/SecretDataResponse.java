@@ -4,6 +4,7 @@ import java.time.Instant;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import com.flipkart.grayskull.models.audit.AuditMask;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Value;
@@ -31,6 +32,7 @@ public class SecretDataResponse {
     /**
      * Private/sensitive part of the secret.
      */
+    @AuditMask
     String privatePart;
     
     /**
