@@ -15,6 +15,7 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.annotation.Transient;
+import org.springframework.data.annotation.Version;
 
 /**
  * Represents a secret managed by the Grayskull system.
@@ -89,6 +90,14 @@ public class Secret {
      * distinguishing it from {@code currentDataVersion} which tracks changes to the secret's value.
      */
     private Integer metadataVersion;
+
+    /**
+     * Optimistic locking version field managed by Spring Data.
+     * Automatically incremented on each update to prevent concurrent modification conflicts.
+     * This ensures that concurrent updates to the secret (e.g., adding versionssimultaneously) are detected and handled appropriately via {@link org.springframework.dao.OptimisticLockingFailureException}.
+     */
+    @Version
+    private Long version;
 
     /**
      * The timestamp when this secret was created.

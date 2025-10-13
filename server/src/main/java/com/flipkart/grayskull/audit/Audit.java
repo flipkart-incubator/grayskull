@@ -9,13 +9,13 @@ import java.lang.annotation.Target;
 /**
  * Marks a method for auditing.
  * <p>
- * The {@link AuditAspect} intercepts methods annotated with {@code @Auditable}
+ * The {@link AuditAspect} intercepts methods annotated with {@code @Audit}
  * to create and persist an {@link com.flipkart.grayskull.models.db.AuditEntry}
  * upon successful method completion. Only successful operations are audited.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface Auditable {
+public @interface Audit {
 
     /**
      * Specifies the type of action being performed.

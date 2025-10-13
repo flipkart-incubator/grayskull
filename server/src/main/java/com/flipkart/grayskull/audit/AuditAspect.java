@@ -25,7 +25,7 @@ import java.util.Optional;
 import static com.flipkart.grayskull.audit.AuditConstants.*;
 
 /**
- * Aspect for auditing methods annotated with {@link Auditable}.
+ * Aspect for auditing methods annotated with {@link Audit}.
  * <p>
  * This class defines the logic for intercepting method executions, capturing their context
  * (arguments, return values, exceptions), and persisting a detailed {@link AuditEntry}.
@@ -49,20 +49,20 @@ public class AuditAspect {
      * @param joinPoint the join point representing the intercepted method.
      * @param result    the object returned by the intercepted method.
      */
-    @AfterReturning(pointcut = "@annotation(com.flipkart.grayskull.audit.Auditable)", returning = "result")
+    @AfterReturning(pointcut = "@annotation(com.flipkart.grayskull.audit.Audit)", returning = "result")
     public void auditSuccess(JoinPoint joinPoint, Object result) {
-        Auditable auditable = ((MethodSignature) joinPoint.getSignature()).getMethod().getAnnotation(Auditable.class);
-        audit(joinPoint, auditable, result);
+        Audit audit = ((MethodSignature) joinPoint.getSignature()).getMethod().getAnnotation(Audit.class);
+        audit(joinPoint, audit, result);
     }
 
     /**
      * Core auditing logic for successful operations only.
      *
      * @param joinPoint the join point representing the intercepted method.
-     * @param auditable the annotation instance.
+     * @param audit     the annotation instance.
      * @param result    the method's return value.
      */
-    private void audit(JoinPoint joinPoint, Auditable auditable, Object result) {
+    private void audit(JoinPoint joinPoint, Audit audit, Object result) {
         Map<String, Object> arguments = getMethodArguments(joinPoint);
 
         String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
@@ -71,8 +71,8 @@ public class AuditAspect {
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntry entry = new AuditEntry(null, projectId, RESOURCE_TYPE_SECRET, resourceName, 
-                resourceVersion, auditable.action().name(), getUserId(), null, metadata);
+        AuditEntry entry = new AuditEntry(null, projectId, RESOURCE_TYPE_SECRET, resourceName,
+                resourceVersion, audit.action().name(), getUserId(), null, metadata);
 
         auditEntryRepository.save(entry);
     }

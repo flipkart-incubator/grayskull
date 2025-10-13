@@ -8,7 +8,9 @@ import lombok.ToString;
 
 /**
  * Defines all authorization actions available in the Grayskull system.
- * This is the central registry for permission-based access control operations.
+ * Actions follow a hierarchical CRUD-based naming convention using dot notation
+ * (e.g., "secrets.create", "secrets.read.value") for better organization and
+ * maintainability.
  */
 @Getter
 @RequiredArgsConstructor
@@ -18,42 +20,43 @@ public enum GrayskullActions {
     /**
      * Permission to list the secrets within a project.
      */
-    LIST_SECRETS("LIST_SECRETS"),
+    SECRETS_LIST("secrets.list"),
 
     /**
      * Permission to create a new secret in a project.
      */
-    CREATE_SECRET("CREATE_SECRET"),
+    SECRETS_CREATE("secrets.create"),
 
     /**
      * Permission to read the metadata of a specific secret.
      */
-    READ_SECRET_METADATA("READ_SECRET_METADATA"),
+    SECRETS_READ_METADATA("secrets.read.metadata"),
 
     /**
      * Permission to read the sensitive value of the latest version of a secret.
      */
-    READ_SECRET_VALUE("READ_SECRET_VALUE"),
+    SECRETS_READ_VALUE("secrets.read.value"),
 
     /**
-     * Permission to add a new version to an existing secret.
+     * Permission to add a new version to an existing secret (update operation).
      */
-    ADD_SECRET_VERSION("ADD_SECRET_VERSION"),
+    SECRETS_UPDATE("secrets.update"),
 
     /**
      * Permission to delete a secret and all its versions.
      */
-    DELETE_SECRET("DELETE_SECRET"),
+    SECRETS_DELETE("secrets.delete"),
 
     /**
-     * Permission to read the sensitive value of a specific version of a secret (Admin).
+     * Permission to read the sensitive value of a specific version of a secret
+     * (Admin operation).
      */
-    READ_SECRET_VERSION_VALUE("READ_SECRET_VERSION_VALUE"),
+    SECRETS_READ_VERSION("secrets.read.version"),
 
     /**
      * Permission to read the audit trail for secrets.
      */
-    READ_AUDIT("READ_AUDIT");
+    AUDIT_READ("audit.read");
 
     @JsonValue
     @ToString.Include
@@ -75,4 +78,4 @@ public enum GrayskullActions {
         }
         throw new IllegalArgumentException("Unknown GrayskullActions value: " + value);
     }
-} 
+}
