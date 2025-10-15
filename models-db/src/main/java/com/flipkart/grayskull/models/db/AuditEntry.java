@@ -60,6 +60,11 @@ public class AuditEntry {
     private String userId;
 
     /**
+     * The ip address and forwarded headers of the client that performed the action.
+     */
+    private Map<String, String> ips;
+
+    /**
      * The timestamp when the action occurred, recorded in UTC with offset information.
      */
     private Instant timestamp;
@@ -70,13 +75,14 @@ public class AuditEntry {
      */
     private Map<String, String> metadata;
 
-    public AuditEntry(String projectId, String resourceType, String resourceName, Integer resourceVersion, String action, String userId, Map<String, String> metadata) {
+    public AuditEntry(String projectId, String resourceType, String resourceName, Integer resourceVersion, String action, String userId, Map<String, String> ips, Map<String, String> metadata) {
         this.projectId = projectId;
         this.resourceType = resourceType;
         this.resourceName = resourceName;
         this.resourceVersion = resourceVersion;
         this.action = action;
         this.userId = userId;
+        this.ips = ips;
         this.metadata = metadata;
         this.timestamp = Instant.now();
     }

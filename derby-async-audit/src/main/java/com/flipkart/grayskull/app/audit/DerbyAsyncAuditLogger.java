@@ -81,6 +81,7 @@ public class DerbyAsyncAuditLogger implements AsyncAuditLogger {
                 maxId = resultSet.getLong(1);
                 String eventSting = resultSet.getString(2);
                 AuditEntry auditEntry = objectMapper.readValue(eventSting, AuditEntry.class);
+                auditEntry.getMetadata().put("logId", auditProperties.getNodeName() + "." + maxId);
                 auditEntries.add(auditEntry);
             }
             if (!auditEntries.isEmpty()) {

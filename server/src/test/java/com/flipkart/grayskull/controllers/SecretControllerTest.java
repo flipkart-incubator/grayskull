@@ -1,7 +1,11 @@
 package com.flipkart.grayskull.controllers;
 
+import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
+import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
+import com.flipkart.grayskull.models.enums.AuditAction;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import org.junit.jupiter.api.*;
@@ -10,7 +14,8 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 
-import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -18,72 +23,75 @@ import static org.mockito.Mockito.*;
 @DisplayName("SecretController Unit Tests")
 class SecretControllerTest {
 
+    private static final String PROJECT_ID = "test-project";
+    private static final String SECRET_NAME = "test-secret";
+
     private final SecretService secretService = mock(SecretService.class);
 
     private final AsyncAuditLogger asyncAuditLogger = mock(AsyncAuditLogger.class);
+
+    private final RequestUtils requestUtils = mock(RequestUtils.class);
 
     private SecretController secretController;
 
     @BeforeEach
     void setUp() {
-        secretController = new SecretController(secretService, asyncAuditLogger);
+        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils);
+        SecurityContextHolder.setContext(new SecurityContextImpl(new TestingAuthenticationToken("user", null)));
     }
 
-    @Nested
-    @DisplayName("readSecretValue Tests")
-    class ReadSecretValueTests {
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
-        private static final String PROJECT_ID = "test-project";
-        private static final String SECRET_NAME = "test-secret";
-        private static final String SECRET_VALUE = "sensitive-secret-value";
-        private static final int DATA_VERSION = 1;
+    @Test
+    @DisplayName("Should successfully read secret data value and log audit")
+    void shouldSuccessfullyReadSecretValue() {
+        // Arrange
+        SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart("public-data").dataVersion(5).build();
+        Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
 
-        @BeforeEach
-        void setUp() {
-            SecurityContextHolder.setContext(new SecurityContextImpl(new TestingAuthenticationToken("user", null)));
-        }
+        when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME)).thenReturn(expectedResponse);
+        when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
-        @AfterEach
-        void tearDown() {
-            SecurityContextHolder.clearContext();
-        }
+        // Act
+        var result = secretController.readSecretValue(PROJECT_ID, SECRET_NAME);
 
-        @Test
-        @DisplayName("Should successfully read secret value and log audit")
-        void shouldSuccessfullyReadSecretValue() {
-            // Arrange
-            SecretDataResponse expectedResponse = SecretDataResponse.builder()
-                    .dataVersion(DATA_VERSION)
-                    .publicPart("public-data")
-                    .privatePart(SECRET_VALUE)
-                    .lastRotated(Instant.now())
-                    .creationTime(Instant.now())
-                    .updatedTime(Instant.now())
-                    .createdBy("test-user")
-                    .updatedBy("test-user")
-                    .state("ACTIVE")
-                    .build();
+        // Assert
+        assertThat(result.getData()).isEqualTo(expectedResponse);
 
-            when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME))
-                    .thenReturn(expectedResponse);
+        // Verify audit logging
+        ArgumentCaptor<AuditEntry> auditEntryArgumentCaptor = ArgumentCaptor.captor();
+        verify(asyncAuditLogger).log(auditEntryArgumentCaptor.capture());
+        assertThat(auditEntryArgumentCaptor.getValue())
+                .usingRecursiveComparison()
+                .ignoringFields("timestamp")
+                .isEqualTo(new AuditEntry(PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, Map.of("publicPart", expectedResponse.getPublicPart())));
+    }
 
-            // Act
-            var result = secretController.readSecretValue(PROJECT_ID, SECRET_NAME);
+    @Test
+    @DisplayName("Should successfully read secret version and log audit")
+    void shouldSuccessfullyReadSecretVersion() {
+        // Arrange
+        SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart("public-data").dataVersion(5).build();
+        Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
 
-            // Assert
-            assertThat(result).isNotNull();
-            assertThat(result.getData()).isEqualTo(expectedResponse);
-            assertThat(result.getMessage()).isEqualTo("Successfully read secret value.");
+        when(secretService.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty())).thenReturn(expectedResponse);
+        when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
-            // Verify audit logging
-            ArgumentCaptor<AuditEntry> auditEntryArgumentCaptor = ArgumentCaptor.captor();
-            verify(asyncAuditLogger).log(auditEntryArgumentCaptor.capture());
+        // Act
+        var result = secretController.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty());
 
-            AuditEntry capturedMetadata = auditEntryArgumentCaptor.getValue();
-            assertThat(capturedMetadata.getMetadata().get("result")).contains("privatePart");
-            // The privatePart should be masked in the audit log
-            assertThat(capturedMetadata.getMetadata().get("result")).doesNotContain(SECRET_VALUE);
-        }
+        // Assert
+        assertThat(result.getData()).isEqualTo(expectedResponse);
 
+        // Verify audit logging
+        ArgumentCaptor<AuditEntry> auditEntryArgumentCaptor = ArgumentCaptor.captor();
+        verify(asyncAuditLogger).log(auditEntryArgumentCaptor.capture());
+        assertThat(auditEntryArgumentCaptor.getValue())
+                .usingRecursiveComparison()
+                .ignoringFields("timestamp")
+                .isEqualTo(new AuditEntry(PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, Map.of("publicPart", expectedResponse.getPublicPart())));
     }
 }

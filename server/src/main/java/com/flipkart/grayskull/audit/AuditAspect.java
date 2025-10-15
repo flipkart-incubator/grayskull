@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.audit;
 
+import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
@@ -38,6 +39,7 @@ import static com.flipkart.grayskull.audit.AuditConstants.*;
 public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
+    private final RequestUtils requestUtils;
 
     /**
      * Advice that runs after an audited method returns successfully.
@@ -68,8 +70,8 @@ public class AuditAspect {
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntry entry = new AuditEntry(null, projectId, RESOURCE_TYPE_SECRET, resourceName, 
-                resourceVersion, auditable.action().name(), getUserId(), null, metadata);
+        AuditEntry entry = new AuditEntry(projectId, RESOURCE_TYPE_SECRET, resourceName,
+                resourceVersion, auditable.action().name(), getUserId(), requestUtils.getRemoteIPs(), metadata);
 
         auditEntryRepository.save(entry);
     }
@@ -100,12 +102,12 @@ public class AuditAspect {
         Map<String, String> metadata = new HashMap<>();
         arguments.forEach((key, value) -> {
             if (value != null) {
-                SanitizingObjectMapper.addToMap(metadata, key, value);
+                metadata.put(key, SanitizingObjectMapper.getMaskedJson(value));
             }
         });
 
         if (result != null) {
-            SanitizingObjectMapper.addToMap(metadata, "result", result);
+            metadata.put("result", SanitizingObjectMapper.getMaskedJson(result));
         }
         return metadata;
     }

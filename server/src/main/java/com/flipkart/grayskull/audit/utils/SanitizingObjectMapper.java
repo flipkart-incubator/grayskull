@@ -1,12 +1,10 @@
 package com.flipkart.grayskull.audit.utils;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
-
-import java.util.Map;
 
 /**
  * A factory for creating a pre-configured {@link ObjectMapper} for sanitizing audit data.
@@ -38,11 +36,8 @@ public class SanitizingObjectMapper {
     /**
      * puts the {@code value} in {@code map} with {@code key} after sanitizing and serializing {@code value} as json
      */
-    public static void addToMap(Map<String, String> map, String key, Object value) {
-        try {
-            map.put(key, MASK_OBJECT_MAPPER.writeValueAsString(value));
-        } catch (JsonProcessingException e) {
-            map.put(key, "Error serializing object: " + e.getMessage());
-        }
+    @SneakyThrows
+    public static String getMaskedJson(Object value) {
+        return MASK_OBJECT_MAPPER.writeValueAsString(value);
     }
 } 

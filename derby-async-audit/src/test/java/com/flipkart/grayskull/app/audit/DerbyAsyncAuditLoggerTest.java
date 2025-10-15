@@ -134,6 +134,6 @@ class DerbyAsyncAuditLoggerTest {
     private AuditEntry createTestAuditEntry() {
         Map<String, String> metadata = new HashMap<>();
         metadata.put("test", "value");
-        return new AuditEntry("project1", "SECRET", "secret1", 1, "READ", "user1", metadata);
+        return new AuditEntry("project1", "SECRET", "secret1", 1, "READ", "user1", Map.of("ip", "ip1"), metadata);
     }
 }
