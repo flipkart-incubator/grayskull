@@ -1,7 +1,8 @@
 package com.flipkart.grayskull.mappers;
 
-import com.flipkart.grayskull.models.db.Secret;
-import com.flipkart.grayskull.models.db.SecretData;
+import com.flipkart.grayskull.spi.models.Secret;
+import com.flipkart.grayskull.spi.models.SecretData;
+import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.SecretDataPayload;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
@@ -9,8 +10,8 @@ import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
-import com.flipkart.grayskull.models.enums.LifecycleState;
 import com.flipkart.grayskull.models.enums.SecretProvider;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

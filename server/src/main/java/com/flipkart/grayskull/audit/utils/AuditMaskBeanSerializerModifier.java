@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.BeanDescription;
 import com.fasterxml.jackson.databind.SerializationConfig;
 import com.fasterxml.jackson.databind.ser.BeanPropertyWriter;
 import com.fasterxml.jackson.databind.ser.BeanSerializerModifier;
-import com.flipkart.grayskull.models.audit.AuditMask;
+import com.flipkart.grayskull.audit.AuditMask;
 
 import java.util.List;
 

@@ -2,7 +2,8 @@ package com.flipkart.grayskull.audit.utils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.flipkart.grayskull.models.audit.AuditMask;
+import com.flipkart.grayskull.audit.AuditMask;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

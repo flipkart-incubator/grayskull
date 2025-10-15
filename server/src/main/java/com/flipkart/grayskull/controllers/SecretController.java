@@ -3,7 +3,7 @@ package com.flipkart.grayskull.controllers;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
-import com.flipkart.grayskull.models.enums.LifecycleState;
+import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;

@@ -1,57 +1,74 @@
 package com.flipkart.grayskull.mappers;
 
-import com.flipkart.grayskull.models.db.Secret;
-import com.flipkart.grayskull.models.db.SecretData;
+import com.flipkart.grayskull.entities.SecretDataEntity;
+import com.flipkart.grayskull.entities.SecretEntity;
+import com.flipkart.grayskull.spi.models.Secret;
+import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
-import com.flipkart.grayskull.models.enums.LifecycleState;
+import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import org.mapstruct.InheritConfiguration;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Maps between Secret domain models (entities) and Data Transfer Objects (DTOs).
+ * Maps between Secret domain models (entities) and Data Transfer Objects
+ * (DTOs).
  * <p>
  * This mapper uses MapStruct to generate the implementation at compile-time,
  * ensuring high performance and type safety.
  */
-@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE,
-        imports = {UUID.class, Instant.class, LifecycleState.class})
+@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE, imports = { UUID.class,
+        LifecycleState.class })
 public interface SecretMapper {
 
     /**
-     * Maps a {@link CreateSecretRequest} to a {@link Secret} entity.
-     * Sets default values for metadata and timestamps.
+     * Maps a {@link CreateSecretRequest} to a {@link SecretEntity}.
+     * Sets default values for metadata. Timestamps are managed by Spring Data auditing.
      */
-    @Mapping(target = "metadataVersion", constant = "1")
-    @Mapping(target = "currentDataVersion", constant = "1")
-    @Mapping(target = "createdBy", source = "systemUser")
-    @Mapping(target = "updatedBy", source = "systemUser")
-    Secret requestToSecret(CreateSecretRequest request, String projectId, String systemUser);
+    default SecretEntity requestToSecret(CreateSecretRequest request, String projectId, String systemUser) {
+        return SecretEntity.builder()
+                .id(UUID.randomUUID().toString())
+                .projectId(projectId)
+                .name(request.getName())
+                .systemLabels(null)
+                .currentDataVersion(1)
+                .lastRotated(null)
+                .state(LifecycleState.ACTIVE)
+                .provider(request.getProvider() != null ? request.getProvider().name() : null)
+                .providerMeta(request.getProviderMeta())
+                .metadataVersion(1)
+                .version(null)
+                .createdBy(systemUser)
+                .updatedBy(systemUser)
+                .data(null)
+                .build();
+    }
 
     /**
-     * Maps a {@link CreateSecretRequest} to a {@link SecretData} entity.
+     * Maps a {@link CreateSecretRequest} to a {@link SecretDataEntity}.
      */
+    @Mapping(target = "id", expression = "java(UUID.randomUUID().toString())")
     @Mapping(target = "privatePart", source = "request.data.privatePart")
     @Mapping(target = "publicPart", source = "request.data.publicPart")
     @Mapping(target = "dataVersion", constant = "1L")
     @Mapping(target = "secretId", source = "secretId")
-    SecretData requestToSecretData(CreateSecretRequest request, String secretId);
+    SecretDataEntity requestToSecretData(CreateSecretRequest request, String secretId);
 
     /**
-     * Creates a new {@link SecretData} entity for an upgrade request.
+     * Creates a new {@link SecretDataEntity} for an upgrade request.
      */
+    @Mapping(target = "id", expression = "java(UUID.randomUUID().toString())")
     @Mapping(target = "secretId", source = "secret.id")
     @Mapping(target = "dataVersion", source = "newVersion")
-    SecretData upgradeRequestToSecretData(UpgradeSecretDataRequest request, Secret secret, int newVersion);
+    SecretDataEntity upgradeRequestToSecretData(UpgradeSecretDataRequest request, Secret secret, int newVersion);
 
     /**
      * Maps a {@link Secret} entity to a {@link SecretMetadata} DTO.
@@ -68,7 +85,8 @@ public interface SecretMapper {
      * to a comprehensive {@link SecretDataResponse} DTO.
      *
      * @param secret     The main secret entity, providing metadata.
-     * @param secretData The secret data entity, providing the value and version info.
+     * @param secretData The secret data entity, providing the value and version
+     *                   info.
      * @return A {@link SecretDataResponse} DTO.
      */
     @Mapping(target = "dataVersion", source = "secretData.dataVersion")
@@ -91,7 +109,8 @@ public interface SecretMapper {
 
     /**
      * Converts a {@link LifecycleState} enum to its string representation.
-     * This method is used by MapStruct automatically for any LifecycleState -> String mapping.
+     * This method is used by MapStruct automatically for any LifecycleState ->
+     * String mapping.
      *
      * @param state The enum to convert.
      * @return The uppercase name of the enum (e.g., "ACTIVE").
@@ -99,4 +118,4 @@ public interface SecretMapper {
     default String lifecycleStateToString(LifecycleState state) {
         return state == null ? null : state.name();
     }
-} 
+}

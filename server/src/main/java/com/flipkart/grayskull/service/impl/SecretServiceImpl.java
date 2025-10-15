@@ -1,11 +1,13 @@
 package com.flipkart.grayskull.service.impl;
 
 import com.flipkart.grayskull.audit.Audit;
+import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.configuration.DefaultProjectConfig;
+import com.flipkart.grayskull.entities.ProjectEntity;
 import com.flipkart.grayskull.mappers.SecretMapper;
-import com.flipkart.grayskull.models.db.Project;
-import com.flipkart.grayskull.models.db.Secret;
-import com.flipkart.grayskull.models.db.SecretData;
+import com.flipkart.grayskull.spi.models.Project;
+import com.flipkart.grayskull.spi.models.Secret;
+import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
@@ -14,8 +16,7 @@ import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
-import com.flipkart.grayskull.models.enums.AuditAction;
-import com.flipkart.grayskull.models.enums.LifecycleState;
+import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
 import com.flipkart.grayskull.spi.repositories.SecretDataRepository;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
@@ -24,8 +25,6 @@ import com.flipkart.grayskull.service.utils.AuthnUtil;
 import com.flipkart.grayskull.service.utils.SecretEncryptionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,8 +59,8 @@ public class SecretServiceImpl implements SecretService {
      */
     @Override
     public ListSecretsResponse listSecrets(String projectId, int offset, int limit) {
-        Pageable pageable = PageRequest.of(offset, limit);
-        List<Secret> secrets = secretRepository.findByProjectIdAndState(projectId, LifecycleState.ACTIVE, pageable);
+        List<Secret> secrets = secretRepository.findByProjectIdAndState(projectId, LifecycleState.ACTIVE, offset,
+                limit);
         long total = secretRepository.countByProjectIdAndState(projectId, LifecycleState.ACTIVE);
         List<SecretMetadata> secretMetadata = secrets.stream()
                 .map(secretMapper::secretToSecretMetadata)
@@ -227,7 +226,8 @@ public class SecretServiceImpl implements SecretService {
     }
 
     /**
-     * Retrieves a project by its ID. If the project does not exist, it creates a new one
+     * Retrieves a project by its ID. If the project does not exist, it creates a
+     * new one
      * with the default KMS key, saves it, and returns the new instance.
      *
      * @param projectId The ID of the project to get or create.
@@ -237,14 +237,18 @@ public class SecretServiceImpl implements SecretService {
     public Project getOrCreateProject(String projectId) {
         return projectRepository.findById(projectId).orElseGet(() -> {
             String defaultKeyId = defaultProjectConfig.getDefaultProject().getKmsKeyId();
-            Project newProject = new Project(projectId, defaultKeyId);
+            ProjectEntity newProject = ProjectEntity.builder()
+                    .id(projectId)
+                    .kmsKeyId(defaultKeyId)
+                    .build();
             return projectRepository.save(newProject);
         });
     }
 
     /**
      * Resolves the KMS key ID to be used for encryption for a given project.
-     * It first checks for a project-specific key. If one is not defined, it falls back
+     * It first checks for a project-specific key. If one is not defined, it falls
+     * back
      * to the default KMS key.
      *
      * @param projectId The ID of the project.

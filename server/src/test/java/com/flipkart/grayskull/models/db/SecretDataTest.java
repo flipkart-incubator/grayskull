@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.models.db;
 
-import com.flipkart.grayskull.models.enums.LifecycleState;
+import com.flipkart.grayskull.spi.models.SecretData;
+import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

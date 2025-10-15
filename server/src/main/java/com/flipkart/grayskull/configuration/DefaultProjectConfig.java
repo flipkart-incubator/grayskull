@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.configuration;
 
-import com.flipkart.grayskull.models.db.Project;
+import com.flipkart.grayskull.entities.ProjectEntity;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Configuration class to bind and validate default project settings from the application's properties.
  * <p>
- * This class maps properties under the prefix {@code grayskull.projects} to a {@link com.flipkart.grayskull.models.db.Project} object.
+ * This class maps properties under the prefix {@code grayskull.projects} to a {@link com.flipkart.grayskull.entities.ProjectEntity} object.
  * It is used to define a system-wide default project configuration, which can provide fallback values,
  * such as a default KMS key for encryption, when no project-specific configuration is present in the database.
  */
@@ -20,7 +20,6 @@ import org.springframework.context.annotation.Configuration;
 @Setter
 public class DefaultProjectConfig {
 
-    private Project defaultProject;
+    private ProjectEntity defaultProject;
 
 }
-    

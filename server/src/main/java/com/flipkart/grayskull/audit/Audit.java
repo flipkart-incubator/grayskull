@@ -1,6 +1,5 @@
 package com.flipkart.grayskull.audit;
 
-import com.flipkart.grayskull.models.enums.AuditAction;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -10,7 +9,7 @@ import java.lang.annotation.Target;
  * Marks a method for auditing.
  * <p>
  * The {@link AuditAspect} intercepts methods annotated with {@code @Audit}
- * to create and persist an {@link com.flipkart.grayskull.models.db.AuditEntry}
+ * to create and persist an {@link com.flipkart.grayskull.spi.models.AuditEntry}
  * upon successful method completion. Only successful operations are audited.
  */
 @Target(ElementType.METHOD)

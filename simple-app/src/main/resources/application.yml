@@ -29,7 +29,7 @@ grayskull:
         actions:
           - "*"
       - user: user1
-        project: "test-project"
+        project: "*"
         secret: "*"
         actions:
           - "*"

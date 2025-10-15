@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.spi.authz;
 
-import com.flipkart.grayskull.models.db.Project;
-import com.flipkart.grayskull.models.db.Secret;
+import com.flipkart.grayskull.spi.models.Project;
+import com.flipkart.grayskull.spi.models.Secret;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

@@ -3,7 +3,7 @@ package com.flipkart.grayskull.audit;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
-import com.flipkart.grayskull.models.db.AuditEntry;
+import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
@@ -27,9 +27,12 @@ import static com.flipkart.grayskull.audit.AuditConstants.*;
 /**
  * Aspect for auditing methods annotated with {@link Audit}.
  * <p>
- * This class defines the logic for intercepting method executions, capturing their context
- * (arguments, return values, exceptions), and persisting a detailed {@link AuditEntry}.
- * The auditing is performed within the same transaction as the intercepted method,
+ * This class defines the logic for intercepting method executions, capturing
+ * their context
+ * (arguments, return values, exceptions), and persisting a detailed
+ * {@link AuditEntry}.
+ * The auditing is performed within the same transaction as the intercepted
+ * method,
  * ensuring strong consistency between the business operation and the audit log.
  * 
  * Only successful operations are audited - failures are not tracked.
@@ -71,8 +74,15 @@ public class AuditAspect {
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntry entry = new AuditEntry(null, projectId, RESOURCE_TYPE_SECRET, resourceName,
-                resourceVersion, audit.action().name(), getUserId(), null, metadata);
+        AuditEntryEntity entry = AuditEntryEntity.builder()
+                .projectId(projectId)
+                .resourceType(RESOURCE_TYPE_SECRET)
+                .resourceName(resourceName)
+                .resourceVersion(resourceVersion)
+                .action(audit.action().name())
+                .userId(getUserId())
+                .metadata(metadata)
+                .build();
 
         auditEntryRepository.save(entry);
     }
@@ -90,10 +100,11 @@ public class AuditAspect {
     }
 
     /**
-     * Builds a metadata map containing all relevant information about the audited event.
+     * Builds a metadata map containing all relevant information about the audited
+     * event.
      * This method serializes the method arguments and results into a JSON format,
      * masking any fields that are annotated with
-     * {@link com.flipkart.grayskull.models.audit.AuditMask}.
+     * {@link com.flipkart.grayskull.audit.AuditMask}.
      *
      * @param arguments the arguments passed to the intercepted method.
      * @param result    the result returned by the method.
@@ -138,7 +149,8 @@ public class AuditAspect {
 
     /**
      * Extracts the resource name from the method's arguments.
-     * For secret operations, this extracts the secret name from either direct string arguments 
+     * For secret operations, this extracts the secret name from either direct
+     * string arguments
      * or {@link CreateSecretRequest} objects.
      *
      * @param joinPoint the join point of the intercepted method.
@@ -163,7 +175,8 @@ public class AuditAspect {
      * Extracts the parameter names and values from the intercepted method.
      *
      * @param joinPoint The join point of the intercepted method.
-     * @return A map where keys are parameter names and values are the argument objects.
+     * @return A map where keys are parameter names and values are the argument
+     *         objects.
      */
     private Map<String, Object> getMethodArguments(JoinPoint joinPoint) {
         Map<String, Object> argsMap = new HashMap<>();
