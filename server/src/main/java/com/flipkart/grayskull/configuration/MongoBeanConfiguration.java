@@ -8,16 +8,17 @@ import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
-import com.flipkart.grayskull.spi.repositories.ProjectRepository;
+import com.flipkart.grayskull.spimpl.repositories.ProjectRepositoryImpl;
 import com.mongodb.ReadPreference;
 import com.mongodb.TransactionOptions;
 
 /**
- * MongoDB configuration class that enables repository scanning, auditing, and transaction management.
+ * MongoDB configuration class that enables repository scanning, auditing, and
+ * transaction management.
  * Only loads when {@link MongoDatabaseFactory} is present on the classpath.
- * Configures repository scanning starting from {@link ProjectRepository} package.
+ * Configures repository scanning starting from ProjectRepositoryImpl package.
  */
-@EnableMongoRepositories(basePackageClasses = ProjectRepository.class)
+@EnableMongoRepositories(basePackageClasses = ProjectRepositoryImpl.class)
 @EnableMongoAuditing
 @ConditionalOnClass(MongoDatabaseFactory.class)
 @Configuration
@@ -26,12 +27,14 @@ public class MongoBeanConfiguration {
     /**
      * Configures MongoDB transaction management with primary read preference.
      *
-     * @param dbFactory Factory for obtaining {@link com.mongodb.client.MongoDatabase} instances
+     * @param dbFactory Factory for obtaining
+     *                  {@link com.mongodb.client.MongoDatabase} instances
      * @return Configured transaction manager for MongoDB operations
      */
     @Bean
     MongoTransactionManager transactionManager(MongoDatabaseFactory dbFactory) {
-        return new MongoTransactionManager(dbFactory, TransactionOptions.builder().readPreference(ReadPreference.primary()).build());
+        return new MongoTransactionManager(dbFactory,
+                TransactionOptions.builder().readPreference(ReadPreference.primary()).build());
     }
-    
+
 }

@@ -2,8 +2,8 @@ package com.flipkart.grayskull.app.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;

@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.spimpl.audit;
 
-import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.AllArgsConstructor;
 

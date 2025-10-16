@@ -29,25 +29,25 @@ grayskull:
         actions:
           - "*"
       - user: user1
-        project: "test-project"
+        project: "*"
         secret: "*"
         actions:
           - "*"
       - user: editor
         project: "test-project"
         actions:
-          - "CREATE_SECRET"
-          - "READ_SECRET_METADATA"
-          - "READ_SECRET_VALUE"
-          - "ADD_SECRET_VERSION"
-          - "DELETE_SECRET"
-          - "LIST_SECRETS"
-          - "READ_SECRET_VERSION_VALUE"
+          - "secrets.create"
+          - "secrets.read.metadata"
+          - "secrets.read.value"
+          - "secrets.update"
+          - "secrets.delete"
+          - "secrets.list"
+          - "secrets.read.version"
       - user: viewer
         project: "test-project"
         actions:
-          - "LIST_SECRETS"
-          - "READ_SECRET_METADATA"
+          - "secrets.list"
+          - "secrets.read.metadata"
 
 
 management:

@@ -1,13 +1,13 @@
 package com.flipkart.grayskull.controllers;
 
+import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.AuditConstants;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
-import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
-import com.flipkart.grayskull.models.enums.AuditAction;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.TestingAuthenticationToken;
@@ -67,7 +67,7 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, Map.of("publicPart", expectedResponse.getPublicPart())));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, null, Map.of("publicPart", expectedResponse.getPublicPart())));
     }
 
     @Test
@@ -92,6 +92,6 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, Map.of("publicPart", expectedResponse.getPublicPart())));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, null, Map.of("publicPart", expectedResponse.getPublicPart())));
     }
 }

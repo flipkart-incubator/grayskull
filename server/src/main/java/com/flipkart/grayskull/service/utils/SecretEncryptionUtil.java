@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.service.utils;
 
-import com.flipkart.grayskull.models.db.SecretData;
+import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.spi.EncryptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -23,8 +23,9 @@ public class SecretEncryptionUtil {
 
     public void decryptSecretData(SecretData secretData) {
         if (secretData.getPrivatePart() != null && !secretData.getPrivatePart().isEmpty()) {
-            byte[] decrypted = encryptionService.decrypt(Base64.getDecoder().decode(secretData.getPrivatePart()), secretData.getKmsKeyId());
+            byte[] decrypted = encryptionService.decrypt(Base64.getDecoder().decode(secretData.getPrivatePart()),
+                    secretData.getKmsKeyId());
             secretData.setPrivatePart(new String(decrypted));
         }
     }
-} 
+}

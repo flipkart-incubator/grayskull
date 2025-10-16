@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.spi;
 
-import com.flipkart.grayskull.models.db.AuditEntry;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 
 /**
  * Grayskull audits all the write operations in the same transaction so that none of them are missed.

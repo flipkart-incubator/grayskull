@@ -17,21 +17,12 @@
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>com.flipkart.grayskull</groupId>
-            <artifactId>models-api</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.flipkart.grayskull</groupId>
-            <artifactId>models-db</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.data</groupId>
-            <artifactId>spring-data-commons</artifactId>
-            <scope>provided</scope>
-        </dependency>
+        <!-- No external dependencies - SPI module is self-contained -->
+        <!-- 
+            Framework-specific dependencies (jakarta.servlet, spring-security-core)
+            are kept as provided scope since they are required by the GrayskullAuthenticationProvider
+            and GrayskullAuthorizationProvider SPI interfaces 
+        -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>

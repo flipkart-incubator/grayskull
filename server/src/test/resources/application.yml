@@ -26,14 +26,14 @@ grayskull:
       - user: editor
         project: "test-project"
         actions:
-          - "CREATE_SECRET"
-          - "READ_SECRET_METADATA"
-          - "READ_SECRET_VALUE"
-          - "ADD_SECRET_VERSION"
-          - "DELETE_SECRET"
-          - "LIST_SECRETS"
+          - "secrets.create"
+          - "secrets.read.metadata"
+          - "secrets.read.value"
+          - "secrets.update"
+          - "secrets.delete"
+          - "secrets.list"
       - user: viewer
         project: "test-project"
         actions:
-          - "LIST_SECRETS"
-          - "READ_SECRET_METADATA" 
+          - "secrets.list"
+          - "secrets.read.metadata" 

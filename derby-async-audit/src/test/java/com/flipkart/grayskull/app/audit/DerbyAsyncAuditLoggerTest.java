@@ -2,7 +2,7 @@ package com.flipkart.grayskull.app.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.flipkart.grayskull.models.db.AuditEntry;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -134,6 +134,6 @@ class DerbyAsyncAuditLoggerTest {
     private AuditEntry createTestAuditEntry() {
         Map<String, String> metadata = new HashMap<>();
         metadata.put("test", "value");
-        return new AuditEntry("project1", "SECRET", "secret1", 1, "READ", "user1", Map.of("ip", "ip1"), metadata);
+        return new AuditEntry(null, "project1", "SECRET", "secret1", 1, "READ", "user1", Map.of("ip", "ip1"), null, metadata);
     }
 }
