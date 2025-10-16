@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.exception;
 
 import com.flipkart.grayskull.models.dto.response.ResponseTemplate;
+import com.flipkart.grayskull.models.dto.response.Violation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,6 +21,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -36,20 +39,35 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     /**
      * Handles validation exceptions for request parameters and bodies.
-     * Triggered when a method parameter annotated with @Valid fails validation.
+     * Triggered when a method parameter annotated with @Valid fails validation,
+     * method argument types don't match, or request body validation fails.
+     * 
+     * This handler provides structured field-level violation information in the response.
      *
      * @param ex      The ConstraintViolationException that was thrown.
      * @param request The current web request.
-     * @return A ResponseEntity containing a standardized error response with a 400
-     *         Bad Request status.
+     * @return A ResponseEntity containing a standardized error response with structured
+     *         violations and a 400 Bad Request status.
      */
-    @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ResponseTemplate<Void>> handleConstraintViolationException(ConstraintViolationException ex,
-            WebRequest request) {
-        String message = ex.getConstraintViolations().stream()
-                .map(cv -> cv.getPropertyPath() + ": " + cv.getMessage())
-                .collect(Collectors.joining(", "));
-        ResponseTemplate<Void> errorResponse = ResponseTemplate.error(message, HttpStatus.BAD_REQUEST.name());
+    @ExceptionHandler({ConstraintViolationException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ResponseTemplate<Void>> handleValidationException(Exception ex, WebRequest request) {
+        List<Violation> violations = new ArrayList<>();
+        
+        if (ex instanceof ConstraintViolationException constraintEx) {
+            violations = constraintEx.getConstraintViolations().stream()
+                    .map(cv -> new Violation(cv.getPropertyPath().toString(), cv.getMessage()))
+                    .collect(Collectors.toList());
+        } else if (ex instanceof MethodArgumentTypeMismatchException typeMismatchEx) {
+            String message = String.format("Could not convert value '%s' to type '%s'",
+                    typeMismatchEx.getValue(),
+                    Objects.requireNonNull(typeMismatchEx.getRequiredType()).getSimpleName());
+            violations.add(new Violation(typeMismatchEx.getName(), message));
+        }
+        
+        ResponseTemplate<Void> errorResponse = ResponseTemplate.validationError(
+                "Validation failed",
+                HttpStatus.BAD_REQUEST.name(),
+                violations);
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -114,24 +132,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
 
-    /**
-     * Handles exceptions for method argument type mismatches.
-     * Triggered when a method argument (e.g., a path variable) is of the wrong
-     * type.
-     *
-     * @param ex      The MethodArgumentTypeMismatchException that was thrown.
-     * @param request The current web request.
-     * @return A ResponseEntity containing a standardized error response with a 400
-     *         Bad Request status.
-     */
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ResponseTemplate<Void>> handleMethodArgumentTypeMismatchException(
-            MethodArgumentTypeMismatchException ex, WebRequest request) {
-        String message = String.format("The parameter '%s' of value '%s' could not be converted to type '%s'",
-                ex.getName(), ex.getValue(), Objects.requireNonNull(ex.getRequiredType()).getSimpleName());
-        ResponseTemplate<Void> errorResponse = ResponseTemplate.error(message, HttpStatus.BAD_REQUEST.name());
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
-    }
 
     /**
      * A catch-all handler for any other unhandled exceptions.
@@ -164,17 +164,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         ResponseTemplate<Void> errorResponse = ResponseTemplate.error("Malformed JSON request",
-                HttpStatus.BAD_REQUEST.name());
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+                HttpStatus.UNPROCESSABLE_ENTITY.name());
+        return new ResponseEntity<>(errorResponse, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
-                .collect(Collectors.joining(", "));
-        ResponseTemplate<Void> errorResponse = ResponseTemplate.error(message, HttpStatus.BAD_REQUEST.name());
+        List<Violation> violations = ex.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> new Violation(fieldError.getField(), fieldError.getDefaultMessage()))
+                .collect(Collectors.toList());
+        
+        ResponseTemplate<Void> errorResponse = ResponseTemplate.validationError(
+                "Validation failed",
+                HttpStatus.BAD_REQUEST.name(),
+                violations);
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 }

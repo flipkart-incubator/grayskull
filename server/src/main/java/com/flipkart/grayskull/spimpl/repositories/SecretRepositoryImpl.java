@@ -41,8 +41,17 @@ public class SecretRepositoryImpl implements SecretRepository {
 
     @Override
     public List<Secret> findByProjectIdAndState(String projectId, LifecycleState state, int offset, int limit) {
-        return mongoRepository.findByProjectIdAndState(projectId, state, PageRequest.of(offset, limit))
-                .stream()
+        // For true offset-based pagination, always fetch from page 0 with size (offset + limit)
+        // This ensures we get all records from start to our desired range
+        // Note: PageRequest.of(page, size) calculates skip as page * size, so we must use page 0
+        // to avoid incorrect offset calculations when size varies
+        Pageable pageable = PageRequest.of(0, offset + limit);
+        List<SecretEntity> entities = mongoRepository.findByProjectIdAndState(projectId, state, pageable);
+        
+        // Skip the offset records and limit to the requested amount
+        return entities.stream()
+                .skip(offset)
+                .limit(limit)
                 .map(entity -> (Secret) entity)
                 .collect(Collectors.toList());
     }

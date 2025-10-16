@@ -1,6 +1,5 @@
 package com.flipkart.grayskull.authz;
 
-import com.flipkart.grayskull.entities.ProjectEntity;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
@@ -35,12 +34,10 @@ public class GrayskullSecurity {
      * <p>
      * This method is designed for actions where a secret is not yet involved, such
      * as listing secrets
-     * within a project or creating a new one. If the project does not yet exist in
-     * the database,
-     * this method creates a transient {@link Project} instance. This allows
-     * authorization rules
-     * (e.g., wildcard rules for admins) to grant permission for creating resources
-     * in new projects.
+     * within a project or creating a new one. The project resolution logic
+     * (including transient project creation for non-existent projects) is
+     * delegated to the repository layer, keeping authorization logic clean
+     * and focused on permission evaluation.
      *
      * @param projectId The ID of the project.
      * @param action    The action to authorize (e.g., "LIST_SECRETS",
@@ -49,8 +46,7 @@ public class GrayskullSecurity {
      */
     public boolean hasPermission(String projectId, String action) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Project project = projectRepository.findById(projectId)
-                .orElse(ProjectEntity.builder().id(projectId).kmsKeyId(null).build()); // Create a transient project if not found
+        Project project = projectRepository.findByIdOrTransient(projectId);
 
         AuthorizationContext context = AuthorizationContext.forProject(authentication, project);
         return authorizationProvider.isAuthorized(context, action);

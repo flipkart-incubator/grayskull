@@ -80,6 +80,11 @@ public class SecretServiceImpl implements SecretService {
     @Transactional
     @Audit(action = AuditAction.CREATE_SECRET)
     public CreateSecretResponse createSecret(String projectId, CreateSecretRequest request) {
+        // TODO: Add explicit project existence check if auto-create semantic changes.
+        // Currently, resolveKmsKeyId auto-creates projects via getOrCreateProject.
+        // If this behavior is removed in the future, add validation here:
+        // projectRepository.findById(projectId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+        
         secretRepository.findByProjectIdAndName(projectId, request.getName())
                 .ifPresent(s -> {
                     throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -145,6 +150,11 @@ public class SecretServiceImpl implements SecretService {
     @Audit(action = AuditAction.UPGRADE_SECRET_DATA)
     public UpgradeSecretDataResponse upgradeSecretData(String projectId, String secretName,
             UpgradeSecretDataRequest request) {
+        // TODO: Add explicit project existence check if auto-create semantic changes.
+        // Currently, resolveKmsKeyId auto-creates projects via getOrCreateProject.
+        // If this behavior is removed in the future, add validation here:
+        // projectRepository.findById(projectId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+        
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
 
         String keyId = resolveKmsKeyId(projectId);
@@ -227,8 +237,12 @@ public class SecretServiceImpl implements SecretService {
 
     /**
      * Retrieves a project by its ID. If the project does not exist, it creates a
-     * new one
-     * with the default KMS key, saves it, and returns the new instance.
+     * new one with the default KMS key, saves it, and returns the new instance.
+     * <p>
+     * TODO: This auto-creation behavior may change in the future. If so, this method
+     * should be updated to throw an exception when the project doesn't exist, and
+     * calling APIs (createSecret, upgradeSecretData) should add explicit project
+     * existence checks before proceeding with their operations.
      *
      * @param projectId The ID of the project to get or create.
      * @return The existing or newly created {@link Project}.

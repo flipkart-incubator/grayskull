@@ -5,6 +5,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * A standardized wrapper for all API responses.
  *
@@ -17,18 +19,27 @@ public final class ResponseTemplate<T> {
     private T data;
     private String message;
     private String code;
+    
+    /**
+     * A list of field-level validation violations.
+     * This field is only present for validation errors and contains structured
+     * information about which fields failed validation and why.
+     */
+    private List<Violation> violations;
 
     /**
      * Private constructor to enforce the use of static factory methods.
      *
-     * @param data    The response payload.
-     * @param message A descriptive message.
-     * @param code    An optional error code.
+     * @param data       The response payload.
+     * @param message    A descriptive message.
+     * @param code       An optional error code.
+     * @param violations A list of field-level validation violations.
      */
-    private ResponseTemplate(T data, String message, String code) {
+    private ResponseTemplate(T data, String message, String code, List<Violation> violations) {
         this.data = data;
         this.message = message;
         this.code = code;
+        this.violations = violations;
     }
 
     /**
@@ -40,7 +51,7 @@ public final class ResponseTemplate<T> {
      * @return A ResponseTemplate instance for a successful operation with data.
      */
     public static <T> ResponseTemplate<T> success(T data, String message) {
-        return new ResponseTemplate<>(data, message, null);
+        return new ResponseTemplate<>(data, message, null, null);
     }
 
     /**
@@ -50,7 +61,7 @@ public final class ResponseTemplate<T> {
      * @return A ResponseTemplate instance for a successful operation without data.
      */
     public static ResponseTemplate<Void> success(String message) {
-        return new ResponseTemplate<>(null, message, null);
+        return new ResponseTemplate<>(null, message, null, null);
     }
 
     /**
@@ -61,6 +72,19 @@ public final class ResponseTemplate<T> {
      * @return A ResponseTemplate instance for a failed operation.
      */
     public static ResponseTemplate<Void> error(String message, String code) {
-        return new ResponseTemplate<>(null, message, code);
+        return new ResponseTemplate<>(null, message, code, null);
+    }
+    
+    /**
+     * Creates an error response with structured field violations.
+     * Used for validation errors where specific fields failed validation.
+     *
+     * @param message    A general error message.
+     * @param code       A unique code identifying the error type.
+     * @param violations A list of field-level validation violations.
+     * @return A ResponseTemplate instance for a validation failure.
+     */
+    public static ResponseTemplate<Void> validationError(String message, String code, List<Violation> violations) {
+        return new ResponseTemplate<>(null, message, code, violations);
     }
 } 

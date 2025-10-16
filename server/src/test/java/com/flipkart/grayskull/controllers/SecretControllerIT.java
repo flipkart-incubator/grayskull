@@ -123,11 +123,12 @@ class SecretControllerIT extends BaseIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.secrets", hasSize(2)));
 
-            // Act & Assert: Test offset
+            // Act & Assert: Test offset (offset=1 means skip first record, return next 2)
             performListSecrets(projectId, ADMIN_USER, "limit=2", "offset=1")
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.secrets", hasSize(1)))
-                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-3"));
+                    .andExpect(jsonPath("$.data.secrets", hasSize(2)))
+                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-2"))
+                    .andExpect(jsonPath("$.data.secrets[1].name").value("secret-3"));
 
             // Act & Assert: Test empty project
             performListSecrets("empty-project", ADMIN_USER)
@@ -144,6 +145,70 @@ class SecretControllerIT extends BaseIntegrationTest {
             performListSecrets(projectId, ADMIN_USER, "offset=1")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.secrets", hasSize(0)));
+        }
+
+        @Test
+        void shouldHandleComplexPaginationScenarios() throws Exception {
+            final String projectId = "project-pagination-complex";
+            
+            // Create 10 secrets
+            for (int i = 1; i <= 10; i++) {
+                performCreateSecret(projectId, "secret-" + i, "value-" + i, ADMIN_USER);
+            }
+
+            // Test 1: First page with limit 3
+            performListSecrets(projectId, ADMIN_USER, "limit=3", "offset=0")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.secrets", hasSize(3)))
+                    .andExpect(jsonPath("$.data.total").value(10))
+                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-1"))
+                    .andExpect(jsonPath("$.data.secrets[1].name").value("secret-2"))
+                    .andExpect(jsonPath("$.data.secrets[2].name").value("secret-3"));
+
+            // Test 2: Second page with limit 3 (offset=3)
+            performListSecrets(projectId, ADMIN_USER, "limit=3", "offset=3")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.secrets", hasSize(3)))
+                    .andExpect(jsonPath("$.data.total").value(10))
+                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-4"))
+                    .andExpect(jsonPath("$.data.secrets[1].name").value("secret-5"))
+                    .andExpect(jsonPath("$.data.secrets[2].name").value("secret-6"));
+
+            // Test 3: Non-aligned offset (offset=5, limit=3)
+            performListSecrets(projectId, ADMIN_USER, "limit=3", "offset=5")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.secrets", hasSize(3)))
+                    .andExpect(jsonPath("$.data.total").value(10))
+                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-6"))
+                    .andExpect(jsonPath("$.data.secrets[1].name").value("secret-7"))
+                    .andExpect(jsonPath("$.data.secrets[2].name").value("secret-8"));
+
+            // Test 4: Last partial page (offset=8, limit=5) - should return 2 items
+            performListSecrets(projectId, ADMIN_USER, "limit=5", "offset=8")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.secrets", hasSize(2)))
+                    .andExpect(jsonPath("$.data.total").value(10))
+                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-9"))
+                    .andExpect(jsonPath("$.data.secrets[1].name").value("secret-10"));
+
+            // Test 5: Exact boundary (offset=9, limit=1) - last item
+            performListSecrets(projectId, ADMIN_USER, "limit=1", "offset=9")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.secrets", hasSize(1)))
+                    .andExpect(jsonPath("$.data.total").value(10))
+                    .andExpect(jsonPath("$.data.secrets[0].name").value("secret-10"));
+
+            // Test 6: Beyond total count
+            performListSecrets(projectId, ADMIN_USER, "limit=5", "offset=10")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.secrets", hasSize(0)))
+                    .andExpect(jsonPath("$.data.total").value(10));
+
+            // Test 7: Large offset
+            performListSecrets(projectId, ADMIN_USER, "limit=5", "offset=100")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.secrets", hasSize(0)))
+                    .andExpect(jsonPath("$.data.total").value(10));
         }
     }
 
@@ -431,26 +496,47 @@ class SecretControllerIT extends BaseIntegrationTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"privatePart\": \"some-value\"}"))
                 .andExpect(status().isMethodNotAllowed())
-                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"))
+                .andExpect(jsonPath("$.violations").doesNotExist());
         }
 
         @Test
-        void shouldReturnBadRequestForMalformedJson() throws Exception {
+        void shouldReturnUnprocessableEntityForMalformedJson() throws Exception {
             mockMvc.perform(post(String.format("/v1/project/%s/secrets", TEST_PROJECT))
                     .with(user(ADMIN_USER))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"name\": \"test-secret\", \"privatePart\": }")) // Invalid JSON
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
-                .andExpect(jsonPath("$.message").value("Malformed JSON request"));
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("UNPROCESSABLE_ENTITY"))
+                .andExpect(jsonPath("$.message").value("Malformed JSON request"))
+                .andExpect(jsonPath("$.violations").doesNotExist());
         }
 
+
         @Test
-        void shouldReturnBadRequestForArgumentTypeMismatch() throws Exception {
+        void shouldReturnStructuredViolationForTypeMismatchError() throws Exception {
+            // Path variable 'version' expects Integer but receives String
             mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/%s", TEST_PROJECT, "some-secret", "not-a-number"))
                     .with(user(ADMIN_USER)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.violations").isArray())
+                .andExpect(jsonPath("$.violations", hasSize(1)))
+                .andExpect(jsonPath("$.violations[0].field").value("version"))
+                .andExpect(jsonPath("$.violations[0].message").exists());
+        }
+
+
+        @Test
+        void shouldNotIncludeViolationsForNonValidationErrors() throws Exception {
+            // Test that 404 errors don't include violations field
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s", TEST_PROJECT, "non-existent-secret"))
+                    .with(user(ADMIN_USER)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.message").exists())
+                .andExpect(jsonPath("$.violations").doesNotExist());
         }
     }
 } 

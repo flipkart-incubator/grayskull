@@ -33,6 +33,13 @@ public class ProjectRepositoryImpl implements ProjectRepository {
     }
 
     @Override
+    public Project findByIdOrTransient(String id) {
+        return mongoRepository.findById(id)
+                .map(entity -> (Project) entity)
+                .orElseGet(() -> ProjectEntity.builder().id(id).kmsKeyId(null).build());
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public <S extends Project> S save(S entity) {
         if (!(entity instanceof ProjectEntity)) {
