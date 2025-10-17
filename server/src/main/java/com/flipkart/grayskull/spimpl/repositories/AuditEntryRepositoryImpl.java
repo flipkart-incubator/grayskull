@@ -3,18 +3,11 @@ package com.flipkart.grayskull.spimpl.repositories;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import com.flipkart.grayskull.spimpl.repositories.mongo.AuditEntryMongoRepository;
 import org.springframework.data.util.Streamable;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.stream.Collectors;
-
-/**
- * Internal MongoDB repository for AuditEntryEntity.
- */
-interface AuditEntryMongoRepository extends MongoRepository<AuditEntryEntity, String> {
-}
 
 /**
  * Spring Data MongoDB repository implementation for AuditEntry.
