@@ -3,16 +3,10 @@ package com.flipkart.grayskull.spimpl.repositories;
 import com.flipkart.grayskull.entities.ProjectEntity;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import com.flipkart.grayskull.spimpl.repositories.mongo.ProjectMongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
-
-/**
- * Internal MongoDB repository for ProjectEntity.
- */
-interface ProjectMongoRepository extends MongoRepository<ProjectEntity, String> {
-}
 
 /**
  * Spring Data MongoDB repository implementation for Project.

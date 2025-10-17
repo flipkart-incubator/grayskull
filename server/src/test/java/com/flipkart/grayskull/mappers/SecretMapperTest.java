@@ -1,5 +1,7 @@
 package com.flipkart.grayskull.mappers;
 
+import com.flipkart.grayskull.entities.SecretEntity;
+import com.flipkart.grayskull.entities.SecretDataEntity;
 import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
@@ -57,7 +59,7 @@ class SecretMapperTest {
             String systemUser = "admin";
 
             // Act
-            Secret secret = secretMapper.requestToSecret(request, projectId, systemUser);
+            SecretEntity secret = secretMapper.requestToSecret(request, projectId, systemUser);
 
             // Assert
             assertNotNull(secret);
@@ -83,7 +85,7 @@ class SecretMapperTest {
             String secretId = "secret-123";
 
             // Act
-            SecretData secretData = secretMapper.requestToSecretData(request, secretId);
+            SecretDataEntity secretData = secretMapper.requestToSecretData(request, secretId);
 
             // Assert
             assertNotNull(secretData);
@@ -111,7 +113,7 @@ class SecretMapperTest {
             int newVersion = 2;
 
             // Act
-            SecretData secretData = secretMapper.upgradeRequestToSecretData(request, secret, newVersion);
+            SecretDataEntity secretData = secretMapper.upgradeRequestToSecretData(request, secret, newVersion);
 
             // Assert
             assertNotNull(secretData);
@@ -132,7 +134,7 @@ class SecretMapperTest {
             // providerMeta and systemLabels are null
 
             // Act
-            Secret secret = secretMapper.requestToSecret(request, "proj-1", "user1");
+            SecretEntity secret = secretMapper.requestToSecret(request, "proj-1", "user1");
 
             // Assert
             assertNotNull(secret);
@@ -231,12 +233,13 @@ class SecretMapperTest {
                     .updatedBy("user2")
                     .build();
 
-            SecretData secretData = new SecretData();
-            secretData.setSecretId("secret-202");
-            secretData.setDataVersion(2L);
-            secretData.setPublicPart("public-data");
-            secretData.setPrivatePart("private-data");
-            secretData.setState(LifecycleState.ACTIVE);
+            SecretData secretData = SecretData.builder()
+                    .secretId("secret-202")
+                    .dataVersion(2L)
+                    .publicPart("public-data")
+                    .privatePart("private-data")
+                    .state(LifecycleState.ACTIVE)
+                    .build();
 
             // Act
             SecretDataResponse response = secretMapper.toSecretDataResponse(secret, secretData);
@@ -268,10 +271,11 @@ class SecretMapperTest {
                     .updatedBy("admin")
                     .build();
 
-            SecretData secretData = new SecretData();
-            secretData.setDataVersion(1L);
-            secretData.setPublicPart("old-public");
-            secretData.setPrivatePart("old-private");
+            SecretData secretData = SecretData.builder()
+                    .dataVersion(1L)
+                    .publicPart("old-public")
+                    .privatePart("old-private")
+                    .build();
 
             // Act
             SecretDataVersionResponse response = secretMapper.secretDataToSecretDataVersionResponse(secret, secretData);
@@ -320,7 +324,7 @@ class SecretMapperTest {
             request.setData(payload);
 
             // Act
-            SecretData secretData = secretMapper.requestToSecretData(request, "");
+            SecretDataEntity secretData = secretMapper.requestToSecretData(request, "");
 
             // Assert
             assertNotNull(secretData);
@@ -345,7 +349,7 @@ class SecretMapperTest {
             int largeVersion = Integer.MAX_VALUE;
 
             // Act
-            SecretData secretData = secretMapper.upgradeRequestToSecretData(request, secret, largeVersion);
+            SecretDataEntity secretData = secretMapper.upgradeRequestToSecretData(request, secret, largeVersion);
 
             // Assert
             assertNotNull(secretData);

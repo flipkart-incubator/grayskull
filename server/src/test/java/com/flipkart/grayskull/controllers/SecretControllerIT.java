@@ -530,8 +530,12 @@ class SecretControllerIT extends BaseIntegrationTest {
 
         @Test
         void shouldNotIncludeViolationsForNonValidationErrors() throws Exception {
+            // Create a project/secret first so user has access to the project
+            final String projectId = "project-not-found-test";
+            performCreateSecret(projectId, "existing-secret", "some-value", ADMIN_USER);
+            
             // Test that 404 errors don't include violations field
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s", TEST_PROJECT, "non-existent-secret"))
+            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s", projectId, "non-existent-secret"))
                     .with(user(ADMIN_USER)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"))

@@ -3,17 +3,10 @@ package com.flipkart.grayskull.spimpl.repositories;
 import com.flipkart.grayskull.entities.SecretDataEntity;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.spi.repositories.SecretDataRepository;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import com.flipkart.grayskull.spimpl.repositories.mongo.SecretDataMongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
-
-/**
- * Internal MongoDB repository for SecretDataEntity.
- */
-interface SecretDataMongoRepository extends MongoRepository<SecretDataEntity, String> {
-    Optional<SecretDataEntity> findBySecretIdAndDataVersion(String secretId, long dataVersion);
-}
 
 /**
  * Spring Data MongoDB repository implementation for SecretData.

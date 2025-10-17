@@ -4,27 +4,14 @@ import com.flipkart.grayskull.entities.SecretEntity;
 import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
+import com.flipkart.grayskull.spimpl.repositories.mongo.SecretMongoRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
-/**
- * Internal MongoDB repository for SecretEntity.
- */
-interface SecretMongoRepository extends MongoRepository<SecretEntity, String> {
-    List<SecretEntity> findByProjectIdAndState(String projectId, LifecycleState state, Pageable pageable);
-
-    long countByProjectIdAndState(String projectId, LifecycleState state);
-
-    Optional<SecretEntity> findByProjectIdAndName(String projectId, String name);
-
-    Optional<SecretEntity> findByProjectIdAndNameAndState(String projectId, String name, LifecycleState state);
-}
 
 /**
  * Spring Data MongoDB repository implementation for Secret.
