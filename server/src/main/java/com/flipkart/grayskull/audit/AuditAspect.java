@@ -2,10 +2,10 @@ package com.flipkart.grayskull.audit;
 
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
-import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.JoinPoint;
@@ -73,7 +73,7 @@ public class AuditAspect {
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntryEntity entry = AuditEntryEntity.builder()
+        AuditEntry entry = AuditEntry.builder()
                 .projectId(projectId)
                 .resourceType(RESOURCE_TYPE_SECRET)
                 .resourceName(resourceName)

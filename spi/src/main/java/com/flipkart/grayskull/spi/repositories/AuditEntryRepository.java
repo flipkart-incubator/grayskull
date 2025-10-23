@@ -16,7 +16,7 @@ public interface AuditEntryRepository {
      * @param entity the audit entry to save, must not be null.
      * @return the saved audit entry; will never be null.
      */
-    <S extends AuditEntry> S save(S entity);
+    AuditEntry save(AuditEntry entity);
 
     /**
      * Saves all given audit entries.
@@ -24,5 +24,5 @@ public interface AuditEntryRepository {
      * @param entities the audit entries to save, must not be null and must not contain null.
      * @return the saved audit entries; will never be null.
      */
-    <S extends AuditEntry> List<S> saveAll(Iterable<S> entities);
+    List<AuditEntry> saveAll(Iterable<AuditEntry> entities);
 }
