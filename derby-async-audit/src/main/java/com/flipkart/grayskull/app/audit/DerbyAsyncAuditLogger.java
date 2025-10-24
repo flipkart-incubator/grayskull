@@ -30,7 +30,7 @@ public class DerbyAsyncAuditLogger implements AsyncAuditLogger {
     private final AuditCheckpointRepository auditCheckpointRepository;
 
     public DerbyAsyncAuditLogger(AuditProperties auditProperties, ObjectMapper objectMapper, MeterRegistry meterRegistry, AuditEntryRepository auditEntryRepository, AuditCheckpointRepository auditCheckpointRepository) throws SQLException {
-        this.connection = DriverManager.getConnection(auditProperties.getDerbyUrl());
+        this.connection = DriverManager.getConnection("jdbc:derby:" + auditProperties.getDerbyDirectory() + ";create=true");
         this.auditProperties = auditProperties;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
@@ -71,26 +71,33 @@ public class DerbyAsyncAuditLogger implements AsyncAuditLogger {
 
     @Transactional
     public int commitBatchToDb() throws SQLException, JsonProcessingException {
-        try (Statement statement = connection.createStatement()) {
-            AuditCheckpoint auditCheckpoint = auditCheckpointRepository.findByNodeName(auditProperties.getNodeName()).orElseGet(() -> new AuditCheckpoint(auditProperties.getNodeName()));
-            long maxId = auditCheckpoint.getLogId();
-            statement.execute("SELECT id, event FROM audits WHERE id > " + maxId + " ORDER BY id FETCH FIRST " + auditProperties.getBatchSize() + " ROWS ONLY");
+        AuditCheckpoint auditCheckpoint = auditCheckpointRepository.findByNodeName(auditProperties.getNodeName()).orElseGet(() -> new AuditCheckpoint(auditProperties.getNodeName()));
+        long maxId = auditCheckpoint.getLogId();
+        log.info("fetching {} audit entries from checkpoint {}", auditProperties.getBatchSize(), maxId);
+        List<AuditEntry> auditEntries = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement("SELECT id, event FROM audits WHERE id > ? ORDER BY id FETCH FIRST ? ROWS ONLY")) {
+            statement.setLong(1, maxId);
+            statement.setInt(2, auditProperties.getBatchSize());
+            statement.execute();
             ResultSet resultSet = statement.getResultSet();
-            List<AuditEntry> auditEntries = new ArrayList<>();
             while (resultSet.next()) {
                 maxId = resultSet.getLong(1);
                 String eventSting = resultSet.getString(2);
                 AuditEntry auditEntry = objectMapper.readValue(eventSting, AuditEntry.class);
-                auditEntry.getMetadata().put("logId", auditProperties.getNodeName() + "." + maxId);
+                auditEntry.getMetadata().put("logId", auditProperties.getNodeName() + "." + maxId + "." + auditEntry.getTimestamp());
                 auditEntries.add(auditEntry);
             }
-            if (!auditEntries.isEmpty()) {
-                auditEntryRepository.saveAll(auditEntries);
-                auditCheckpoint.setLogId(maxId);
-                auditCheckpointRepository.save(auditCheckpoint);
-                statement.execute("DELETE FROM audits WHERE id <= " + maxId);
-            }
-            return auditEntries.size();
         }
+        log.info("found {} entries. storing them to db. current checkpoint is {}", auditEntries.size(), maxId);
+        if (!auditEntries.isEmpty()) {
+            auditEntryRepository.saveAll(auditEntries);
+            auditCheckpoint.setLogId(maxId);
+            auditCheckpointRepository.save(auditCheckpoint);
+            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM audits WHERE id <= ?")) {
+                statement.setLong(1, maxId);
+                statement.execute();
+            }
+        }
+        return auditEntries.size();
     }
 }

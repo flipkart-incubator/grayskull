@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.*;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -22,7 +23,7 @@ import static org.mockito.Mockito.*;
 
 class DerbyAsyncAuditLoggerTest {
 
-    private final AuditProperties auditProperties = new AuditProperties("jdbc:derby:memory:testdb;create=true", "test-node", 100, "1m");
+    private final AuditProperties auditProperties = new AuditProperties("memory:testdb", "test-node", 100, "1m", Duration.ZERO);
     private final Connection connection = mock();
     private final ObjectMapper objectMapper = mock();
     private final MeterRegistry meterRegistry = mock();
@@ -99,9 +100,13 @@ class DerbyAsyncAuditLoggerTest {
         AuditCheckpoint checkpoint = new AuditCheckpoint("test-node");
         checkpoint.setLogId(0L);
 
+        PreparedStatement selectStatement = mock();
+        PreparedStatement deleteStatement = mock();
+
         when(auditCheckpointRepository.findByNodeName("test-node")).thenReturn(Optional.of(checkpoint));
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.getResultSet()).thenReturn(resultSet);
+        when(connection.prepareStatement("SELECT id, event FROM audits WHERE id > ? ORDER BY id FETCH FIRST ? ROWS ONLY")).thenReturn(selectStatement);
+        when(connection.prepareStatement("DELETE FROM audits WHERE id <= ?")).thenReturn(deleteStatement);
+        when(selectStatement.getResultSet()).thenReturn(resultSet);
         when(resultSet.next()).thenReturn(true).thenReturn(false);
         when(resultSet.getLong(1)).thenReturn(1L);
         when(resultSet.getString(2)).thenReturn("{\"test\":\"data\"}");
@@ -112,7 +117,6 @@ class DerbyAsyncAuditLoggerTest {
         assertEquals(1, result);
         verify(auditEntryRepository).saveAll(anyList());
         verify(auditCheckpointRepository).save(checkpoint);
-        verify(statement).execute("DELETE FROM audits WHERE id <= 1");
     }
 
     @Test
@@ -120,15 +124,18 @@ class DerbyAsyncAuditLoggerTest {
         AuditCheckpoint checkpoint = new AuditCheckpoint("test-node");
         checkpoint.setLogId(0L);
 
+        PreparedStatement selectStatement = mock();
+
         when(auditCheckpointRepository.findByNodeName("test-node")).thenReturn(Optional.of(checkpoint));
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.getResultSet()).thenReturn(resultSet);
+        when(connection.prepareStatement("SELECT id, event FROM audits WHERE id > ? ORDER BY id FETCH FIRST ? ROWS ONLY")).thenReturn(selectStatement);
+        when(selectStatement.getResultSet()).thenReturn(resultSet);
         when(resultSet.next()).thenReturn(false);
 
         int result = logger.commitBatchToDb();
 
         assertEquals(0, result);
         verify(auditEntryRepository, never()).saveAll(anyList());
+        verify(connection, never()).prepareStatement("DELETE FROM audits WHERE id <= ?");
     }
 
     private AuditEntry createTestAuditEntry() {

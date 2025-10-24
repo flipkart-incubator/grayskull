@@ -9,6 +9,8 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import java.time.Duration;
+
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "audit")
@@ -20,7 +22,7 @@ public class AuditProperties {
      * Folder for Apache Derby where audit events are stored
      */
     @NotEmpty
-    private String derbyUrl;
+    private String derbyDirectory;
 
     /**
      * Unique name for this instance of the service. needs to be unique because this name is persisted to DB
@@ -40,5 +42,11 @@ public class AuditProperties {
      */
     @NotEmpty
     private String batchTimeInterval;
+
+    /**
+     * If the checkpoint is older than this duration, then the data present in the Derby db is considered and deleted.
+     * If the duration is set to zero, then staleness check is disabled
+     */
+    private Duration stalenessDuration = Duration.ZERO;
 
 }

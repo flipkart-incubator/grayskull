@@ -6,4 +6,5 @@ import java.util.Optional;
 
 public interface AuditCheckpointRepository extends CrudRepository<AuditCheckpoint, Long> {
     Optional<AuditCheckpoint> findByNodeName(String nodeName);
+    void deleteByNodeName(String nodeName);
 }

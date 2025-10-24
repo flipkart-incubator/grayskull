@@ -71,4 +71,5 @@ audit:
   batch-size: 10
   batchTimeInterval: 1m
   node-name: localhost
-  derby-url: jdbc:derby:/tmp/test;create=true
+  derby-directory: /tmp/test
+  staleness-duration: 5d

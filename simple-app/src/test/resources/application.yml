@@ -9,7 +9,7 @@ grayskull:
       test-key: "MfDeylVH3ZmvnrK+XJv259fzjFB55+9yZaUr1OYvNVE="
 
 audit:
-  derby-url: jdbc:derby:memory:testdb;create=true
+  derby-directory: /tmp/derby-test
   batch-size: 10
   batch-time-interval: 1m
   node-name: localhost
