@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.spi.models;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
@@ -70,6 +71,7 @@ public class AuditEntry {
      * The timestamp when the action occurred, recorded in UTC with offset
      * information.
      */
+    @Builder.Default
     private Instant timestamp = Instant.now();
 
     /**
