@@ -44,9 +44,13 @@ public class AuditProperties {
     private String batchTimeInterval;
 
     /**
-     * If the checkpoint is older than this duration, then the data present in the Derby db is considered and deleted.
+     * If the checkpoint is older than this duration, then the data present in the Derby db is considered stale and deleted.
      * If the duration is set to zero, then staleness check is disabled
      */
     private Duration stalenessDuration = Duration.ZERO;
+
+    public String getDerbyUrl() {
+        return "jdbc:derby:" + derbyDirectory + ";create=true";
+    }
 
 }

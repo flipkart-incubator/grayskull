@@ -30,7 +30,7 @@ public class DerbyAsyncAuditLogger implements AsyncAuditLogger {
     private final AuditCheckpointRepository auditCheckpointRepository;
 
     public DerbyAsyncAuditLogger(AuditProperties auditProperties, ObjectMapper objectMapper, MeterRegistry meterRegistry, AuditEntryRepository auditEntryRepository, AuditCheckpointRepository auditCheckpointRepository) throws SQLException {
-        this.connection = DriverManager.getConnection("jdbc:derby:" + auditProperties.getDerbyDirectory() + ";create=true");
+        this.connection = DriverManager.getConnection(auditProperties.getDerbyUrl());
         this.auditProperties = auditProperties;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
