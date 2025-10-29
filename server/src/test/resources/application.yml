@@ -5,10 +5,8 @@ spring:
       uri: mongodb://admin:password@host.docker.internal:37017/admin?maxLifeTimeMs=3600000&maxIdleTimeMs=600000&maxConnecting=100&readPreference=secondaryPreferred&w=majority
 
 grayskull:
-  projects:
-    defaultProject:
-      id: "default-project"
-      kmsKeyId: "test-key"
+  kms:
+    defaultKeyId: "test-key"
   crypto:
     keys:
       test-key: "wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4="

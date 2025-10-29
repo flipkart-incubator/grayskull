@@ -21,10 +21,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class SecretDataEntity extends SecretData {
 
     @Id
-    private String id;
-
     @Override
-    public String getSecretId() {
-        return super.getSecretId();
+    public String getId() {
+        return super.getId();
     }
 }

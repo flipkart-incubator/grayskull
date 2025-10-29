@@ -21,6 +21,12 @@ import java.time.Instant;
 public class SecretData {
 
     /**
+     * The unique identifier for this secret data version.
+     * This is the primary key.
+     */
+    private String id;
+
+    /**
      * The identifier of the Secret this data belongs to.
      */
     private String secretId;

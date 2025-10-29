@@ -16,6 +16,16 @@ import java.time.Instant;
 public class UpgradeSecretDataResponse {
 
     /**
+     * Project identifier.
+     */
+    String projectId;
+
+    /**
+     * Secret name.
+     */
+    String name;
+
+    /**
      * New data version number.
      */
     int dataVersion;

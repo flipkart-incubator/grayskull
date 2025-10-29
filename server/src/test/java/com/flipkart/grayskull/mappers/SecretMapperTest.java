@@ -209,7 +209,7 @@ class SecretMapperTest {
                     .build();
 
             // Act
-            CreateSecretResponse response = secretMapper.secretToCreateSecretResponse(secret);
+            CreateSecretResponse response = secretMapper.secretToSecretResponse(secret);
 
             // Assert
             assertNotNull(response);

@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Spring Data MongoDB repository implementation for Secret.
@@ -40,7 +39,7 @@ public class SecretRepositoryImpl implements SecretRepository {
                 .skip(offset)
                 .limit(limit)
                 .map(entity -> (Secret) entity)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override

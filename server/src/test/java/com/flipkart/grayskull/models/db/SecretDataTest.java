@@ -42,6 +42,7 @@ class SecretDataTest {
 
             // Act
             SecretData secretData = new SecretData(
+                    "id-123",
                     "secret-123",
                     1L,
                     "public-value",
@@ -140,11 +141,11 @@ class SecretDataTest {
             // Arrange
             Instant now = Instant.now();
             SecretData data1 = new SecretData(
-                    "secret-1", 1L, "public", "private",
+                    "id-1", "secret-1", 1L, "public", "private",
                     "kms-1", "ref-1", "ver-1", now, LifecycleState.ACTIVE);
 
             SecretData data2 = new SecretData(
-                    "secret-1", 1L, "public", "private",
+                    "id-1", "secret-1", 1L, "public", "private",
                     "kms-1", "ref-1", "ver-1", now, LifecycleState.ACTIVE);
 
             // Act & Assert

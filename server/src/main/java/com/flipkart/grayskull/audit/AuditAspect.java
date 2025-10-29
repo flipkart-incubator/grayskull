@@ -1,8 +1,10 @@
 package com.flipkart.grayskull.audit;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
+import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.models.AuditEntry;
@@ -16,7 +18,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -59,6 +60,10 @@ public class AuditAspect {
 
     /**
      * Core auditing logic for successful operations only.
+     * <p>
+     * If audit metadata serialization fails, this method throws an exception,
+     * which will cause the entire operation to fail, ensuring that operations
+     * without proper audit trails are not allowed.
      *
      * @param joinPoint the join point representing the intercepted method.
      * @param audit     the annotation instance.
@@ -68,12 +73,12 @@ public class AuditAspect {
         Map<String, Object> arguments = getMethodArguments(joinPoint);
 
         String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
-        String resourceName = extractResourceName(joinPoint, arguments);
+        String resourceName = extractResourceName(result, arguments);
         Integer resourceVersion = extractResourceVersion(result);
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntry entry = AuditEntry.builder()
+        AuditEntryEntity entry = AuditEntryEntity.builder()
                 .projectId(projectId)
                 .resourceType(RESOURCE_TYPE_SECRET)
                 .resourceName(resourceName)
@@ -105,6 +110,9 @@ public class AuditAspect {
      * This method serializes the method arguments and results into a JSON format,
      * masking any fields that are annotated with
      * {@link com.flipkart.grayskull.audit.AuditMask}.
+     * <p>
+     * If serialization fails, the method throws an exception, causing the entire
+     * operation to fail, ensuring audit integrity.
      *
      * @param arguments the arguments passed to the intercepted method.
      * @param result    the result returned by the method.
@@ -112,27 +120,29 @@ public class AuditAspect {
      */
     private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) {
         Map<String, String> metadata = new HashMap<>();
-        arguments.forEach((key, value) -> {
-            if (value != null) {
-                metadata.put(key, SanitizingObjectMapper.getMaskedJson(value));
+        for (Map.Entry<String, Object> entry : arguments.entrySet()) {
+            if (entry.getValue() != null) {
+                metadata.put(entry.getKey(), SanitizingObjectMapper.getMaskedJson(result));
             }
-        });
+        }
 
         if (result != null) {
-            metadata.put("result", SanitizingObjectMapper.getMaskedJson(result));
+            metadata.put(RESULT_METADATA_KEY, SanitizingObjectMapper.getMaskedJson(result));
         }
         return metadata;
     }
 
     /**
      * Extracts the resource version from the method's result object.
+     * Relies on the response entity schema as the source of truth rather than
+     * HTTP method/URL or instanceof checks.
      *
      * @param result the object returned by the intercepted method.
      * @return The resource version, or {@code null} if not applicable.
      */
     private Integer extractResourceVersion(Object result) {
-        if (result instanceof CreateSecretResponse) {
-            return 1;
+        if (result instanceof CreateSecretResponse secretResponse) {
+            return secretResponse.getCurrentDataVersion();
         } else if (result instanceof UpgradeSecretDataResponse secretResponse) {
             return secretResponse.getDataVersion();
         }
@@ -140,27 +150,29 @@ public class AuditAspect {
     }
 
     /**
-     * Extracts the resource name from the method's arguments.
-     * For secret operations, this extracts the secret name from either direct
-     * string arguments
-     * or {@link CreateSecretRequest} objects.
+     * Extracts the resource name from the method's result object or method arguments.
+     * Prefers response entity schema as the source of truth (for create/upgrade operations),
+     * but falls back to method arguments for operations that return void (like delete).
      *
-     * @param joinPoint the join point of the intercepted method.
-     * @param arguments the extracted arguments of the method.
+     * @param result the object returned by the intercepted method.
+     * @param arguments the method arguments map.
      * @return The resource name, or "UNKNOWN" if not found.
      */
-    private String extractResourceName(JoinPoint joinPoint, Map<String, Object> arguments) {
+    private String extractResourceName(Object result, Map<String, Object> arguments) {
+        // Try to extract from response entity first (response schema is the source of truth)
+        if (result instanceof CreateSecretResponse secretResponse) {
+            return secretResponse.getName();
+        } else if (result instanceof UpgradeSecretDataResponse secretResponse) {
+            return secretResponse.getName();
+        }
+
+        // Fall back to method arguments for void operations (like delete)
         Object name = arguments.get(SECRET_NAME_PARAM);
         if (name instanceof String s) {
             return s;
         }
 
-        return Arrays.stream(joinPoint.getArgs())
-                .filter(CreateSecretRequest.class::isInstance)
-                .map(CreateSecretRequest.class::cast)
-                .map(CreateSecretRequest::getName)
-                .findFirst()
-                .orElse(UNKNOWN_VALUE);
+        return UNKNOWN_VALUE;
     }
 
     /**
