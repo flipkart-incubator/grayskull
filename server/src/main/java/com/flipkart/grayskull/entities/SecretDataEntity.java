@@ -25,9 +25,4 @@ public class SecretDataEntity extends SecretData {
     public String getId() {
         return super.getId();
     }
-
-    @Override
-    public String getSecretId() {
-        return super.getSecretId();
-    }
 }
