@@ -18,10 +18,8 @@ grayskull:
     keys:
       key1: wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4=
       key2: LFptkQ/bTpTX4dCoGtZm2BcqMvoUTYJHTvyoF4t0X00=
-  projects:
-    defaultProject:
-      id: default-project
-      kmsKeyId: key1
+  kms:
+    defaultKeyId: key1
   authorization:
     rules:
       - user: admin

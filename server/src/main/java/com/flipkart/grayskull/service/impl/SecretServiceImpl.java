@@ -2,7 +2,7 @@ package com.flipkart.grayskull.service.impl;
 
 import com.flipkart.grayskull.audit.Audit;
 import com.flipkart.grayskull.audit.AuditAction;
-import com.flipkart.grayskull.configuration.DefaultProjectConfig;
+import com.flipkart.grayskull.configuration.KmsConfig;
 import com.flipkart.grayskull.entities.ProjectEntity;
 import com.flipkart.grayskull.mappers.SecretMapper;
 import com.flipkart.grayskull.spi.models.Project;
@@ -32,7 +32,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -43,7 +42,7 @@ public class SecretServiceImpl implements SecretService {
     private final SecretDataRepository secretDataRepository;
     private final SecretMapper secretMapper;
     private final SecretEncryptionUtil secretEncryptionUtil;
-    private final DefaultProjectConfig defaultProjectConfig;
+    private final KmsConfig kmsConfig;
     private final ProjectRepository projectRepository;
     private final AuthnUtil authnUtil;
 
@@ -63,7 +62,7 @@ public class SecretServiceImpl implements SecretService {
         long total = secretRepository.countByProjectIdAndState(projectId, LifecycleState.ACTIVE);
         List<SecretMetadata> secretMetadata = secrets.stream()
                 .map(secretMapper::secretToSecretMetadata)
-                .collect(Collectors.toList());
+                .toList();
         return new ListSecretsResponse(secretMetadata, total);
     }
 
@@ -100,7 +99,7 @@ public class SecretServiceImpl implements SecretService {
         secretDataRepository.save(secretData);
         savedSecret.setData(secretData);
 
-        return secretMapper.secretToCreateSecretResponse(savedSecret);
+        return secretMapper.secretToSecretResponse(savedSecret);
     }
 
     /**
@@ -172,7 +171,14 @@ public class SecretServiceImpl implements SecretService {
         secretDataRepository.save(secretData);
 
         UpgradeSecretDataResponse response = new UpgradeSecretDataResponse();
+        response.setProjectId(projectId);
+        response.setName(secretName);
         response.setDataVersion(newVersion);
+        response.setLastRotated(secret.getLastRotated());
+        response.setCreationTime(secret.getCreationTime());
+        response.setUpdatedTime(secret.getUpdatedTime());
+        response.setCreatedBy(secret.getCreatedBy());
+        response.setUpdatedBy(secret.getUpdatedBy());
         return response;
     }
 
@@ -249,7 +255,7 @@ public class SecretServiceImpl implements SecretService {
     @Transactional
     public Project getOrCreateProject(String projectId) {
         return projectRepository.findById(projectId).orElseGet(() -> {
-            String defaultKeyId = defaultProjectConfig.getDefaultProject().getKmsKeyId();
+            String defaultKeyId = kmsConfig.getDefaultKeyId();
             ProjectEntity newProject = ProjectEntity.builder()
                     .id(projectId)
                     .kmsKeyId(defaultKeyId)
@@ -271,7 +277,7 @@ public class SecretServiceImpl implements SecretService {
         Project project = getOrCreateProject(projectId);
         String keyId = project.getKmsKeyId();
         if (keyId == null || keyId.isEmpty()) {
-            return defaultProjectConfig.getDefaultProject().getKmsKeyId();
+            return kmsConfig.getDefaultKeyId();
         }
         return keyId;
     }

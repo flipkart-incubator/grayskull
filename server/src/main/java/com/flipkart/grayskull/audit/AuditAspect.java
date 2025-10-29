@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
-import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
@@ -17,7 +16,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -60,31 +58,39 @@ public class AuditAspect {
 
     /**
      * Core auditing logic for successful operations only.
+     * <p>
+     * If audit metadata serialization fails, this method throws an exception,
+     * which will cause the entire operation to fail, ensuring that operations
+     * without proper audit trails are not allowed.
      *
      * @param joinPoint the join point representing the intercepted method.
      * @param audit     the annotation instance.
      * @param result    the method's return value.
      */
     private void audit(JoinPoint joinPoint, Audit audit, Object result) {
-        Map<String, Object> arguments = getMethodArguments(joinPoint);
+        try {
+            Map<String, Object> arguments = getMethodArguments(joinPoint);
 
-        String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
-        String resourceName = extractResourceName(joinPoint, arguments);
-        Integer resourceVersion = extractResourceVersion(result);
+            String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
+            String resourceName = extractResourceName(result, arguments);
+            Integer resourceVersion = extractResourceVersion(result);
 
-        Map<String, String> metadata = buildMetadata(arguments, result);
+            Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntryEntity entry = AuditEntryEntity.builder()
-                .projectId(projectId)
-                .resourceType(RESOURCE_TYPE_SECRET)
-                .resourceName(resourceName)
-                .resourceVersion(resourceVersion)
-                .action(audit.action().name())
-                .userId(getUserId())
-                .metadata(metadata)
-                .build();
+            AuditEntryEntity entry = AuditEntryEntity.builder()
+                    .projectId(projectId)
+                    .resourceType(RESOURCE_TYPE_SECRET)
+                    .resourceName(resourceName)
+                    .resourceVersion(resourceVersion)
+                    .action(audit.action().name())
+                    .userId(getUserId())
+                    .metadata(metadata)
+                    .build();
 
-        auditEntryRepository.save(entry);
+            auditEntryRepository.save(entry);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize audit metadata", e);
+        }
     }
 
     /**
@@ -105,42 +111,40 @@ public class AuditAspect {
      * This method serializes the method arguments and results into a JSON format,
      * masking any fields that are annotated with
      * {@link com.flipkart.grayskull.audit.AuditMask}.
+     * <p>
+     * If serialization fails, the method throws an exception, causing the entire
+     * operation to fail, ensuring audit integrity.
      *
      * @param arguments the arguments passed to the intercepted method.
      * @param result    the result returned by the method.
      * @return A map of metadata for the audit entry.
+     * @throws JsonProcessingException if serialization of any argument or result fails.
      */
-    private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) {
+    private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) throws JsonProcessingException {
         Map<String, String> metadata = new HashMap<>();
-        arguments.forEach((key, value) -> {
-            if (value != null) {
-                try {
-                    metadata.put(key, OBJECT_MAPPER.writeValueAsString(value));
-                } catch (JsonProcessingException e) {
-                    metadata.put(key, "Error serializing object: " + e.getMessage());
-                }
+        for (Map.Entry<String, Object> entry : arguments.entrySet()) {
+            if (entry.getValue() != null) {
+                metadata.put(entry.getKey(), OBJECT_MAPPER.writeValueAsString(entry.getValue()));
             }
-        });
+        }
 
         if (result != null) {
-            try {
-                metadata.put(RESULT_METADATA_KEY, OBJECT_MAPPER.writeValueAsString(result));
-            } catch (JsonProcessingException e) {
-                metadata.put(RESULT_METADATA_KEY, "Error serializing object: " + e.getMessage());
-            }
+            metadata.put(RESULT_METADATA_KEY, OBJECT_MAPPER.writeValueAsString(result));
         }
         return metadata;
     }
 
     /**
      * Extracts the resource version from the method's result object.
+     * Relies on the response entity schema as the source of truth rather than
+     * HTTP method/URL or instanceof checks.
      *
      * @param result the object returned by the intercepted method.
      * @return The resource version, or {@code null} if not applicable.
      */
     private Integer extractResourceVersion(Object result) {
         if (result instanceof CreateSecretResponse) {
-            return 1;
+            return ((CreateSecretResponse) result).getCurrentDataVersion();
         } else if (result instanceof UpgradeSecretDataResponse) {
             return ((UpgradeSecretDataResponse) result).getDataVersion();
         }
@@ -148,27 +152,29 @@ public class AuditAspect {
     }
 
     /**
-     * Extracts the resource name from the method's arguments.
-     * For secret operations, this extracts the secret name from either direct
-     * string arguments
-     * or {@link CreateSecretRequest} objects.
+     * Extracts the resource name from the method's result object or method arguments.
+     * Prefers response entity schema as the source of truth (for create/upgrade operations),
+     * but falls back to method arguments for operations that return void (like delete).
      *
-     * @param joinPoint the join point of the intercepted method.
-     * @param arguments the extracted arguments of the method.
+     * @param result the object returned by the intercepted method.
+     * @param arguments the method arguments map.
      * @return The resource name, or "UNKNOWN" if not found.
      */
-    private String extractResourceName(JoinPoint joinPoint, Map<String, Object> arguments) {
+    private String extractResourceName(Object result, Map<String, Object> arguments) {
+        // Try to extract from response entity first (response schema is the source of truth)
+        if (result instanceof CreateSecretResponse) {
+            return ((CreateSecretResponse) result).getName();
+        } else if (result instanceof UpgradeSecretDataResponse) {
+            return ((UpgradeSecretDataResponse) result).getName();
+        }
+        
+        // Fall back to method arguments for void operations (like delete)
         Object name = arguments.get(SECRET_NAME_PARAM);
         if (name instanceof String) {
             return (String) name;
         }
-
-        return Arrays.stream(joinPoint.getArgs())
-                .filter(CreateSecretRequest.class::isInstance)
-                .map(CreateSecretRequest.class::cast)
-                .map(CreateSecretRequest::getName)
-                .findFirst()
-                .orElse(UNKNOWN_VALUE);
+        
+        return UNKNOWN_VALUE;
     }
 
     /**

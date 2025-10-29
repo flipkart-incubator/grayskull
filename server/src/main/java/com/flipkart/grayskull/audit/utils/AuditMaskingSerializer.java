@@ -9,11 +9,11 @@ import java.io.IOException;
 /**
  * A Jackson serializer that replaces the value of a field with a predefined mask.
  * This is used to hide sensitive information in audit entries.
- * The serializer writes a static placeholder string ({@code ***MASKED***}) instead of the actual field value.
+ * The serializer writes a static placeholder string ({@code MASKED}) instead of the actual field value.
  */
 public class AuditMaskingSerializer extends JsonSerializer<Object> {
 
-    private static final String MASKED_VALUE = "***MASKED***";
+    private static final String MASKED_VALUE = "MASKED";
 
     /**
      * Serializes the given value by writing a masked placeholder.

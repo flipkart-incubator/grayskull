@@ -72,13 +72,17 @@ public interface SecretMapper {
 
     /**
      * Maps a {@link Secret} entity to a {@link SecretMetadata} DTO.
+     * This is the generic mapping from source entity to destination entity,
+     * reusable across create/get/list operations.
      */
     SecretMetadata secretToSecretMetadata(Secret secret);
 
     /**
      * Maps a {@link Secret} entity to a {@link CreateSecretResponse} DTO.
+     * This is the generic mapping from source entity to destination entity,
+     * reusable across create/get operations.
      */
-    CreateSecretResponse secretToCreateSecretResponse(Secret secret);
+    CreateSecretResponse secretToSecretResponse(Secret secret);
 
     /**
      * Maps a {@link Secret} entity and its corresponding {@link SecretData}

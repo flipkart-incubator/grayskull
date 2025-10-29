@@ -31,7 +31,7 @@ class AuditMaskingSerializerTest {
     private ObjectMapper sanitizingMapper;
     private ObjectMapper regularMapper;
 
-    private static final String MASKED_VALUE = "***MASKED***";
+    private static final String MASKED_VALUE = "MASKED";
 
     @BeforeEach
     void setUp() {
