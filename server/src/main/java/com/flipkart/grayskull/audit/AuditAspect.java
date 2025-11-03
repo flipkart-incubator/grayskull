@@ -114,6 +114,18 @@ public class AuditAspect {
      * <p>
      * If serialization fails, the method throws an exception, causing the entire
      * operation to fail, ensuring audit integrity.
+     * <p>
+     * The metadata structure is:
+     * <pre>
+     * {
+     *   "request": {
+     *     "param1": value1,
+     *     "param2": value2,
+     *     ...
+     *   },
+     *   "result": { ... }
+     * }
+     * </pre>
      *
      * @param arguments the arguments passed to the intercepted method.
      * @param result    the result returned by the method.
@@ -122,12 +134,21 @@ public class AuditAspect {
      */
     private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) throws JsonProcessingException {
         Map<String, String> metadata = new HashMap<>();
-        for (Map.Entry<String, Object> entry : arguments.entrySet()) {
-            if (entry.getValue() != null) {
-                metadata.put(entry.getKey(), OBJECT_MAPPER.writeValueAsString(entry.getValue()));
+        
+        // Wrap all request parameters under the "request" key
+        if (!arguments.isEmpty()) {
+            Map<String, Object> requestParams = new HashMap<>();
+            for (Map.Entry<String, Object> entry : arguments.entrySet()) {
+                if (entry.getValue() != null) {
+                    requestParams.put(entry.getKey(), entry.getValue());
+                }
+            }
+            if (!requestParams.isEmpty()) {
+                metadata.put(REQUEST_METADATA_KEY, OBJECT_MAPPER.writeValueAsString(requestParams));
             }
         }
 
+        // Wrap response under the "result" key
         if (result != null) {
             metadata.put(RESULT_METADATA_KEY, OBJECT_MAPPER.writeValueAsString(result));
         }

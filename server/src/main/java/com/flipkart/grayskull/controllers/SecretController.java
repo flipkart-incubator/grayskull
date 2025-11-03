@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Optional;
 
 @RestController
-@RequestMapping("/v1/project/{projectId}/secrets")
+@RequestMapping("/v1/projects/{projectId}/secrets")
 @RequiredArgsConstructor
 @Validated
 public class SecretController {

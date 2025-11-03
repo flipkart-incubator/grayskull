@@ -29,6 +29,11 @@ public class AuditConstants {
     public static final String DEFAULT_USER = "system";
     
     /**
+     * Metadata key for request parameters.
+     */
+    public static final String REQUEST_METADATA_KEY = "request";
+    
+    /**
      * Metadata key for method result.
      */
     public static final String RESULT_METADATA_KEY = "result";

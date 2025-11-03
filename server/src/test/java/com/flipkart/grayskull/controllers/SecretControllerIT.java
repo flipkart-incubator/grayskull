@@ -105,7 +105,7 @@ class SecretControllerIT extends BaseIntegrationTest {
                     .andExpect(status().isNotFound());
 
             // Act & Assert: Verify it can be fetched by an admin by specifying state
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.state").value("DISABLED"));
@@ -220,7 +220,7 @@ class SecretControllerIT extends BaseIntegrationTest {
 
         @Test
         void shouldReturnForbiddenWithoutCredentials() throws Exception {
-            mockMvc.perform(get("/v1/project/some-project/secrets"))
+            mockMvc.perform(get("/v1/projects/some-project/secrets"))
                     .andExpect(status().isForbidden());
         }
 
@@ -386,7 +386,7 @@ class SecretControllerIT extends BaseIntegrationTest {
             performUpgradeSecret(projectId, secretName, "value-v2", ADMIN_USER);
 
             // Act & Assert: Use the admin endpoint to get the first version
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1", projectId, secretName))
                 .with(user(ADMIN_USER)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.privatePart").value("value-v1"))
@@ -394,7 +394,7 @@ class SecretControllerIT extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Successfully retrieved secret version."));
 
             // Act & Assert: Get the second version
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/2", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/2", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.privatePart").value("value-v2"));
@@ -407,14 +407,14 @@ class SecretControllerIT extends BaseIntegrationTest {
             performCreateSecret(projectId, secretName, "value-v1", ADMIN_USER);
 
             // Act & Assert: Get a version of an active secret by specifying state=ACTIVE
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=ACTIVE", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1?state=ACTIVE", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.privatePart").value("value-v1"))
                     .andExpect(jsonPath("$.data.state").value("ACTIVE"));
 
             // Act & Assert: Fail to get a version of an active secret when specifying wrong state
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isNotFound());
         }
@@ -427,19 +427,19 @@ class SecretControllerIT extends BaseIntegrationTest {
             performDeleteSecret(projectId, secretName, ADMIN_USER).andExpect(status().isOk());
 
             // Act & Assert: Get a version of a disabled secret without specifying state (should fail)
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isNotFound());
 
             // Act & Assert: Get a version of a disabled secret by specifying state
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1?state=DISABLED", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.privatePart").value("value-v1"))
                     .andExpect(jsonPath("$.data.state").value("DISABLED"));
 
             // Act & Assert: Fail to get a version of a disabled secret when specifying wrong state
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1?state=ACTIVE", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1?state=ACTIVE", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isNotFound());
         }
@@ -451,7 +451,7 @@ class SecretControllerIT extends BaseIntegrationTest {
             performCreateSecret(projectId, secretName, "v1", ADMIN_USER);
 
             // Act & Assert: Try to get a version that doesn't exist
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/99", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/99", projectId, secretName))
                 .with(user(ADMIN_USER)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
@@ -463,7 +463,7 @@ class SecretControllerIT extends BaseIntegrationTest {
             performCreateSecret(TEST_PROJECT, secretName, "v1", ADMIN_USER);
             performUpgradeSecret(TEST_PROJECT, secretName, "v2", ADMIN_USER);
 
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/1", TEST_PROJECT, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1", TEST_PROJECT, secretName))
                 .with(user(EDITOR_USER)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
@@ -476,7 +476,7 @@ class SecretControllerIT extends BaseIntegrationTest {
             performCreateSecret(projectId, secretName, "v1", ADMIN_USER);
 
             // Act & Assert: Try to get version 0, which is invalid
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/0", projectId, secretName))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/0", projectId, secretName))
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
@@ -491,7 +491,7 @@ class SecretControllerIT extends BaseIntegrationTest {
 
         @Test
         void shouldReturnMethodNotAllowedForUnsupportedHttpVerb() throws Exception {
-            mockMvc.perform(put(String.format("/v1/project/%s/secrets/%s/data", TEST_PROJECT, "some-secret"))
+            mockMvc.perform(put(String.format("/v1/projects/%s/secrets/%s/data", TEST_PROJECT, "some-secret"))
                     .with(user(ADMIN_USER))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"privatePart\": \"some-value\"}"))
@@ -502,7 +502,7 @@ class SecretControllerIT extends BaseIntegrationTest {
 
         @Test
         void shouldReturnUnprocessableEntityForMalformedJson() throws Exception {
-            mockMvc.perform(post(String.format("/v1/project/%s/secrets", TEST_PROJECT))
+            mockMvc.perform(post(String.format("/v1/projects/%s/secrets", TEST_PROJECT))
                     .with(user(ADMIN_USER))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"name\": \"test-secret\", \"privatePart\": }")) // Invalid JSON
@@ -516,7 +516,7 @@ class SecretControllerIT extends BaseIntegrationTest {
         @Test
         void shouldReturnStructuredViolationForTypeMismatchError() throws Exception {
             // Path variable 'version' expects Integer but receives String
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s/versions/%s", TEST_PROJECT, "some-secret", "not-a-number"))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/%s", TEST_PROJECT, "some-secret", "not-a-number"))
                     .with(user(ADMIN_USER)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
@@ -535,7 +535,7 @@ class SecretControllerIT extends BaseIntegrationTest {
             performCreateSecret(projectId, "existing-secret", "some-value", ADMIN_USER);
             
             // Test that 404 errors don't include violations field
-            mockMvc.perform(get(String.format("/v1/project/%s/secrets/%s", projectId, "non-existent-secret"))
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s", projectId, "non-existent-secret"))
                     .with(user(ADMIN_USER)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"))
