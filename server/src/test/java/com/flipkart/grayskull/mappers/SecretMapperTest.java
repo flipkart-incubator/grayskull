@@ -8,7 +8,7 @@ import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.SecretDataPayload;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
-import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
+import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
@@ -191,8 +191,8 @@ class SecretMapperTest {
         }
 
         @Test
-        @DisplayName("Should map Secret to CreateSecretResponse")
-        void shouldMapSecretToCreateSecretResponse() {
+        @DisplayName("Should map Secret to SecretResponse")
+        void shouldMapSecretToSecretResponse() {
             // Arrange
             Instant now = Instant.now();
             Secret secret = Secret.builder()
@@ -209,7 +209,7 @@ class SecretMapperTest {
                     .build();
 
             // Act
-            CreateSecretResponse response = secretMapper.secretToSecretResponse(secret);
+            SecretResponse response = secretMapper.secretToSecretResponse(secret);
 
             // Assert
             assertNotNull(response);

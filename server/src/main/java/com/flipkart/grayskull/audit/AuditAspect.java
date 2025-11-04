@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
-import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
+import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.RequiredArgsConstructor;
@@ -73,7 +73,7 @@ public class AuditAspect {
 
             String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
             String resourceName = extractResourceName(result, arguments);
-            Integer resourceVersion = extractResourceVersion(result);
+            Integer resourceVersion = extractResourceVersion(audit.action(), result);
 
             Map<String, String> metadata = buildMetadata(arguments, result);
 
@@ -156,20 +156,28 @@ public class AuditAspect {
     }
 
     /**
-     * Extracts the resource version from the method's result object.
-     * Relies on the response entity schema as the source of truth rather than
-     * HTTP method/URL or instanceof checks.
+     * Extracts the resource version based on the audit action.
+     * Uses the action type (from the request context) as the source of truth
+     * rather than checking response types.
      *
+     * @param action the audit action being performed.
      * @param result the object returned by the intercepted method.
      * @return The resource version, or {@code null} if not applicable.
      */
-    private Integer extractResourceVersion(Object result) {
-        if (result instanceof CreateSecretResponse) {
-            return ((CreateSecretResponse) result).getCurrentDataVersion();
-        } else if (result instanceof UpgradeSecretDataResponse) {
-            return ((UpgradeSecretDataResponse) result).getDataVersion();
+    private Integer extractResourceVersion(AuditAction action, Object result) {
+        switch (action) {
+            case CREATE_SECRET:
+                // For create operations, version is always 1
+                return 1;
+            case UPGRADE_SECRET_DATA:
+                // For upgrade operations, extract version from response
+                if (result instanceof UpgradeSecretDataResponse) {
+                    return ((UpgradeSecretDataResponse) result).getDataVersion();
+                }
+                return null;
+            default:
+                return null;
         }
-        return null;
     }
 
     /**
@@ -183,8 +191,8 @@ public class AuditAspect {
      */
     private String extractResourceName(Object result, Map<String, Object> arguments) {
         // Try to extract from response entity first (response schema is the source of truth)
-        if (result instanceof CreateSecretResponse) {
-            return ((CreateSecretResponse) result).getName();
+        if (result instanceof SecretResponse) {
+            return ((SecretResponse) result).getName();
         } else if (result instanceof UpgradeSecretDataResponse) {
             return ((UpgradeSecretDataResponse) result).getName();
         }

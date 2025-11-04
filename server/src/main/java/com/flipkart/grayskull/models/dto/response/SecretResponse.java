@@ -7,13 +7,13 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * Response after successfully creating a new secret.
+ * Response containing secret metadata after creation.
  * Contains metadata without sensitive values.
  */
 @Data
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class CreateSecretResponse {
+public class SecretResponse {
     
     /**
      * Project identifier.
