@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  grayskull-local-mongo1:
+    image: mongo:latest
+    container_name: grayskull-local-mongo1
+    command: ["--replSet", "rs0", "--auth", "--keyFile", "/etc/mongo/mongo-keyfile", "--bind_ip_all"]
+    ports:
+      - "37017:27017"  # Primary node port
+    volumes:
+      - mongo1_data:/data/db  # Persistent data storage
+      - type: bind
+        source: ./mongo-keyfile/keyfile
+        target: /etc/mongo/mongo-keyfile
+        read_only: true
+    healthcheck:
+      test: [ "CMD", "mongosh", "--username", "${MONGO_ROOT_USERNAME}", "--password", "${MONGO_ROOT_PASSWORD}", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    networks:
+      - mongo_net
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    user: "999:999"  # mongodb user in container
+
+  grayskull-local-mongo2:
+    image: mongo:latest
+    container_name: grayskull-local-mongo2
+    command: ["--replSet", "rs0", "--auth", "--keyFile", "/etc/mongo/mongo-keyfile", "--bind_ip_all"]
+    ports:
+      - "37018:27017"  # Secondary node 1 port
+    volumes:
+      - mongo2_data:/data/db  # Persistent data storage
+      - type: bind
+        source: ./mongo-keyfile/keyfile
+        target: /etc/mongo/mongo-keyfile
+        read_only: true
+    networks:
+      - mongo_net
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    user: "999:999"  # mongodb user in container
+
+  grayskull-local-mongo3:
+    image: mongo:latest
+    container_name: grayskull-local-mongo3
+    command: ["--replSet", "rs0", "--auth", "--keyFile", "/etc/mongo/mongo-keyfile", "--bind_ip_all"]
+    ports:
+      - "37019:27017"  # Secondary node 2 port
+    volumes:
+      - mongo3_data:/data/db  # Persistent data storage
+      - type: bind
+        source: ./mongo-keyfile/keyfile
+        target: /etc/mongo/mongo-keyfile
+        read_only: true
+    networks:
+      - mongo_net
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    user: "999:999"  # mongodb user in container
+
+# Named volumes for persistent data storage
+volumes:
+  mongo1_data:
+  mongo2_data:
+  mongo3_data:
+
+# Network configuration for MongoDB cluster
+networks:
+  mongo_net:
+    driver: bridge

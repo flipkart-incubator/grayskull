@@ -1,34 +1,24 @@
 spring:
-  application:
-    name: Grayskull
   data:
     mongodb:
-      database: grayskull
+      database: grayskull-test
       uri: mongodb://admin:password@host.docker.internal:37017/admin?maxLifeTimeMs=3600000&maxIdleTimeMs=600000&maxConnecting=100&readPreference=secondaryPreferred&w=majority
 
-server:
-  read-only:
-    enabled: false
-  error:
-    include-binding-errors: always
-    include-message: always
-
 grayskull:
+  kms:
+    defaultKeyId: "test-key"
   crypto:
     keys:
-      key1: wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4=
-      key2: LFptkQ/bTpTX4dCoGtZm2BcqMvoUTYJHTvyoF4t0X00=
-  kms:
-    defaultKeyId: key1
+      test-key: "wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4="
   authorization:
     rules:
       - user: admin
         project: "*"
+        secret: "*"
         actions:
           - "*"
       - user: user1
         project: "*"
-        secret: "*"
         actions:
           - "*"
       - user: editor
@@ -40,27 +30,8 @@ grayskull:
           - "secrets.update"
           - "secrets.delete"
           - "secrets.list"
-          - "secrets.read.version"
       - user: viewer
         project: "test-project"
         actions:
           - "secrets.list"
-          - "secrets.read.metadata"
-
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus,refresh
-  observations:
-    annotations:
-      enabled: true
-
-swagger:
-  ui:
-    path: /swagger-ui.html
-    enabled: true
-    version: 1.0.0
-    title: Grayskull API
-    description: API for managing secrets in Grayskull
+          - "secrets.read.metadata" 
