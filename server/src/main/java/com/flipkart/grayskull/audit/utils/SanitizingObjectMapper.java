@@ -3,7 +3,6 @@ package com.flipkart.grayskull.audit.utils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -31,13 +30,5 @@ public class SanitizingObjectMapper {
         mapper.registerModule(module);
 
         return mapper;
-    }
-
-    /**
-     * puts the {@code value} in {@code map} with {@code key} after sanitizing and serializing {@code value} as json
-     */
-    @SneakyThrows
-    public static String getMaskedJson(Object value) {
-        return MASK_OBJECT_MAPPER.writeValueAsString(value);
     }
 } 

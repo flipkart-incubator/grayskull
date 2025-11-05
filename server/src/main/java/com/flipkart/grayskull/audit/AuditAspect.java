@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.audit;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
-import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.flipkart.grayskull.audit.AuditConstants.*;
+import static com.flipkart.grayskull.audit.utils.SanitizingObjectMapper.MASK_OBJECT_MAPPER;
 
 /**
  * Aspect for auditing methods annotated with {@link Audit}.
@@ -68,26 +69,30 @@ public class AuditAspect {
      * @param result    the method's return value.
      */
     private void audit(JoinPoint joinPoint, Audit audit, Object result) {
-        Map<String, Object> arguments = getMethodArguments(joinPoint);
+        try {
+            Map<String, Object> arguments = getMethodArguments(joinPoint);
 
-        String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
-        String resourceName = extractResourceName(result, arguments);
-        Integer resourceVersion = extractResourceVersion(audit.action(), result);
+            String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
+            String resourceName = extractResourceName(result, arguments);
+            Integer resourceVersion = extractResourceVersion(audit.action(), result);
 
-        Map<String, String> metadata = buildMetadata(arguments, result);
+            Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntryEntity entry = AuditEntryEntity.builder()
-                .projectId(projectId)
-                .resourceType(RESOURCE_TYPE_SECRET)
-                .resourceName(resourceName)
-                .resourceVersion(resourceVersion)
-                .action(audit.action().name())
-                .userId(getUserId())
-                .ips(requestUtils.getRemoteIPs())
-                .metadata(metadata)
-                .build();
+            AuditEntryEntity entry = AuditEntryEntity.builder()
+                    .projectId(projectId)
+                    .resourceType(RESOURCE_TYPE_SECRET)
+                    .resourceName(resourceName)
+                    .resourceVersion(resourceVersion)
+                    .action(audit.action().name())
+                    .userId(getUserId())
+                    .ips(requestUtils.getRemoteIPs())
+                    .metadata(metadata)
+                    .build();
 
-        auditEntryRepository.save(entry);
+            auditEntryRepository.save(entry);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Failed to serialize audit metadata", e);
+        }
     }
 
     /**
@@ -128,7 +133,7 @@ public class AuditAspect {
      * @param result    the result returned by the method.
      * @return A map of metadata for the audit entry.
      */
-    private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) {
+    private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) throws JsonProcessingException {
         Map<String, String> metadata = new HashMap<>();
 
         // Wrap all request parameters under the "request" key
@@ -140,13 +145,13 @@ public class AuditAspect {
                 }
             }
             if (!requestParams.isEmpty()) {
-                metadata.put(REQUEST_METADATA_KEY, SanitizingObjectMapper.getMaskedJson(requestParams));
+                metadata.put(REQUEST_METADATA_KEY, MASK_OBJECT_MAPPER.writeValueAsString(requestParams));
             }
         }
 
         // Wrap response under the "result" key
         if (result != null) {
-            metadata.put(RESULT_METADATA_KEY, SanitizingObjectMapper.getMaskedJson(result));
+            metadata.put(RESULT_METADATA_KEY, MASK_OBJECT_MAPPER.writeValueAsString(result));
         }
         return metadata;
     }

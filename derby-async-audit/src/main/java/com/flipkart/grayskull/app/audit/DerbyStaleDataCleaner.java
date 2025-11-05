@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.FileSystemUtils;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,6 +33,13 @@ public class DerbyStaleDataCleaner {
         }
         log.info("checkpoint is stale, deleting the data");
         auditCheckpointRepository.deleteByNodeName(auditProperties.getNodeName());
-        FileSystemUtils.deleteRecursively(Path.of(auditProperties.getDerbyDirectory()));
+        Path derbyPath = Path.of(auditProperties.getDerbyDirectory()).normalize().toAbsolutePath();
+        // Validate it's not current dir, or one of parent dirs
+        if (Path.of("").toAbsolutePath().startsWith(derbyPath)) {
+            throw new IllegalStateException("Invalid Derby directory path: " + derbyPath);
+        }
+        if (Files.exists(derbyPath)) {
+            FileSystemUtils.deleteRecursively(derbyPath);
+        }
     }
 }
