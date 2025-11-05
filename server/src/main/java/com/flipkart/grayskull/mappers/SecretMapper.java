@@ -6,7 +6,7 @@ import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
-import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
+import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
@@ -78,11 +78,11 @@ public interface SecretMapper {
     SecretMetadata secretToSecretMetadata(Secret secret);
 
     /**
-     * Maps a {@link Secret} entity to a {@link CreateSecretResponse} DTO.
+     * Maps a {@link Secret} entity to a {@link SecretResponse} DTO.
      * This is the generic mapping from source entity to destination entity,
      * reusable across create/get operations.
      */
-    CreateSecretResponse secretToSecretResponse(Secret secret);
+    SecretResponse secretToSecretResponse(Secret secret);
 
     /**
      * Maps a {@link Secret} entity and its corresponding {@link SecretData}

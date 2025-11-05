@@ -2,7 +2,7 @@ package com.flipkart.grayskull.service.interfaces;
 
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
-import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
+import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
@@ -31,10 +31,10 @@ public interface SecretService {
      * 
      * @param projectId The ID of the project.
      * @param request   The request body containing the secret details.
-     * @return A {@link CreateSecretResponse} containing the details of the created
+     * @return A {@link SecretResponse} containing the details of the created
      *         secret.
      */
-    CreateSecretResponse createSecret(String projectId, CreateSecretRequest request);
+    SecretResponse createSecret(String projectId, CreateSecretRequest request);
 
     /**
      * Reads the metadata of a specific secret. Always returns the latest version of

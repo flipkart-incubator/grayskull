@@ -59,24 +59,24 @@ public abstract class BaseIntegrationTest {
 
     protected ResultActions performCreateSecret(String projectId, String secretName, String secretValue, String username) throws Exception {
         CreateSecretRequest createRequest = buildCreateSecretRequest(secretName, secretValue);
-        return mockMvc.perform(post("/v1/project/{projectId}/secrets", projectId)
+        return mockMvc.perform(post("/v1/projects/{projectId}/secrets", projectId)
                 .with(user(username))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)));
     }
 
     protected ResultActions performReadSecretValue(String projectId, String secretName, String username) throws Exception {
-        return mockMvc.perform(get("/v1/project/{projectId}/secrets/{secretName}/data", projectId, secretName)
+        return mockMvc.perform(get("/v1/projects/{projectId}/secrets/{secretName}/data", projectId, secretName)
                 .with(user(username)));
     }
 
     protected ResultActions performReadSecretMetadata(String projectId, String secretName, String username) throws Exception {
-        return mockMvc.perform(get("/v1/project/{projectId}/secrets/{secretName}", projectId, secretName)
+        return mockMvc.perform(get("/v1/projects/{projectId}/secrets/{secretName}", projectId, secretName)
                 .with(user(username)));
     }
 
     protected ResultActions performListSecrets(String projectId, String username, String... queryParams) throws Exception {
-        String url = "/v1/project/{projectId}/secrets";
+        String url = "/v1/projects/{projectId}/secrets";
         if (queryParams.length > 0) {
             url += "?" + String.join("&", queryParams);
         }
@@ -88,19 +88,19 @@ public abstract class BaseIntegrationTest {
         UpgradeSecretDataRequest upgradeRequest = new UpgradeSecretDataRequest();
         upgradeRequest.setPublicPart("public-part");
         upgradeRequest.setPrivatePart(newSecretValue);
-        return mockMvc.perform(post("/v1/project/{projectId}/secrets/{secretName}/data", projectId, secretName)
+        return mockMvc.perform(post("/v1/projects/{projectId}/secrets/{secretName}/data", projectId, secretName)
                 .with(user(username))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(upgradeRequest)));
     }
 
     protected ResultActions performDeleteSecret(String projectId, String secretName, String username) throws Exception {
-        return mockMvc.perform(delete("/v1/project/{projectId}/secrets/{secretName}", projectId, secretName)
+        return mockMvc.perform(delete("/v1/projects/{projectId}/secrets/{secretName}", projectId, secretName)
                 .with(user(username)));
     }
 
     protected ResultActions performGetSecretByVersion(String projectId, String secretName, int version, String username) throws Exception {
-        return mockMvc.perform(get("/v1/project/{projectId}/secrets/{secretName}/versions/{version}", projectId, secretName, version)
+        return mockMvc.perform(get("/v1/projects/{projectId}/secrets/{secretName}/versions/{version}", projectId, secretName, version)
                 .with(user(username)));
     }
 

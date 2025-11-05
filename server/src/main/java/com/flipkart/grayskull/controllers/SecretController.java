@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@RequestMapping("/v1/project/{projectId}/secrets")
+@RequestMapping("/v1/projects/{projectId}/secrets")
 @RequiredArgsConstructor
 @Validated
 public class SecretController {
@@ -49,10 +49,10 @@ public class SecretController {
     @Operation(summary = "Creates a new secret for a given project.")
     @PostMapping
     @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, 'secrets.create')")
-    public ResponseTemplate<CreateSecretResponse> createSecret(
+    public ResponseTemplate<SecretResponse> createSecret(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @Valid @RequestBody CreateSecretRequest request) {
-        CreateSecretResponse response = secretService.createSecret(projectId, request);
+        SecretResponse response = secretService.createSecret(projectId, request);
         return ResponseTemplate.success(response, "Successfully created secret.");
     }
 

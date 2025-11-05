@@ -10,7 +10,7 @@ import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
-import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
+import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
@@ -71,13 +71,13 @@ public class SecretServiceImpl implements SecretService {
      *
      * @param projectId The ID of the project.
      * @param request   The request body containing the secret details.
-     * @return A {@link CreateSecretResponse} containing the details of the created
+     * @return A {@link SecretResponse} containing the details of the created
      *         secret.
      */
     @Override
     @Transactional
     @Audit(action = AuditAction.CREATE_SECRET)
-    public CreateSecretResponse createSecret(String projectId, CreateSecretRequest request) {
+    public SecretResponse createSecret(String projectId, CreateSecretRequest request) {
         // TODO: Add explicit project existence check if auto-create semantic changes.
         // Currently, resolveKmsKeyId auto-creates projects via getOrCreateProject.
         // If this behavior is removed in the future, add validation here:

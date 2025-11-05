@@ -3,7 +3,7 @@ package com.flipkart.grayskull.audit;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
-import com.flipkart.grayskull.models.dto.response.CreateSecretResponse;
+import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
@@ -72,7 +72,7 @@ public class AuditAspect {
 
         String projectId = (String) arguments.getOrDefault(PROJECT_ID_PARAM, UNKNOWN_VALUE);
         String resourceName = extractResourceName(result, arguments);
-        Integer resourceVersion = extractResourceVersion(result);
+        Integer resourceVersion = extractResourceVersion(audit.action(), result);
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
@@ -111,6 +111,18 @@ public class AuditAspect {
      * <p>
      * If serialization fails, the method throws an exception, causing the entire
      * operation to fail, ensuring audit integrity.
+     * <p>
+     * The metadata structure is:
+     * <pre>
+     * {
+     *   "request": {
+     *     "param1": value1,
+     *     "param2": value2,
+     *     ...
+     *   },
+     *   "result": { ... }
+     * }
+     * </pre>
      *
      * @param arguments the arguments passed to the intercepted method.
      * @param result    the result returned by the method.
@@ -118,12 +130,21 @@ public class AuditAspect {
      */
     private Map<String, String> buildMetadata(Map<String, Object> arguments, Object result) {
         Map<String, String> metadata = new HashMap<>();
-        for (Map.Entry<String, Object> entry : arguments.entrySet()) {
-            if (entry.getValue() != null) {
-                metadata.put(entry.getKey(), SanitizingObjectMapper.getMaskedJson(result));
+
+        // Wrap all request parameters under the "request" key
+        if (!arguments.isEmpty()) {
+            Map<String, Object> requestParams = new HashMap<>();
+            for (Map.Entry<String, Object> entry : arguments.entrySet()) {
+                if (entry.getValue() != null) {
+                    requestParams.put(entry.getKey(), entry.getValue());
+                }
+            }
+            if (!requestParams.isEmpty()) {
+                metadata.put(REQUEST_METADATA_KEY, SanitizingObjectMapper.getMaskedJson(requestParams));
             }
         }
 
+        // Wrap response under the "result" key
         if (result != null) {
             metadata.put(RESULT_METADATA_KEY, SanitizingObjectMapper.getMaskedJson(result));
         }
@@ -131,20 +152,28 @@ public class AuditAspect {
     }
 
     /**
-     * Extracts the resource version from the method's result object.
-     * Relies on the response entity schema as the source of truth rather than
-     * HTTP method/URL or instanceof checks.
+     * Extracts the resource version based on the audit action.
+     * Uses the action type (from the request context) as the source of truth
+     * rather than checking response types.
      *
+     * @param action the audit action being performed.
      * @param result the object returned by the intercepted method.
      * @return The resource version, or {@code null} if not applicable.
      */
-    private Integer extractResourceVersion(Object result) {
-        if (result instanceof CreateSecretResponse secretResponse) {
-            return secretResponse.getCurrentDataVersion();
-        } else if (result instanceof UpgradeSecretDataResponse secretResponse) {
-            return secretResponse.getDataVersion();
-        }
-        return null;
+    private Integer extractResourceVersion(AuditAction action, Object result) {
+        return switch (action) {
+            case CREATE_SECRET ->
+                // For create operations, version is always 1
+                    1;
+            case UPGRADE_SECRET_DATA -> {
+                // For upgrade operations, extract version from response
+                if (result instanceof UpgradeSecretDataResponse secretResponse) {
+                    yield secretResponse.getDataVersion();
+                }
+                yield null;
+            }
+            default -> null;
+        };
     }
 
     /**
@@ -158,7 +187,7 @@ public class AuditAspect {
      */
     private String extractResourceName(Object result, Map<String, Object> arguments) {
         // Try to extract from response entity first (response schema is the source of truth)
-        if (result instanceof CreateSecretResponse secretResponse) {
+        if (result instanceof SecretResponse secretResponse) {
             return secretResponse.getName();
         } else if (result instanceof UpgradeSecretDataResponse secretResponse) {
             return secretResponse.getName();
