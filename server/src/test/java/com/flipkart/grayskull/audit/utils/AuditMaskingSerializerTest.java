@@ -36,7 +36,7 @@ class AuditMaskingSerializerTest {
     @BeforeEach
     void setUp() {
         // Create a sanitizing mapper with masking capabilities
-        sanitizingMapper = SanitizingObjectMapper.create();
+        sanitizingMapper = SanitizingObjectMapper.MASK_OBJECT_MAPPER;
 
         // Create a regular mapper without masking for comparison
         regularMapper = new ObjectMapper();

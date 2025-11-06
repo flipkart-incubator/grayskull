@@ -32,7 +32,7 @@ public class AuditConstants {
      * Metadata key for request parameters.
      */
     public static final String REQUEST_METADATA_KEY = "request";
-    
+
     /**
      * Metadata key for method result.
      */

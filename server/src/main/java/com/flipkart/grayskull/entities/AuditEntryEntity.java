@@ -5,11 +5,8 @@ import com.flipkart.grayskull.spi.models.AuditEntry;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
-import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-
-import java.time.Instant;
 
 /**
  * MongoDB entity implementation for AuditEntry.
@@ -27,9 +24,4 @@ public class AuditEntryEntity extends AuditEntry {
         return super.getId();
     }
 
-    @CreatedDate
-    @Override
-    public Instant getTimestamp() {
-        return super.getTimestamp();
-    }
 }

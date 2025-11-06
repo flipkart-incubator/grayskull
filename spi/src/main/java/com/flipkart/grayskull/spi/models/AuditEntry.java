@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.spi.models;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
@@ -62,10 +63,16 @@ public class AuditEntry {
     private String userId;
 
     /**
+     * The ip address and forwarded headers of the client that performed the action.
+     */
+    private Map<String, String> ips;
+
+    /**
      * The timestamp when the action occurred, recorded in UTC with offset
      * information.
      */
-    private Instant timestamp;
+    @Builder.Default
+    private Instant timestamp = Instant.now();
 
     /**
      * Additional metadata related to the audit event, stored as key-value pairs.

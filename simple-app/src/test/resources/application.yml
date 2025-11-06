@@ -6,4 +6,10 @@ spring:
 grayskull:
   crypto:
     keys:
-      test-key: "MfDeylVH3ZmvnrK+XJv259fzjFB55+9yZaUr1OYvNVE=" 
+      test-key: "MfDeylVH3ZmvnrK+XJv259fzjFB55+9yZaUr1OYvNVE="
+
+audit:
+  derby-directory: /tmp/derby-test
+  batch-size: 10
+  batch-time-interval: 1m
+  node-name: localhost

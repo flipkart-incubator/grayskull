@@ -1,31 +1,33 @@
 package com.flipkart.grayskull.spimpl.repositories;
 
-import com.flipkart.grayskull.entities.AuditEntryEntity;
+import com.flipkart.grayskull.mappers.AuditEntryMapper;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import com.flipkart.grayskull.spimpl.repositories.mongo.AuditEntryMongoRepository;
+import lombok.AllArgsConstructor;
+import org.springframework.data.util.Streamable;
 import org.springframework.stereotype.Repository;
+
+import java.util.List;
 
 /**
  * Spring Data MongoDB repository implementation for AuditEntry.
  * Implements the SPI contract using Spring Data.
  */
 @Repository
+@AllArgsConstructor
 public class AuditEntryRepositoryImpl implements AuditEntryRepository {
 
     private final AuditEntryMongoRepository mongoRepository;
+    private final AuditEntryMapper auditEntryMapper;
 
-    public AuditEntryRepositoryImpl(AuditEntryMongoRepository mongoRepository) {
-        this.mongoRepository = mongoRepository;
+    @Override
+    public AuditEntry save(AuditEntry entry) {
+        return mongoRepository.save(auditEntryMapper.toEntity(entry));
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public <S extends AuditEntry> S save(S entity) {
-        if (!(entity instanceof AuditEntryEntity)) {
-            throw new IllegalArgumentException(
-                    "Expected AuditEntryEntity but got: " + entity.getClass().getName());
-        }
-        return (S) mongoRepository.save((AuditEntryEntity) entity);
+    public List<AuditEntry> saveAll(Iterable<AuditEntry> entries) {
+        return mongoRepository.saveAll(Streamable.of(entries).map(auditEntryMapper::toEntity)).stream().map(AuditEntry.class::cast).toList();
     }
 }

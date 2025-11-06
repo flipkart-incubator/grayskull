@@ -64,3 +64,10 @@ swagger:
     version: 1.0.0
     title: Grayskull API
     description: API for managing secrets in Grayskull
+
+audit:
+  batch-size: 10
+  batchTimeInterval: 1m
+  node-name: localhost
+  derby-directory: /tmp/test
+  staleness-duration: 5d

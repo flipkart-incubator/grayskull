@@ -23,6 +23,22 @@
             <artifactId>server</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.flipkart.grayskull</groupId>
+            <artifactId>derby-async-audit</artifactId>
+        </dependency>
+        <!-- derbynet allows starting a derby server on start if we set derby.drda.startNetworkServer jvm property to true
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derbynet</artifactId>
+        </dependency>
+        -->
+        <!-- derbytools contain tools like ij which help introspecting the derby db
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derbytools</artifactId>
+        </dependency>
+        -->
+        <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-jmx</artifactId>
         </dependency>

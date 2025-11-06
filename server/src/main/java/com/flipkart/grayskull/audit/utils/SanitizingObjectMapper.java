@@ -3,6 +3,7 @@ package com.flipkart.grayskull.audit.utils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import lombok.experimental.UtilityClass;
 
 /**
  * A factory for creating a pre-configured {@link ObjectMapper} for sanitizing audit data.
@@ -10,14 +11,17 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
  * mask fields annotated with {@link com.flipkart.grayskull.audit.AuditMask}.
  * It also includes the {@link JavaTimeModule} to ensure correct serialization of Java 8 date/time types.
  */
+@UtilityClass
 public class SanitizingObjectMapper {
+
+    public static final ObjectMapper MASK_OBJECT_MAPPER = SanitizingObjectMapper.create();
 
     /**
      * Creates and configures an {@link ObjectMapper} with sanitization capabilities.
      *
      * @return A new, configured {@link ObjectMapper} instance.
      */
-    public static ObjectMapper create() {
+    private static ObjectMapper create() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
 

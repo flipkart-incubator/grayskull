@@ -1,10 +1,15 @@
 package com.flipkart.grayskull.controllers;
 
+import com.flipkart.grayskull.audit.AuditAction;
+import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
+import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -13,9 +18,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -25,6 +32,8 @@ import java.util.Optional;
 public class SecretController {
 
     private final SecretService secretService;
+    private final AsyncAuditLogger asyncAuditLogger;
+    private final RequestUtils requestUtils;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -64,6 +73,18 @@ public class SecretController {
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
+        Map<String, String> auditMetadata = Map.of("publicPart", response.getPublicPart());
+        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        AuditEntry auditEntry = AuditEntry.builder()
+                .projectId(projectId)
+                .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
+                .resourceName(secretName)
+                .resourceVersion(response.getDataVersion())
+                .action(AuditAction.READ_SECRET.name())
+                .userId(userId)
+                .ips(requestUtils.getRemoteIPs())
+                .metadata(auditMetadata).build();
+        asyncAuditLogger.log(auditEntry);
         return ResponseTemplate.success(response, "Successfully read secret value.");
     }
 
@@ -96,6 +117,18 @@ public class SecretController {
             @PathVariable("version") @Min(1) int version,
             @RequestParam(name = "state", required = false) Optional<LifecycleState> state) {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
+        Map<String, String> auditMetadata = Map.of("publicPart", response.getPublicPart());
+        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        AuditEntry auditEntry = AuditEntry.builder()
+                .projectId(projectId)
+                .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
+                .resourceName(secretName)
+                .resourceVersion(response.getDataVersion())
+                .action(AuditAction.READ_SECRET_VERSION.name())
+                .userId(userId)
+                .ips(requestUtils.getRemoteIPs())
+                .metadata(auditMetadata).build();
+        asyncAuditLogger.log(auditEntry);
         return ResponseTemplate.success(response, "Successfully retrieved secret version.");
     }
 }
