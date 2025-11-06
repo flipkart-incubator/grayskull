@@ -21,10 +21,15 @@ import java.sql.SQLException;
 public class AuditConfiguration {
 
     @Bean
+    public DerbyDao derbyDao(AuditProperties auditProperties, ObjectMapper objectMapper) throws SQLException {
+        return new DerbyDao(auditProperties.getDerbyUrl(), objectMapper);
+    }
+
+    @Bean
     @Primary
-    public AsyncAuditLogger derbyAsyncAuditLogger(AuditProperties auditProperties, ObjectMapper objectMapper, MeterRegistry meterRegistry, AuditEntryRepository auditEntryRepository, AuditCheckpointRepository auditCheckpointRepository) throws SQLException, IOException {
+    public AsyncAuditLogger derbyAsyncAuditLogger(AuditProperties auditProperties, DerbyDao derbyDao, MeterRegistry meterRegistry, AuditEntryRepository auditEntryRepository, AuditCheckpointRepository auditCheckpointRepository) throws IOException {
         new DerbyStaleDataCleaner(auditCheckpointRepository, auditProperties).cleanStaleData();
-        return new DerbyAsyncAuditLogger(auditProperties, objectMapper, meterRegistry, auditEntryRepository, auditCheckpointRepository);
+        return new DerbyAsyncAuditLogger(auditProperties, derbyDao, meterRegistry, auditEntryRepository, auditCheckpointRepository);
     }
 
     @Bean
