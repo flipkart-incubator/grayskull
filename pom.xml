@@ -194,15 +194,8 @@
                         </goals>
                     </execution>
                     <execution>
-                        <id>jacoco-package</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>jacoco-test</id>
-                        <phase>test</phase>
+                        <id>jacoco-report</id>
+                        <phase>verify</phase>
                         <goals>
                             <goal>report</goal>
                         </goals>

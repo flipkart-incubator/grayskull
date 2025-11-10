@@ -30,8 +30,7 @@ jobs:
     - name: Build with Maven
       run: mvn -B clean install
     - name: Publish Test Results
-      uses: EnricoMi/publish-unit-test-result-action/composite@v2
-      if: success()
+      uses: EnricoMi/publish-unit-test-result-action/linux@v2
       with:
         files: |
           */target/surefire-reports/TEST*.xml
@@ -40,8 +39,7 @@ jobs:
     - name: Publish code coverage (uses CodeCov.io)
       uses: codecov/codecov-action@v4
       with:
-        files: |
-          */target/site/jacoco/jacoco.xml
+        files: "*/target/site/jacoco/jacoco.xml"
 
     # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
 #    - name: Update dependency graph
