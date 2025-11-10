@@ -3,12 +3,14 @@ package com.flipkart.grayskull;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.exceptions.GrayskullException;
+import com.flipkart.grayskull.exceptions.RetryableException;
 import com.flipkart.grayskull.hooks.NoOpRefreshHookHandle;
 import com.flipkart.grayskull.hooks.RefreshHookHandle;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.models.GrayskullProperties;
 import com.flipkart.grayskull.models.response.Response;
 import com.flipkart.grayskull.models.SecretValue;
+import com.flipkart.grayskull.utils.RetryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,11 +26,13 @@ import java.net.URLEncoder;
  */
 public class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
+    private static final int RETRY_INTERVAL_MS = 100;
     
     private final String baseUrl;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
     private final GrayskullProperties grayskullProperties;
     private final GrayskullHttpClient httpClient;
+    private final RetryUtil retryUtil;
 
     /**
      * Creates a new Grayskull client implementation with metrics enabled by default.
@@ -54,6 +58,7 @@ public class GrayskullClientImpl implements GrayskullClient {
         this.authHeaderProvider = authHeaderProvider;
         this.grayskullProperties = grayskullProperties;
         this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullProperties, enableMetrics);
+        this.retryUtil = new RetryUtil(grayskullProperties.getMaxRetries(), RETRY_INTERVAL_MS);
     }
     
     /**
@@ -96,14 +101,30 @@ public class GrayskullClientImpl implements GrayskullClient {
         String encodedSecretName = urlEncode(secretName);
         String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
         
-        // Pass secretRef and method name to HTTP client for metrics tracking
-        SecretValue secretValue = httpClient.doGet(url, new TypeReference<Response<SecretValue>>() {}, secretRef, "getSecret");
-        
-        if (secretValue == null) {
-            throw new GrayskullException(500, "No data in response");
+        // Use retry mechanism to fetch the secret
+        try {
+            SecretValue secretValue = retryUtil.retry(() -> {
+                // Pass secretRef and method name to HTTP client for metrics tracking
+                SecretValue result = httpClient.doGet(url, new TypeReference<Response<SecretValue>>() {}, secretRef, "getSecret");
+                
+                if (result == null) {
+                    throw new GrayskullException("No data in response");
+                }
+                
+                return result;
+            });
+            
+            return secretValue;
+        } catch (RetryableException e) {
+            // Exhausted all retry attempts - wrap in GrayskullException
+            throw new GrayskullException("Failed to fetch secret after retries", e);
+        } catch (GrayskullException e) {
+            // Non-retryable GrayskullException - rethrow with original status code
+            throw e;
+        } catch (Exception e) {
+            // Other unexpected exceptions - wrap without status code
+            throw new GrayskullException("Unexpected error fetching secret", e);
         }
-
-        return secretValue;
     }
 
     /**

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.exceptions.GrayskullException;
+import com.flipkart.grayskull.exceptions.RetryableException;
 import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullProperties;
 import com.flipkart.grayskull.models.response.Response;
@@ -43,7 +44,7 @@ class GrayskullHttpClient {
         this.metricsPublisher = enableMetrics ? new MetricsPublisher() : null;
     }
 
-    <T> T doGet(String url, TypeReference<Response<T>> responseType, String secretRef, String methodName) {
+    <T> T doGet(String url, TypeReference<Response<T>> responseType, String secretRef, String methodName) throws RetryableException {
         Request request = buildRequest(url)
                 .get()
                 .build();
@@ -81,17 +82,23 @@ class GrayskullHttpClient {
         return requestBuilder;
     }
 
-    private <T> T executeRequest(Request request, TypeReference<Response<T>> responseType) {
+    private <T> T executeRequest(Request request, TypeReference<Response<T>> responseType) throws RetryableException {
         try (okhttp3.Response response = httpClient.newCall(request).execute()) {
             int statusCode = response.code();
             
             if (!response.isSuccessful()) {
                 String errorBody = response.body() != null ? response.body().string() : "";
-                throw new GrayskullException(statusCode, "Request failed: " + errorBody);
+                
+                // Determine if the error is retryable
+                if (isRetryableStatusCode(statusCode)) {
+                    throw new RetryableException("Request failed with retryable status " + statusCode + ": " + errorBody);
+                } else {
+                    throw new GrayskullException(statusCode, "Request failed: " + errorBody);
+                }
             }
 
             if (response.body() == null) {
-                throw new GrayskullException(500, "Empty response body from server");
+                throw new RetryableException("Empty response body from server");
             }
 
             String responseBody = response.body().string();
@@ -100,14 +107,19 @@ class GrayskullHttpClient {
             Response<T> responseTemplate = objectMapper.readValue(responseBody, responseType);
             
             if (responseTemplate == null || responseTemplate.getData() == null) {
-                throw new GrayskullException(500, "No data in response");
+                throw new RetryableException("No data in response");
             }
 
             return responseTemplate.getData();
 
         } catch (IOException e) {
-            throw new GrayskullException(0, "Error communicating with Grayskull server", e);
+            // Network/IO errors are generally transient and worth retrying
+            throw new RetryableException("Error communicating with Grayskull server: " + e.getMessage(), e);
         }
+    }
+    
+    private boolean isRetryableStatusCode(int statusCode) {
+        return statusCode == 429 || (statusCode >= 500 && statusCode < 600);
     }
 
     void close() {

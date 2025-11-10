@@ -3,6 +3,7 @@ package com.flipkart.grayskull;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.exceptions.GrayskullException;
+import com.flipkart.grayskull.exceptions.RetryableException;
 import com.flipkart.grayskull.hooks.RefreshHookHandle;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.models.GrayskullProperties;
@@ -59,7 +60,7 @@ public class GrayskullClientImplTest {
     }
 
     @Test
-    public void testGetSecret_success() {
+    public void testGetSecret_success() throws Exception {
         // Given
         String secretRef = "my-project:database-password";
         SecretValue expectedSecret = SecretValue.builder()
@@ -120,7 +121,7 @@ public class GrayskullClientImplTest {
     }
 
     @Test
-    public void testGetSecret_validFormat_withMultipleColons() {
+    public void testGetSecret_validFormat_withMultipleColons() throws Exception {
         // Given
         String secretRef = "my-project:secret:with:colons";
         SecretValue expectedSecret = SecretValue.builder()
@@ -148,7 +149,7 @@ public class GrayskullClientImplTest {
     }
 
     @Test
-    public void testGetSecret_withSpecialCharacters() {
+    public void testGetSecret_withSpecialCharacters() throws Exception {
         // Given - secret name contains @ and # characters
         String secretRef = "project:secret@domain#tag";
         SecretValue expectedSecret = SecretValue.builder()
@@ -180,7 +181,7 @@ public class GrayskullClientImplTest {
     }
 
     @Test(expected = GrayskullException.class)
-    public void testGetSecret_nullResponse() {
+    public void testGetSecret_nullResponse() throws Exception {
         // Given
         String secretRef = "project:secret";
         when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
@@ -191,14 +192,61 @@ public class GrayskullClientImplTest {
     }
 
     @Test(expected = GrayskullException.class)
-    public void testGetSecret_httpClientThrowsException() {
+    public void testGetSecret_httpClientThrowsRetryableException() throws Exception {
         // Given
         String secretRef = "project:secret";
         when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
-                .thenThrow(new GrayskullException(500, "Network error"));
+                .thenThrow(new RetryableException("Network error"));
+
+        // When/Then - should exhaust retries and wrap in GrayskullException
+        client.getSecret(secretRef);
+    }
+
+    @Test
+    public void testGetSecret_retriesOnRetryableException() throws Exception {
+        // Given
+        String secretRef = "project:secret";
+        SecretValue expectedSecret = SecretValue.builder()
+                .dataVersion(1)
+                .publicPart("pub")
+                .privatePart("priv")
+                .build();
+
+        // Mock to fail twice, then succeed on third attempt
+        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+                .thenThrow(new RetryableException("Timeout"))
+                .thenThrow(new RetryableException("Timeout"))
+                .thenReturn(expectedSecret);
+
+        // When
+        SecretValue result = client.getSecret(secretRef);
+
+        // Then - should succeed after retries
+        assertNotNull(result);
+        assertEquals(expectedSecret.getDataVersion(), result.getDataVersion());
+        
+        // Verify httpClient was called 3 times (2 failures + 1 success)
+        verify(mockHttpClient, times(3)).doGet(anyString(), any(TypeReference.class), anyString(), anyString());
+    }
+
+    @Test
+    public void testGetSecret_noRetryOnNonRetryableException() throws Exception {
+        // Given
+        String secretRef = "project:secret";
+        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+                .thenThrow(new GrayskullException(404, "Not found"));
 
         // When/Then
-        client.getSecret(secretRef);
+        try {
+            client.getSecret(secretRef);
+            fail("Expected GrayskullException to be thrown");
+        } catch (GrayskullException e) {
+            assertEquals(404, e.getStatusCode());
+            assertEquals("Not found", e.getMessage());
+        }
+        
+        // Verify httpClient was called only once (no retries)
+        verify(mockHttpClient, times(1)).doGet(anyString(), any(TypeReference.class), anyString(), anyString());
     }
 
     @Test

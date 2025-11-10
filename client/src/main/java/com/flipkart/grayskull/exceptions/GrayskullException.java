@@ -20,6 +20,16 @@ public class GrayskullException extends RuntimeException {
         super(e);
         this.statusCode = statusCode;
     }
+
+    public GrayskullException(String message) {
+        super(message);
+        this.statusCode = 0;
+    }
+
+    public GrayskullException(String message, Throwable cause) {
+        super(message, cause);
+        this.statusCode = 0;
+    }
 }
 
 
