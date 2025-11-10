@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.exceptions.GrayskullException;
+import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullProperties;
 import com.flipkart.grayskull.models.response.Response;
 import okhttp3.*;
@@ -19,8 +20,13 @@ class GrayskullHttpClient {
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
+    private final MetricsPublisher metricsPublisher;
 
     GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullProperties properties) {
+        this(authHeaderProvider, properties, true);
+    }
+
+    GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullProperties properties, boolean enableMetrics) {
         this.authHeaderProvider = authHeaderProvider;
         this.objectMapper = new ObjectMapper();
         
@@ -32,14 +38,34 @@ class GrayskullHttpClient {
                         5,
                         TimeUnit.MINUTES))
                 .build();
+        
+        // Initialize metrics publisher if enabled
+        this.metricsPublisher = enableMetrics ? new MetricsPublisher() : null;
     }
 
-    <T> T doGet(String url, TypeReference<Response<T>> responseType) {
+    <T> T doGet(String url, TypeReference<Response<T>> responseType, String secretRef, String methodName) {
         Request request = buildRequest(url)
                 .get()
                 .build();
 
-        return executeRequest(request, responseType);
+        // Execute request with timing
+        long startTime = System.currentTimeMillis();
+        int statusCode = 0;
+        try {
+            T result = executeRequest(request, responseType);
+            statusCode = 200; 
+            return result;
+        } catch (GrayskullException e) {
+            statusCode = e.getStatusCode(); 
+            throw e;
+        } finally {
+            // Record metrics with status code and secret reference
+            if (metricsPublisher != null) {
+                long duration = System.currentTimeMillis() - startTime;
+                metricsPublisher.record(methodName, statusCode, secretRef);
+                metricsPublisher.recordDuration(methodName, duration, secretRef);
+            }
+        }
     }
 
     private Request.Builder buildRequest(String url) {
@@ -57,29 +83,30 @@ class GrayskullHttpClient {
 
     private <T> T executeRequest(Request request, TypeReference<Response<T>> responseType) {
         try (okhttp3.Response response = httpClient.newCall(request).execute()) {
+            int statusCode = response.code();
+            
             if (!response.isSuccessful()) {
                 String errorBody = response.body() != null ? response.body().string() : "";
-                throw new GrayskullException(
-                        String.format("Request failed. HTTP %d: %s", response.code(), errorBody));
+                throw new GrayskullException(statusCode, "Request failed: " + errorBody);
             }
 
             if (response.body() == null) {
-                throw new GrayskullException("Empty response body from server");
+                throw new GrayskullException(500, "Empty response body from server");
             }
 
             String responseBody = response.body().string();
-            log.debug("Received response: {}", responseBody);
+            log.debug("Received response with status: {}", statusCode);
 
             Response<T> responseTemplate = objectMapper.readValue(responseBody, responseType);
             
             if (responseTemplate == null || responseTemplate.getData() == null) {
-                throw new GrayskullException("No data in response");
+                throw new GrayskullException(500, "No data in response");
             }
 
             return responseTemplate.getData();
 
         } catch (IOException e) {
-            throw new GrayskullException("Error communicating with Grayskull server", e);
+            throw new GrayskullException(0, "Error communicating with Grayskull server", e);
         }
     }
 

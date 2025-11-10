@@ -68,7 +68,7 @@ public class GrayskullClientImplTest {
                 .privatePart("password123")
                 .build();
 
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class)))
+        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
 
         // When
@@ -83,7 +83,9 @@ public class GrayskullClientImplTest {
         // Verify correct URL was called
         verify(mockHttpClient).doGet(
                 eq("https://test.grayskull.com/v1/projects/my-project/secrets/database-password/data"),
-                any(TypeReference.class)
+                any(TypeReference.class),
+                eq(secretRef),
+                eq("getSecret")
         );
     }
 
@@ -127,7 +129,7 @@ public class GrayskullClientImplTest {
                 .privatePart("priv")
                 .build();
 
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class)))
+        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
 
         // When
@@ -136,10 +138,44 @@ public class GrayskullClientImplTest {
         // Then
         assertNotNull(result);
         
-        // Verify URL contains the secret name with colons
+        // Verify URL is properly encoded - colons after the first one are encoded as %3A
         verify(mockHttpClient).doGet(
-                eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret:with:colons/data"),
-                any(TypeReference.class)
+                eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret%3Awith%3Acolons/data"),
+                any(TypeReference.class),
+                eq(secretRef),
+                eq("getSecret")
+        );
+    }
+
+    @Test
+    public void testGetSecret_withSpecialCharacters() {
+        // Given - secret name contains @ and # characters
+        String secretRef = "project:secret@domain#tag";
+        SecretValue expectedSecret = SecretValue.builder()
+                .dataVersion(1)
+                .publicPart("username")
+                .privatePart("password")
+                .build();
+
+        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+                .thenReturn(expectedSecret);
+
+        // When
+        SecretValue result = client.getSecret(secretRef);
+
+        // Then
+        assertNotNull(result);
+        assertEquals(expectedSecret.getDataVersion(), result.getDataVersion());
+        assertEquals(expectedSecret.getPublicPart(), result.getPublicPart());
+        assertEquals(expectedSecret.getPrivatePart(), result.getPrivatePart());
+        
+        // Verify URL is properly encoded with special characters
+        // @ should be encoded as %40, # should be encoded as %23
+        verify(mockHttpClient).doGet(
+                eq("https://test.grayskull.com/v1/projects/project/secrets/secret%40domain%23tag/data"),
+                any(TypeReference.class),
+                eq(secretRef),
+                eq("getSecret")
         );
     }
 
@@ -147,7 +183,7 @@ public class GrayskullClientImplTest {
     public void testGetSecret_nullResponse() {
         // Given
         String secretRef = "project:secret";
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class)))
+        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(null);
 
         // When/Then
@@ -158,8 +194,8 @@ public class GrayskullClientImplTest {
     public void testGetSecret_httpClientThrowsException() {
         // Given
         String secretRef = "project:secret";
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class)))
-                .thenThrow(new GrayskullException("Network error"));
+        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+                .thenThrow(new GrayskullException(500, "Network error"));
 
         // When/Then
         client.getSecret(secretRef);

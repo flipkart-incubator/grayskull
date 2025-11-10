@@ -12,6 +12,9 @@ import com.flipkart.grayskull.models.SecretValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+
 /**
  * Implementation of the Grayskull client.
  * <p>
@@ -28,16 +31,29 @@ public class GrayskullClientImpl implements GrayskullClient {
     private final GrayskullHttpClient httpClient;
 
     /**
-     * Creates a new Grayskull client implementation.
+     * Creates a new Grayskull client implementation with metrics enabled by default.
      *
      * @param authHeaderProvider provider for authentication headers
      * @param grayskullProperties configuration properties
      */
     public GrayskullClientImpl(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullProperties grayskullProperties) {
+        this(authHeaderProvider, grayskullProperties, true);
+    }
+
+    /**
+     * Creates a new Grayskull client implementation with configurable metrics.
+     *
+     * @param authHeaderProvider provider for authentication headers
+     * @param grayskullProperties configuration properties
+     * @param enableMetrics whether to enable JMX metrics collection
+     */
+    public GrayskullClientImpl(GrayskullAuthHeaderProvider authHeaderProvider, 
+                               GrayskullProperties grayskullProperties,
+                               boolean enableMetrics) {
         this.baseUrl = grayskullProperties.getHost();
         this.authHeaderProvider = authHeaderProvider;
         this.grayskullProperties = grayskullProperties;
-        this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullProperties);
+        this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullProperties, enableMetrics);
     }
     
     /**
@@ -75,11 +91,16 @@ public class GrayskullClientImpl implements GrayskullClient {
 
         log.debug("Fetching secret: projectId={}, secretName={}", projectId, secretName);
 
-        String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", projectId, secretName);
-        SecretValue secretValue = httpClient.doGet(url, new TypeReference<Response<SecretValue>>() {});
+        // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
+        String encodedProjectId = urlEncode(projectId);
+        String encodedSecretName = urlEncode(secretName);
+        String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
+        
+        // Pass secretRef and method name to HTTP client for metrics tracking
+        SecretValue secretValue = httpClient.doGet(url, new TypeReference<Response<SecretValue>>() {}, secretRef, "getSecret");
         
         if (secretValue == null) {
-            throw new GrayskullException("No data in response");
+            throw new GrayskullException(500, "No data in response");
         }
 
         return secretValue;
@@ -125,6 +146,14 @@ public class GrayskullClientImpl implements GrayskullClient {
         log.info("Closing Grayskull client");
         if (httpClient != null) {
             httpClient.close();
+        }
+    }
+
+    private static String urlEncode(String value) {
+        try {
+            return URLEncoder.encode(value, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new GrayskullException(500, "Failed to URL encode value: " + value, e);
         }
     }
 }
