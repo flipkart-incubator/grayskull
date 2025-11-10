@@ -29,6 +29,19 @@ jobs:
         cache: maven
     - name: Build with Maven
       run: mvn -B clean install
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action/composite@v2
+      if: success()
+      with:
+        files: |
+          */target/surefire-reports/TEST*.xml
+        fail_on: 'test failures'
+        compare_to_earlier_commit: false
+    - name: Publish code coverage (uses CodeCov.io)
+      uses: codecov/codecov-action@v4
+      with:
+        files: |
+          */target/site/jacoco/jacoco.xml
 
     # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
 #    - name: Update dependency graph
