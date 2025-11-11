@@ -75,8 +75,8 @@ public final class GrayskullProperties {
     /**
      * Sets the Grayskull server endpoint URL.
      *
-     * @param host the server URL (must not be null or empty, should start with http:// or https://)
-     * @throws IllegalArgumentException if host is null, empty, or doesn't start with http:// or https://
+     * @param host the server URL (must not be null or empty)
+     * @throws IllegalArgumentException if host is null or empty
      */
     public void setHost(String host) {
         if (host == null || host.trim().isEmpty()) {
@@ -128,12 +128,15 @@ public final class GrayskullProperties {
     /**
      * Sets the maximum number of retry attempts.
      *
-     * @param maxRetries the maximum number of retry attempts (must be non-negative)
-     * @throws IllegalArgumentException if maxRetries is negative
+     * @param maxRetries the maximum number of retry attempts (must be between 1 and 10)
+     * @throws IllegalArgumentException if maxRetries is less than 1 or greater than 10
      */
     public void setMaxRetries(int maxRetries) {
         if (maxRetries < 1) {
             throw new IllegalArgumentException("Max retries cannot be less than 1, got: " + maxRetries);
+        }
+        if (maxRetries > 10) {
+            throw new IllegalArgumentException("Max retries cannot be greater than 10, got: " + maxRetries);
         }
         this.maxRetries = maxRetries;
     }

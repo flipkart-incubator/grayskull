@@ -11,10 +11,12 @@ import org.slf4j.LoggerFactory;
  * This class implements a retry mechanism with exponential backoff for operations
  * that may fail transiently. It will retry operations that throw {@link RetryableException}
  * up to a maximum number of attempts, with increasing delays between attempts.
+ * The wait time is capped at a maximum of 1 minute.
  * </p>
  */
 public final class RetryUtil {
     private static final Logger log = LoggerFactory.getLogger(RetryUtil.class);
+    private static final long MAX_WAIT_TIME_MS = 60000; // 1 minute
 
     private final int maxAttempt;
     private final int interval;
@@ -35,6 +37,7 @@ public final class RetryUtil {
      * <p>
      * If the task throws a {@link RetryableException}, it will be retried up to maxAttempt times
      * with exponential backoff. Non-retryable exceptions are thrown immediately.
+     * The wait time between retries is capped at a maximum of 1 minute.
      * </p>
      *
      * @param task The task to execute
@@ -71,7 +74,7 @@ public final class RetryUtil {
                     Thread.currentThread().interrupt();
                     throw new GrayskullException("Retry interrupted", ie);
                 }
-                currentInterval *= 2; // Exponential backoff
+                currentInterval = Math.min(currentInterval * 2, MAX_WAIT_TIME_MS); // Exponential backoff capped at 1 minute
             } 
         }
         throw new GrayskullException("Reached maximum attempts: " + maxAttempt, lastException);
