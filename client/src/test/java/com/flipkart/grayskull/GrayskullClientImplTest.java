@@ -2,12 +2,12 @@ package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
-import com.flipkart.grayskull.exceptions.GrayskullException;
-import com.flipkart.grayskull.exceptions.RetryableException;
-import com.flipkart.grayskull.hooks.RefreshHookHandle;
-import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.models.GrayskullProperties;
 import com.flipkart.grayskull.models.SecretValue;
+import com.flipkart.grayskull.models.exceptions.GrayskullException;
+import com.flipkart.grayskull.models.exceptions.RetryableException;
+import com.flipkart.grayskull.hooks.RefreshHookHandle;
+import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

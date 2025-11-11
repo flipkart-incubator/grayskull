@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.utils;
 
-import com.flipkart.grayskull.exceptions.GrayskullException;
-import com.flipkart.grayskull.exceptions.RetryableException;
+import com.flipkart.grayskull.models.exceptions.GrayskullException;
+import com.flipkart.grayskull.models.exceptions.RetryableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

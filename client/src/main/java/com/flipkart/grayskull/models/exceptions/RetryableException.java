@@ -1,4 +1,4 @@
-package com.flipkart.grayskull.exceptions;
+package com.flipkart.grayskull.models.exceptions;
 
 /**
  * Exception indicating that an operation failed but can be retried.

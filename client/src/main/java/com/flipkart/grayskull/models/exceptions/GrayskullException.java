@@ -1,4 +1,4 @@
-package com.flipkart.grayskull.exceptions;
+package com.flipkart.grayskull.models.exceptions;
 
 import lombok.Getter;
 
