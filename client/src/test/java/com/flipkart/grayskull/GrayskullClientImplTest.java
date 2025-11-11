@@ -63,11 +63,7 @@ public class GrayskullClientImplTest {
     public void testGetSecret_success() throws Exception {
         // Given
         String secretRef = "my-project:database-password";
-        SecretValue expectedSecret = SecretValue.builder()
-                .dataVersion(1)
-                .publicPart("username")
-                .privatePart("password123")
-                .build();
+        SecretValue expectedSecret = new SecretValue(1, "username", "password123");
 
         when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
@@ -124,11 +120,7 @@ public class GrayskullClientImplTest {
     public void testGetSecret_validFormat_withMultipleColons() throws Exception {
         // Given
         String secretRef = "my-project:secret:with:colons";
-        SecretValue expectedSecret = SecretValue.builder()
-                .dataVersion(1)
-                .publicPart("pub")
-                .privatePart("priv")
-                .build();
+        SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
 
         when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
@@ -152,11 +144,7 @@ public class GrayskullClientImplTest {
     public void testGetSecret_withSpecialCharacters() throws Exception {
         // Given - secret name contains @ and # characters
         String secretRef = "project:secret@domain#tag";
-        SecretValue expectedSecret = SecretValue.builder()
-                .dataVersion(1)
-                .publicPart("username")
-                .privatePart("password")
-                .build();
+        SecretValue expectedSecret = new SecretValue(1, "username", "password");
 
         when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
@@ -206,11 +194,7 @@ public class GrayskullClientImplTest {
     public void testGetSecret_retriesOnRetryableException() throws Exception {
         // Given
         String secretRef = "project:secret";
-        SecretValue expectedSecret = SecretValue.builder()
-                .dataVersion(1)
-                .publicPart("pub")
-                .privatePart("priv")
-                .build();
+        SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
 
         // Mock to fail twice, then succeed on third attempt
         when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
