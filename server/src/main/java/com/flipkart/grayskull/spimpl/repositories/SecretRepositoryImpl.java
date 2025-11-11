@@ -38,7 +38,7 @@ public class SecretRepositoryImpl implements SecretRepository {
         return entities.stream()
                 .skip(offset)
                 .limit(limit)
-                .map(entity -> (Secret) entity)
+                .map(Secret.class::cast)
                 .toList();
     }
 
