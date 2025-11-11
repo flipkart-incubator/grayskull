@@ -7,7 +7,7 @@ package com.flipkart.grayskull.models.exceptions;
  * connection failures, or temporary server unavailability (5xx errors).
  * </p>
  */
-public class RetryableException extends Exception {
+public final class RetryableException extends Exception {
     
     public RetryableException(String message) {
         super(message);

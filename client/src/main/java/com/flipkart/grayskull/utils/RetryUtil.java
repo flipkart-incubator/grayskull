@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
  * up to a maximum number of attempts, with increasing delays between attempts.
  * </p>
  */
-public class RetryUtil {
+public final class RetryUtil {
     private static final Logger log = LoggerFactory.getLogger(RetryUtil.class);
 
     private final int maxAttempt;

@@ -8,6 +8,7 @@ import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.models.exceptions.RetryableException;
 import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.response.Response;
+import com.flipkart.grayskull.models.response.ResponseWithStatus;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,18 +54,18 @@ class GrayskullHttpClient {
         long startTime = System.currentTimeMillis();
         int statusCode = 0;
         try {
-            T result = executeRequest(request, responseType);
-            statusCode = 200; 
-            return result;
+            ResponseWithStatus<T> result = executeRequest(request, responseType);
+            statusCode = result.getStatusCode();
+            Response<T> response = result.getResponse();
+            return response.getData();
         } catch (GrayskullException e) {
             statusCode = e.getStatusCode(); 
             throw e;
         } finally {
-            // Record metrics with status code and secret reference
+            // Record metrics 
             if (metricsPublisher != null) {
                 long duration = System.currentTimeMillis() - startTime;
-                metricsPublisher.record(methodName, statusCode, secretRef);
-                metricsPublisher.recordDuration(methodName, duration, secretRef);
+                metricsPublisher.recordRequest(methodName, statusCode, duration, secretRef);
             }
         }
     }
@@ -82,7 +83,7 @@ class GrayskullHttpClient {
         return requestBuilder;
     }
 
-    private <T> T executeRequest(Request request, TypeReference<Response<T>> responseType) throws RetryableException {
+    private <T> ResponseWithStatus<T> executeRequest(Request request, TypeReference<Response<T>> responseType) throws RetryableException {
         try (okhttp3.Response response = httpClient.newCall(request).execute()) {
             int statusCode = response.code();
             
@@ -110,7 +111,7 @@ class GrayskullHttpClient {
                 throw new RetryableException("No data in response");
             }
 
-            return responseTemplate.getData();
+            return new ResponseWithStatus<>(statusCode, responseTemplate);
 
         } catch (IOException e) {
             // Network/IO errors are generally transient and worth retrying

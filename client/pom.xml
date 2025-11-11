@@ -22,6 +22,7 @@
         <okhttp.version>4.9.3</okhttp.version>
         <slf4j.version>1.7.36</slf4j.version>
         <lombok.version>1.18.30</lombok.version>
+        <micrometer.version>1.11.0</micrometer.version>
     </properties>
 
     <dependencies>
@@ -48,6 +49,13 @@
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
             <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-jmx</artifactId>
+            <version>${micrometer.version}</version>
+            <optional>true</optional>
         </dependency>
 
         <dependency>

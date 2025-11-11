@@ -1,35 +1,45 @@
 package com.flipkart.grayskull.models.response;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
 
 /**
  * Generic class for deserializing the server's ResponseTemplate.
  * This represents the standard response format from the Grayskull API.
+ * <p>
+ * This class is immutable and thread-safe.
+ * </p>
  *
  * @param <T> the type of the data field
  */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Response<T> {
+public final class Response<T> {
     
     /**
      * The actual response data.
      */
-    private T data;
+    private final T data;
     
     /**
      * A human-readable message describing the response.
      */
-    private String message;
-    
+    private final String message;
+
     /**
-     * A response code for categorizing the response.
+     * Constructor for JSON deserialization.
+     *
+     * @param data    The actual response data
+     * @param message A human-readable message describing the response
      */
-    private String code;
+    @JsonCreator
+    public Response(
+            @JsonProperty("data") T data,
+            @JsonProperty("message") String message) {
+        this.data = data;
+        this.message = message;
+    }
 }
 

@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Getter
 @RequiredArgsConstructor
-public class NoOpRefreshHookHandle implements RefreshHookHandle {
+public final class NoOpRefreshHookHandle implements RefreshHookHandle {
     private final String secretRef;
     private volatile boolean active = true;
 

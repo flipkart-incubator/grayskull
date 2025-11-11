@@ -1,181 +1,79 @@
 package com.flipkart.grayskull.metrics;
 
-import javax.management.*;
-import java.lang.management.ManagementFactory;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * MetricsPublisher is responsible for recording and exposing JMX metrics for Grayskull HTTP client events.
- * Each event is tracked as a JMX counter, keyed by event type, HTTP status series (2XX, 4XX, 5XX), and secret.
+ * MetricsPublisher is responsible for recording and exposing metrics.
+ * <p>
+ * This publisher uses micrometer for metrics if avaiable in the classpath, otherwise defaults to Mbeans.
+ * </p>
  *
+ * <p>
  * Example usage:
+ * <pre>
  *     MetricsPublisher publisher = new MetricsPublisher();
- *     publisher.record("getSecret", 200, "project1:secret1");  // Creates: getSecret.200.project1:secret1
- *     publisher.record("getSecret", 404, "project2:secret2");  // Creates: getSecret.404.project2:secret2
- *     publisher.recordDuration("getSecret", 150, "project1:secret1");
+ *     publisher.recordRequest("getSecret", 200, 150, "project1:secret1");
+ * </pre>
+ * </p>
  *
- * You can view these metrics in JConsole, VisualVM, or any JMX-compatible tool under the domain com.flipkart.grayskull:type=HttpClientMetrics.
  * Metrics are enabled by default but can be disabled through SDK configuration.
  */
-public class MetricsPublisher {
-    private static final ConcurrentHashMap<String, AtomicLong> counters = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, DurationTracker> durationTrackers = new ConcurrentHashMap<>();
+public final class MetricsPublisher {
+    
+    private static final Logger log = LoggerFactory.getLogger(MetricsPublisher.class);
     private static volatile boolean metricsEnabled = true;
+    
+    private final MetricsRecorder recorder;
+
+    public MetricsPublisher() {
+        this.recorder = detectRecorder();
+    }
 
     /**
-     * Configure metrics collection. By default, metrics are enabled.
-     * This method should only be called through the SDK configuration.
-     *
-     * @param enabled true to enable metrics collection, false to disable
+     * Configure metrics collection globally.
+     * @param enabled {@code true} to enable metrics collection, {@code false} to disable
      */
     public static void configure(boolean enabled) {
         metricsEnabled = enabled;
     }
 
     /**
-     * Record a metrics event. Increments the JMX counter for the given event, status code, and secret.
+     * Record a metrics event.
      * If metrics are disabled through configuration, this method will be a no-op.
      *
      * @param event      The SDK method name (e.g., "getSecret", "registerRefreshHook")
-     * @param statusCode The HTTP status code (use 0 for non-HTTP events)
+     * @param statusCode The HTTP status code (e.g., 200, 404, 500)
+     * @param durationMs The request duration in milliseconds
      * @param secretRef  The secret reference (e.g., "project1:secret1")
      */
-    public void record(String event, int statusCode, String secretRef) {
+    public void recordRequest(String event, int statusCode, long durationMs, String secretRef) {
         if (!metricsEnabled) {
             return;
         }
-
-        String key = event + "." + statusCode + "." + secretRef;
-        counters.computeIfAbsent(key, k -> {
-            try {
-                ObjectName name = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
-                AtomicLong counter = new AtomicLong(0);
-                ManagementFactory.getPlatformMBeanServer().registerMBean(new Counter(counter), name);
-                return counter;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }).incrementAndGet();
+        recorder.recordRequest(event, statusCode, durationMs, secretRef);
     }
 
     /**
-     * Record request duration. Updates duration statistics for the given event and secret.
+     * Detects which metrics recorder to use based on classpath availability.
+     * <p>
+     * JMX is used as the fallback since it's always available in Java (no external dependencies).
+     * </p>
      *
-     * @param event      The SDK method name (e.g., "getSecret", "registerRefreshHook")
-     * @param durationMs The duration in milliseconds
-     * @param secretRef  The secret reference (e.g., "project1:secret1")
+     * @return the appropriate metrics recorder (never {@code null})
      */
-    public void recordDuration(String event, long durationMs, String secretRef) {
-        if (!metricsEnabled) {
-            return;
-        }
-
-        String key = event + "." + secretRef;
-        durationTrackers.computeIfAbsent(key, k -> {
-            try {
-                ObjectName name = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
-                DurationTracker tracker = new DurationTracker();
-                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, name);
-                return tracker;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }).record(durationMs);
-    }
-
-    /**
-     * JMX MBean interface for exposing counter values.
-     */
-    public interface CounterMBean {
-        long getCount();
-    }
-
-    /**
-     * JMX MBean implementation for counters.
-     */
-    public static class Counter implements CounterMBean {
-        private final AtomicLong counter;
-
-        public Counter(AtomicLong counter) {
-            this.counter = counter;
-        }
-
-        @Override
-        public long getCount() {
-            return counter.get();
-        }
-    }
-
-    /**
-     * JMX MBean interface for exposing duration metrics.
-     */
-    public interface DurationTrackerMBean {
-        long getTotalDurationMs();
-        long getAverageDurationMs();
-        long getMaxDurationMs();
-        long getMinDurationMs();
-        long getCount();
-    }
-
-    /**
-     * JMX MBean implementation for duration tracking.
-     */
-    public static class DurationTracker implements DurationTrackerMBean {
-        private final AtomicLong count = new AtomicLong(0);
-        private final AtomicLong totalDuration = new AtomicLong(0);
-        private final AtomicLong maxDuration = new AtomicLong(0);
-        private final AtomicLong minDuration = new AtomicLong(Long.MAX_VALUE);
-
-        public void record(long durationMs) {
-            count.incrementAndGet();
-            totalDuration.addAndGet(durationMs);
-
-            // Update max duration
-            long currentMax;
-            do {
-                currentMax = maxDuration.get();
-                if (durationMs <= currentMax) {
-                    break;
-                }
-            } while (!maxDuration.compareAndSet(currentMax, durationMs));
-
-            // Update min duration
-            long currentMin;
-            do {
-                currentMin = minDuration.get();
-                if (durationMs >= currentMin) {
-                    break;
-                }
-            } while (!minDuration.compareAndSet(currentMin, durationMs));
-        }
-
-        @Override
-        public long getTotalDurationMs() {
-            return totalDuration.get();
-        }
-
-        @Override
-        public long getAverageDurationMs() {
-            long c = count.get();
-            return c > 0 ? totalDuration.get() / c : 0;
-        }
-
-        @Override
-        public long getMaxDurationMs() {
-            long max = maxDuration.get();
-            return max == 0 ? 0 : max;
-        }
-
-        @Override
-        public long getMinDurationMs() {
-            long min = minDuration.get();
-            return min == Long.MAX_VALUE ? 0 : min;
-        }
-
-        @Override
-        public long getCount() {
-            return count.get();
+    private static MetricsRecorder detectRecorder() {
+        try {
+            Class.forName("io.micrometer.jmx.JmxMeterRegistry");
+            return new MicrometerMetricsRecorder();
+            
+        } catch (ClassNotFoundException e) {
+            log.debug("micrometer-registry-jmx not available on classpath, using basic JMX MBeans");
+            return new JmxMetricsRecorder();
+            
+        } catch (Exception e) {
+            log.warn("Failed to initialize Micrometer metrics, falling back to basic JMX MBeans", e);
+            return new JmxMetricsRecorder();
         }
     }
 }

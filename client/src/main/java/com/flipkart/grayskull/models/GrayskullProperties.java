@@ -1,7 +1,6 @@
 package com.flipkart.grayskull.models;
 
 import lombok.Getter;
-import lombok.Setter;
 
 /**
  * Configuration properties for the Grayskull client.
@@ -11,8 +10,7 @@ import lombok.Setter;
  * </p>
  */
 @Getter
-@Setter
-public class GrayskullProperties {
+public final class GrayskullProperties {
     
     /**
      * The Grayskull server endpoint URL.
@@ -22,19 +20,6 @@ public class GrayskullProperties {
      * </p>
      */
     private String host;
-    
-    /**
-     * The interval in milliseconds between long polling requests.
-     * <p>
-     * When using long polling to watch for secret changes, this determines how frequently
-     * the client should poll the server. A lower value means more frequent updates but
-     * higher network traffic.
-     * </p>
-     * <p>
-     * Default: 30000ms (30 seconds)
-     * </p>
-     */
-    private int refreshPollInterval = 30000;
     
     /**
      * The connection timeout in milliseconds.
@@ -86,4 +71,70 @@ public class GrayskullProperties {
      * </p>
      */
     private int maxRetries = 3;
+
+    /**
+     * Sets the Grayskull server endpoint URL.
+     *
+     * @param host the server URL (must not be null or empty, should start with http:// or https://)
+     * @throws IllegalArgumentException if host is null, empty, or doesn't start with http:// or https://
+     */
+    public void setHost(String host) {
+        if (host == null || host.trim().isEmpty()) {
+            throw new IllegalArgumentException("Host cannot be null or empty");
+        }
+        // Remove trailing slash if present
+        this.host = host.endsWith("/") ? host.substring(0, host.length() - 1) : host;
+    }
+
+    /**
+     * Sets the connection timeout in milliseconds.
+     *
+     * @param connectionTimeout the connection timeout in milliseconds (must be positive)
+     * @throws IllegalArgumentException if connectionTimeout is not positive
+     */
+    public void setConnectionTimeout(int connectionTimeout) {
+        if (connectionTimeout <= 0) {
+            throw new IllegalArgumentException("Connection timeout must be positive, got: " + connectionTimeout);
+        }
+        this.connectionTimeout = connectionTimeout;
+    }
+
+    /**
+     * Sets the read timeout in milliseconds.
+     *
+     * @param readTimeout the read timeout in milliseconds (must be positive)
+     * @throws IllegalArgumentException if readTimeout is not positive
+     */
+    public void setReadTimeout(int readTimeout) {
+        if (readTimeout <= 0) {
+            throw new IllegalArgumentException("Read timeout must be positive, got: " + readTimeout);
+        }
+        this.readTimeout = readTimeout;
+    }
+
+    /**
+     * Sets the maximum number of concurrent connections.
+     *
+     * @param maxConnections the maximum number of connections (must be positive)
+     * @throws IllegalArgumentException if maxConnections is not positive
+     */
+    public void setMaxConnections(int maxConnections) {
+        if (maxConnections <= 0) {
+            throw new IllegalArgumentException("Max connections must be positive, got: " + maxConnections);
+        }
+        this.maxConnections = maxConnections;
+    }
+
+    /**
+     * Sets the maximum number of retry attempts.
+     *
+     * @param maxRetries the maximum number of retry attempts (must be non-negative)
+     * @throws IllegalArgumentException if maxRetries is negative
+     */
+    public void setMaxRetries(int maxRetries) {
+        if (maxRetries < 1) {
+            throw new IllegalArgumentException("Max retries cannot be less than 1, got: " + maxRetries);
+        }
+        this.maxRetries = maxRetries;
+    }
 }

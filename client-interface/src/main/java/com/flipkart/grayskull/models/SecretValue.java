@@ -1,9 +1,10 @@
 package com.flipkart.grayskull.models;
 
-import lombok.Value;
-import lombok.Builder;
-import lombok.extern.jackson.Jacksonized;
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
+import lombok.Getter;
 
 /**
  * Represents a secret value retrieved from Grayskull.
@@ -12,24 +13,40 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * along with version information.
  * </p>
  */
-@Value
+@Getter
 @Builder
-@Jacksonized
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class SecretValue {
+public final class SecretValue {
 
     /**
      * Data version number.
      */
-    int dataVersion;
+    private final int dataVersion;
 
     /**
      * Public part of the secret.
      */
-    String publicPart;
+    private final String publicPart;
 
     /**
      * Private/sensitive part of the secret.
      */
-    String privatePart;
+    private final String privatePart;
+
+    /**
+     * Constructor for JSON deserialization.
+     *
+     * @param dataVersion Data version number
+     * @param publicPart  Public part of the secret
+     * @param privatePart Private/sensitive part of the secret
+     */
+    @JsonCreator
+    public SecretValue(
+            @JsonProperty("dataVersion") int dataVersion,
+            @JsonProperty("publicPart") String publicPart,
+            @JsonProperty("privatePart") String privatePart) {
+        this.dataVersion = dataVersion;
+        this.publicPart = publicPart;
+        this.privatePart = privatePart;
+    }
 }

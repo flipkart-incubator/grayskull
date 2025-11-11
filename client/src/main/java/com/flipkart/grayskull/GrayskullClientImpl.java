@@ -24,7 +24,7 @@ import java.net.URLEncoder;
  * secret management service, including fetching secrets and managing refresh hooks.
  * </p>
  */
-public class GrayskullClientImpl implements GrayskullClient {
+public final class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
     private static final int RETRY_INTERVAL_MS = 100;
     

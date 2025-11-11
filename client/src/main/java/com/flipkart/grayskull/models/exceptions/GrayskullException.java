@@ -3,8 +3,8 @@ package com.flipkart.grayskull.models.exceptions;
 import lombok.Getter;
 
 @Getter
-public class GrayskullException extends RuntimeException {
-    private int statusCode;
+public final class GrayskullException extends RuntimeException {
+    private final int statusCode;
 
     public GrayskullException(int statusCode, String message) {
         super(message);

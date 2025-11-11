@@ -10,7 +10,7 @@ import java.util.Base64;
  * and password in Base64 format according to RFC 7617.
  * </p>
  */
-public class BasicAuthHeaderProvider implements GrayskullAuthHeaderProvider {
+public final class BasicAuthHeaderProvider implements GrayskullAuthHeaderProvider {
     
     private final String username;
     private final String password;
