@@ -29,7 +29,7 @@ public class ProjectRepositoryImpl implements ProjectRepository {
     @Override
     public Project findByIdOrTransient(String id) {
         return mongoRepository.findById(id)
-                .map(entity -> (Project) entity)
+                .map(Project.class::cast)
                 .orElseGet(() -> ProjectEntity.builder().id(id).kmsKeyId(null).build());
     }
 

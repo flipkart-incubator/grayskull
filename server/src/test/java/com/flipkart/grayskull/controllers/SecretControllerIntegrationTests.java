@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * These tests cover the full application lifecycle including web layer, service layer,
  * and database interactions using a real, ephemeral MongoDB database via Testcontainers.
  */
-class SecretControllerIT extends BaseIntegrationTest {
+class SecretControllerIntegrationTests extends BaseIntegrationTest {
 
     private static final String ADMIN_USER = "admin";
     private static final String EDITOR_USER = "editor";

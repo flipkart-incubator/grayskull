@@ -26,7 +26,8 @@ import java.util.Map;
 @Slf4j
 public class ChaChaEncryptionService implements EncryptionService {
 
-    private static final String CHACHA_ALGORITHM = "ChaCha20-Poly1305";
+    private static final String CHACHA_CIPHER_ALGORITHM = "ChaCha20-Poly1305/None/NoPadding";
+    private static final String CHACHA_SECRETKEY_ALGORITHM = "ChaCha20";
     private static final int NONCE_SIZE_BYTES = 12;
 
     private final Map<String, byte[]> keys;
@@ -55,8 +56,8 @@ public class ChaChaEncryptionService implements EncryptionService {
     @Override
     public byte[] encrypt(byte[] data, String keyId) {
         try {
-            Cipher cipher = Cipher.getInstance(CHACHA_ALGORITHM);
-            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(keys.get(keyId), CHACHA_ALGORITHM));
+            Cipher cipher = Cipher.getInstance(CHACHA_CIPHER_ALGORITHM);
+            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(keys.get(keyId), CHACHA_SECRETKEY_ALGORITHM));
             byte[] nonce = cipher.getParameters().getParameterSpec(IvParameterSpec.class).getIV();
             byte[] encryptedBytes = cipher.doFinal(data);
             byte[] combined = new byte[nonce.length + encryptedBytes.length];
@@ -65,7 +66,7 @@ public class ChaChaEncryptionService implements EncryptionService {
             return combined;
         } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException |
                  InvalidParameterSpecException | IllegalBlockSizeException | BadPaddingException e) {
-            throw new RuntimeException(e);
+            throw new IllegalArgumentException(e);
         }
     }
 
@@ -76,12 +77,12 @@ public class ChaChaEncryptionService implements EncryptionService {
             byte[] cipherBytes = new byte[data.length - NONCE_SIZE_BYTES];
             System.arraycopy(data, 0, nonce, 0, NONCE_SIZE_BYTES);
             System.arraycopy(data, NONCE_SIZE_BYTES, cipherBytes, 0, cipherBytes.length);
-            Cipher cipher = Cipher.getInstance(CHACHA_ALGORITHM);
-            cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keys.get(keyId), CHACHA_ALGORITHM), new IvParameterSpec(nonce));
+            Cipher cipher = Cipher.getInstance(CHACHA_CIPHER_ALGORITHM);
+            cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keys.get(keyId), CHACHA_SECRETKEY_ALGORITHM), new IvParameterSpec(nonce));
             return cipher.doFinal(cipherBytes);
         } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException |
                  BadPaddingException | InvalidAlgorithmParameterException e) {
-            throw new RuntimeException(e);
+            throw new IllegalArgumentException(e);
         }
     }
 

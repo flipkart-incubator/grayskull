@@ -24,7 +24,6 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * Global exception handler for the application.
@@ -56,12 +55,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (ex instanceof ConstraintViolationException constraintEx) {
             violations = constraintEx.getConstraintViolations().stream()
                     .map(cv -> new Violation(cv.getPropertyPath().toString(), cv.getMessage()))
-                    .collect(Collectors.toList());
+                    .toList();
         } else if (ex instanceof MethodArgumentTypeMismatchException typeMismatchEx) {
             String message = String.format("Could not convert value '%s' to type '%s'",
                     typeMismatchEx.getValue(),
                     Objects.requireNonNull(typeMismatchEx.getRequiredType()).getSimpleName());
-            violations.add(new Violation(typeMismatchEx.getName(), message));
+            violations = List.of(new Violation(typeMismatchEx.getName(), message));
         }
         
         ResponseTemplate<Void> errorResponse = ResponseTemplate.validationError(
@@ -83,8 +82,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ResponseTemplate<Void>> handleResponseStatusException(ResponseStatusException ex,
             WebRequest request) {
         String errorCode = "";
-        if (ex.getStatusCode() instanceof HttpStatus) {
-            errorCode = ((HttpStatus) ex.getStatusCode()).name();
+        if (ex.getStatusCode() instanceof HttpStatus status) {
+            errorCode = status.name();
         } else {
             errorCode = String.valueOf(ex.getStatusCode().value());
         }
@@ -173,7 +172,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         List<Violation> violations = ex.getBindingResult().getFieldErrors().stream()
                 .map(fieldError -> new Violation(fieldError.getField(), fieldError.getDefaultMessage()))
-                .collect(Collectors.toList());
+                .toList();
         
         ResponseTemplate<Void> errorResponse = ResponseTemplate.validationError(
                 "Validation failed",
