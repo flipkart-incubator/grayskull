@@ -51,7 +51,7 @@ class GrayskullHttpClient {
                 .build();
 
         // Execute request with timing
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         int statusCode = 0;
         try {
             ResponseWithStatus<T> result = executeRequest(request, responseType);
@@ -64,7 +64,7 @@ class GrayskullHttpClient {
         } finally {
             // Record metrics 
             if (metricsPublisher != null) {
-                long duration = System.currentTimeMillis() - startTime;
+                long duration = System.nanoTime() - startTime;
                 metricsPublisher.recordRequest(methodName, statusCode, duration, secretRef);
             }
         }

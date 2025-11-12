@@ -53,7 +53,7 @@
 
         <dependency>
             <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-registry-jmx</artifactId>
+            <artifactId>micrometer-core</artifactId>
             <version>${micrometer.version}</version>
             <optional>true</optional>
         </dependency>

@@ -64,11 +64,11 @@ public final class MetricsPublisher {
      */
     private static MetricsRecorder detectRecorder() {
         try {
-            Class.forName("io.micrometer.jmx.JmxMeterRegistry");
+            Class.forName("io.micrometer.core.instrument.Metrics");
             return new MicrometerMetricsRecorder();
             
         } catch (ClassNotFoundException e) {
-            log.debug("micrometer-registry-jmx not available on classpath, using basic JMX MBeans");
+            log.debug("micrometer-core not available on classpath, using basic JMX MBeans");
             return new JmxMetricsRecorder();
             
         } catch (Exception e) {
