@@ -12,7 +12,6 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
@@ -25,10 +24,8 @@ import java.time.Instant;
 @NoArgsConstructor
 @Getter
 @Document(collection = "secret")
-@CompoundIndexes({
-        @CompoundIndex(name = "project_name_idx", def = "{'projectId': 1, 'name': 1}", unique = true),
-        @CompoundIndex(name = "project_state_idx", def = "{'projectId': 1, 'state': 1}")
-})
+@CompoundIndex(name = "project_name_idx", def = "{'projectId': 1, 'name': 1}", unique = true)
+@CompoundIndex(name = "project_state_idx", def = "{'projectId': 1, 'state': 1}")
 public class SecretEntity extends Secret {
 
     @Id
