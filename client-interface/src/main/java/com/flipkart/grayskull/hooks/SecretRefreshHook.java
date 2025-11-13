@@ -4,6 +4,6 @@ import com.flipkart.grayskull.models.SecretValue;
 
 @FunctionalInterface
 public interface SecretRefreshHook {
-    void onSecretRefresh(SecretValue secret) throws Exception;
+    void onUpdate(SecretValue secret) throws Exception;
 }
 
