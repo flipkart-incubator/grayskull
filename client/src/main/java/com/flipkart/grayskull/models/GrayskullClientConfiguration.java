@@ -10,7 +10,7 @@ import lombok.Getter;
  * </p>
  */
 @Getter
-public final class GrayskullProperties {
+public final class GrayskullClientConfiguration {
     
     /**
      * The Grayskull server endpoint URL.
@@ -71,6 +71,31 @@ public final class GrayskullProperties {
      * </p>
      */
     private int maxRetries = 3;
+
+    /**
+     * The minimum delay in milliseconds between retry attempts.
+     * <p>
+     * When a request fails and needs to be retried, the client will wait at least
+     * this amount of time before attempting the next retry. This helps prevent
+     * overwhelming the server with rapid retry attempts.
+     * </p>
+     * <p>
+     * Default: 100ms
+     * </p>
+     */
+    private int minRetryDelay = 100;
+
+    /**
+     * Whether to enable metrics collection.
+     * <p>
+     * When enabled, the client will expose metrics about API calls (success/failure counts,
+     * response times, etc.) via JMX MBeans/Micrometer for monitoring and observability.
+     * </p>
+     * <p>
+     * Default: true
+     * </p>
+     */
+    private boolean enableMetrics = true;
 
     /**
      * Sets the Grayskull server endpoint URL.
@@ -139,5 +164,27 @@ public final class GrayskullProperties {
             throw new IllegalArgumentException("Max retries cannot be greater than 10, got: " + maxRetries);
         }
         this.maxRetries = maxRetries;
+    }
+
+    /**
+     * Sets the minimum delay between retry attempts in milliseconds.
+     *
+     * @param minRetryDelay the minimum retry delay in milliseconds (must be at least 50ms)
+     * @throws IllegalArgumentException if minRetryDelay is less than 50ms
+     */
+    public void setMinRetryDelay(int minRetryDelay) {
+        if (minRetryDelay < 50) {
+            throw new IllegalArgumentException("Min retry delay must be at least 50ms, got: " + minRetryDelay);
+        }
+        this.minRetryDelay = minRetryDelay;
+    }
+
+    /**
+     * Sets whether to enable JMX metrics collection.
+     *
+     * @param enableMetrics true to enable metrics, false to disable
+     */
+    public void setEnableMetrics(boolean enableMetrics) {
+        this.enableMetrics = enableMetrics;
     }
 }

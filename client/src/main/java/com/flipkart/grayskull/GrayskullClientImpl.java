@@ -2,15 +2,13 @@ package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
-import com.flipkart.grayskull.models.GrayskullProperties;
+import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
-import com.flipkart.grayskull.models.exceptions.RetryableException;
-import com.flipkart.grayskull.hooks.NoOpRefreshHookHandle;
-import com.flipkart.grayskull.hooks.RefreshHookHandle;
+import com.flipkart.grayskull.hooks.NoOpRefreshHandlerRef;
+import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.models.response.Response;
-import com.flipkart.grayskull.utils.RetryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,39 +24,32 @@ import java.net.URLEncoder;
  */
 public final class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
-    private static final int RETRY_INTERVAL_MS = 100;
     
     private final String baseUrl;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
-    private final GrayskullProperties grayskullProperties;
+    private final GrayskullClientConfiguration grayskullClientConfiguration;
     private final GrayskullHttpClient httpClient;
-    private final RetryUtil retryUtil;
 
     /**
-     * Creates a new Grayskull client implementation with metrics enabled by default.
+     * Creates a new Grayskull client implementation.
      *
-     * @param authHeaderProvider provider for authentication headers
-     * @param grayskullProperties configuration properties
+     * @param authHeaderProvider provider for authentication headers (must not be null)
+     * @param grayskullClientConfiguration configuration properties (must not be null)
+     * @throws IllegalArgumentException if authHeaderProvider or grayskullClientConfiguration is null
      */
-    public GrayskullClientImpl(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullProperties grayskullProperties) {
-        this(authHeaderProvider, grayskullProperties, true);
-    }
-
-    /**
-     * Creates a new Grayskull client implementation with configurable metrics.
-     *
-     * @param authHeaderProvider provider for authentication headers
-     * @param grayskullProperties configuration properties
-     * @param enableMetrics whether to enable JMX metrics collection
-     */
-    public GrayskullClientImpl(GrayskullAuthHeaderProvider authHeaderProvider, 
-                               GrayskullProperties grayskullProperties,
-                               boolean enableMetrics) {
-        this.baseUrl = grayskullProperties.getHost();
+    public GrayskullClientImpl(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullClientConfiguration grayskullClientConfiguration) {
+        
+        if (authHeaderProvider == null) {
+            throw new IllegalArgumentException("authHeaderProvider cannot be null");
+        }
+        if (grayskullClientConfiguration == null) {
+            throw new IllegalArgumentException("grayskullClientConfiguration cannot be null");
+        }
+        
+        this.baseUrl = grayskullClientConfiguration.getHost();
         this.authHeaderProvider = authHeaderProvider;
-        this.grayskullProperties = grayskullProperties;
-        this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullProperties, enableMetrics);
-        this.retryUtil = new RetryUtil(grayskullProperties.getMaxRetries(), RETRY_INTERVAL_MS);
+        this.grayskullClientConfiguration = grayskullClientConfiguration;
+        this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullClientConfiguration, grayskullClientConfiguration.isEnableMetrics());
     }
     
     /**
@@ -101,30 +92,14 @@ public final class GrayskullClientImpl implements GrayskullClient {
         String encodedSecretName = urlEncode(secretName);
         String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
         
-        // Use retry mechanism to fetch the secret
-        try {
-            SecretValue secretValue = retryUtil.retry(() -> {
-                // Pass secretRef and method name to HTTP client for metrics tracking
-                SecretValue result = httpClient.doGet(url, new TypeReference<Response<SecretValue>>() {}, secretRef, "getSecret");
-                
-                if (result == null) {
-                    throw new GrayskullException("No data in response");
-                }
-                
-                return result;
-            });
-            
-            return secretValue;
-        } catch (RetryableException e) {
-            // Exhausted all retry attempts - wrap in GrayskullException
-            throw new GrayskullException("Failed to fetch secret after retries", e);
-        } catch (GrayskullException e) {
-            // Non-retryable GrayskullException - rethrow with original status code
-            throw e;
-        } catch (Exception e) {
-            // Other unexpected exceptions - wrap without status code
-            throw new GrayskullException("Unexpected error fetching secret", e);
+        // Fetch the secret with automatic retry logic
+        SecretValue secretValue = httpClient.doGetWithRetry(url, new TypeReference<Response<SecretValue>>() {}, secretRef, "getSecret");
+        
+        if (secretValue == null) {
+            throw new GrayskullException("No data in response");
         }
+        
+        return secretValue;
     }
 
     /**
@@ -141,7 +116,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
      * @return a handle that can be used to check status or unregister the hook
      */
     @Override
-    public RefreshHookHandle registerRefreshHook(String secretRef, SecretRefreshHook hook) {
+    public RefreshHandlerRef registerRefreshHook(String secretRef, SecretRefreshHook hook) {
         if (secretRef == null || secretRef.isEmpty()) {
             throw new IllegalArgumentException("secretRef cannot be null or empty");
         }
@@ -151,8 +126,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
         
         log.debug("Registering refresh hook for secret: {} (placeholder implementation)", secretRef);
         
-        // TODO: Implement actual hook invocation when server-side long-polling support is added
-        return new NoOpRefreshHookHandle(secretRef);
+        // TODO: Implement actual hook invocation when server-side events support is added
+        return NoOpRefreshHandlerRef.INSTANCE;
     }
 
     /**

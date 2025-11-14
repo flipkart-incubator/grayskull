@@ -1,16 +1,16 @@
 package com.flipkart.grayskull.auth;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-public class BasicAuthHeaderProviderTest {
+class BasicAuthHeaderProviderTest {
 
     @Test
-    public void testGetAuthHeader_validCredentials() {
+    void testGetAuthHeader_validCredentials() {
         // Given
         String username = "testuser";
         String password = "testpass";
@@ -29,26 +29,26 @@ public class BasicAuthHeaderProviderTest {
         assertEquals("testuser:testpass", decoded);
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void testConstructor_nullUsername() {
+    @Test
+    void testConstructor_nullUsername() {
         // When/Then
-        new BasicAuthHeaderProvider(null, "password");
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testConstructor_nullPassword() {
-        // When/Then
-        new BasicAuthHeaderProvider("username", null);
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testConstructor_bothNull() {
-        // When/Then
-        new BasicAuthHeaderProvider(null, null);
+        assertThrows(IllegalArgumentException.class, () -> new BasicAuthHeaderProvider(null, "password"));
     }
 
     @Test
-    public void testGetAuthHeader_emptyCredentials() {
+    void testConstructor_nullPassword() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> new BasicAuthHeaderProvider("username", null));
+    }
+
+    @Test
+    void testConstructor_bothNull() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> new BasicAuthHeaderProvider(null, null));
+    }
+
+    @Test
+    void testGetAuthHeader_emptyCredentials() {
         // Given
         BasicAuthHeaderProvider provider = new BasicAuthHeaderProvider("", "");
 

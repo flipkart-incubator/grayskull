@@ -36,14 +36,16 @@ public final class RetryUtil {
      * Executes the given task with retry logic.
      * <p>
      * If the task throws a {@link RetryableException}, it will be retried up to maxAttempt times
-     * with exponential backoff. Non-retryable exceptions are thrown immediately.
+     * with exponential backoff. If all retry attempts are exhausted, the {@link RetryableException}
+     * is wrapped in a {@link GrayskullException}. Non-retryable exceptions are thrown immediately.
      * The wait time between retries is capped at a maximum of 1 minute.
      * </p>
      *
      * @param task The task to execute
      * @param <T>  The return type of the task
      * @return The result of the task
-     * @throws Exception if the task fails after all retry attempts or throws a non-retryable exception
+     * @throws GrayskullException if the task fails after all retry attempts
+     * @throws Exception if the task throws a non-retryable exception
      */
     public <T> T retry(CheckedSupplier<T> task) throws Exception {
         long currentInterval = interval;
@@ -63,7 +65,7 @@ public final class RetryUtil {
                 
                 if (attempt == maxAttempt) {
                     log.error("Max retry attempts reached ({}), throwing exception", maxAttempt);
-                    throw e; // Rethrow exception after max attempts
+                    throw new GrayskullException("Failed after " + maxAttempt + " retry attempts: " + e.getMessage(), e);
                 }
                 
                 // Sleep before next retry (exponential backoff)

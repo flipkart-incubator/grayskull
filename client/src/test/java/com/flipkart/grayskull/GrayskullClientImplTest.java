@@ -2,31 +2,31 @@ package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
-import com.flipkart.grayskull.models.GrayskullProperties;
+import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.models.exceptions.RetryableException;
-import com.flipkart.grayskull.hooks.RefreshHookHandle;
+import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for GrayskullClientImpl.
  */
-@RunWith(MockitoJUnitRunner.class)
-public class GrayskullClientImplTest {
+@ExtendWith(MockitoExtension.class)
+class GrayskullClientImplTest {
 
     @Mock
     private GrayskullAuthHeaderProvider mockAuthProvider;
@@ -34,17 +34,17 @@ public class GrayskullClientImplTest {
     @Mock
     private GrayskullHttpClient mockHttpClient;
 
-    private GrayskullProperties properties;
+    private GrayskullClientConfiguration grayskullClientConfiguration;
     private GrayskullClientImpl client;
 
-    @Before
-    public void setUp() throws Exception {
-        properties = new GrayskullProperties();
-        properties.setHost("https://test.grayskull.com");
-        properties.setConnectionTimeout(5000);
-        properties.setReadTimeout(10000);
+    @BeforeEach
+    void setUp() throws Exception {
+        grayskullClientConfiguration = new GrayskullClientConfiguration();
+        grayskullClientConfiguration.setHost("https://test.grayskull.com");
+        grayskullClientConfiguration.setConnectionTimeout(5000);
+        grayskullClientConfiguration.setReadTimeout(10000);
         
-        client = new GrayskullClientImpl(mockAuthProvider, properties);
+        client = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);
         
         // Inject mock HTTP client using reflection
         Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
@@ -52,20 +52,102 @@ public class GrayskullClientImplTest {
         httpClientField.set(client, mockHttpClient);
     }
 
-    @After
-    public void tearDown() {
+    @AfterEach
+    void tearDown() {
         if (client != null) {
             client.close();
         }
     }
 
     @Test
-    public void testGetSecret_success() throws Exception {
+    void testConstructor_nullAuthHeaderProvider() {
+        // Given
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+
+        // When/Then
+        assertThrows(IllegalArgumentException.class,
+                () -> new GrayskullClientImpl(null, config),
+                "authHeaderProvider cannot be null");
+    }
+
+    @Test
+    void testConstructor_nullConfiguration() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class,
+                () -> new GrayskullClientImpl(mockAuthProvider, null),
+                "grayskullClientConfiguration cannot be null");
+    }
+
+    @Test
+    void testConstructor_bothNull() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class,
+                () -> new GrayskullClientImpl(null, null),
+                "authHeaderProvider cannot be null");
+    }
+
+    @Test
+    void testConstructor_authProviderReturnsNull() {
+        // Given
+        GrayskullAuthHeaderProvider nullAuthProvider = () -> null;
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+
+        // When - constructor should succeed
+        GrayskullClientImpl clientWithNullAuth = new GrayskullClientImpl(nullAuthProvider, config);
+
+        // Then - but getSecret should fail when auth header is needed
+        assertThrows(IllegalStateException.class,
+                () -> clientWithNullAuth.getSecret("project:secret"),
+                "Auth header cannot be null or empty");
+        
+        clientWithNullAuth.close();
+    }
+
+    @Test
+    void testConstructor_authProviderReturnsEmpty() {
+        // Given
+        GrayskullAuthHeaderProvider emptyAuthProvider = () -> "";
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+
+        // When - constructor should succeed
+        GrayskullClientImpl clientWithEmptyAuth = new GrayskullClientImpl(emptyAuthProvider, config);
+
+        // Then - but getSecret should fail when auth header is needed
+        assertThrows(IllegalStateException.class,
+                () -> clientWithEmptyAuth.getSecret("project:secret"),
+                "Auth header cannot be null or empty");
+        
+        clientWithEmptyAuth.close();
+    }
+
+    @Test
+    void testConstructor_authProviderReturnsWhitespace() {
+        // Given
+        GrayskullAuthHeaderProvider whitespaceAuthProvider = () -> "   ";
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+
+        // When - constructor should succeed
+        GrayskullClientImpl clientWithWhitespaceAuth = new GrayskullClientImpl(whitespaceAuthProvider, config);
+
+        // Then - but getSecret should fail when auth header is whitespace-only
+        assertThrows(IllegalStateException.class,
+                () -> clientWithWhitespaceAuth.getSecret("project:secret"),
+                "Auth header cannot be null or empty");
+        
+        clientWithWhitespaceAuth.close();
+    }
+
+    @Test
+    void testGetSecret_success() throws Exception {
         // Given
         String secretRef = "my-project:database-password";
         SecretValue expectedSecret = new SecretValue(1, "username", "password123");
 
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
 
         // When
@@ -78,7 +160,7 @@ public class GrayskullClientImplTest {
         assertEquals(expectedSecret.getPrivatePart(), result.getPrivatePart());
         
         // Verify correct URL was called
-        verify(mockHttpClient).doGet(
+        verify(mockHttpClient).doGetWithRetry(
                 eq("https://test.grayskull.com/v1/projects/my-project/secrets/database-password/data"),
                 any(TypeReference.class),
                 eq(secretRef),
@@ -86,43 +168,43 @@ public class GrayskullClientImplTest {
         );
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void testGetSecret_nullSecretRef() {
+    @Test
+    void testGetSecret_nullSecretRef() {
         // When/Then
-        client.getSecret(null);
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testGetSecret_emptySecretRef() {
-        // When/Then
-        client.getSecret("");
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testGetSecret_invalidFormat_noColon() {
-        // When/Then
-        client.getSecret("invalid-format");
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testGetSecret_invalidFormat_emptyProjectId() {
-        // When/Then
-        client.getSecret(":secret-name");
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testGetSecret_invalidFormat_emptySecretName() {
-        // When/Then
-        client.getSecret("project-id:");
+        assertThrows(IllegalArgumentException.class, () -> client.getSecret(null));
     }
 
     @Test
-    public void testGetSecret_validFormat_withMultipleColons() throws Exception {
+    void testGetSecret_emptySecretRef() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> client.getSecret(""));
+    }
+
+    @Test
+    void testGetSecret_invalidFormat_noColon() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> client.getSecret("invalid-format"));
+    }
+
+    @Test
+    void testGetSecret_invalidFormat_emptyProjectId() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> client.getSecret(":secret-name"));
+    }
+
+    @Test
+    void testGetSecret_invalidFormat_emptySecretName() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> client.getSecret("project-id:"));
+    }
+
+    @Test
+    void testGetSecret_validFormat_withMultipleColons() throws Exception {
         // Given
         String secretRef = "my-project:secret:with:colons";
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
 
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
 
         // When
@@ -132,7 +214,7 @@ public class GrayskullClientImplTest {
         assertNotNull(result);
         
         // Verify URL is properly encoded - colons after the first one are encoded as %3A
-        verify(mockHttpClient).doGet(
+        verify(mockHttpClient).doGetWithRetry(
                 eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret%3Awith%3Acolons/data"),
                 any(TypeReference.class),
                 eq(secretRef),
@@ -141,12 +223,12 @@ public class GrayskullClientImplTest {
     }
 
     @Test
-    public void testGetSecret_withSpecialCharacters() throws Exception {
+    void testGetSecret_withSpecialCharacters() throws Exception {
         // Given - secret name contains @ and # characters
         String secretRef = "project:secret@domain#tag";
         SecretValue expectedSecret = new SecretValue(1, "username", "password");
 
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(expectedSecret);
 
         // When
@@ -160,7 +242,7 @@ public class GrayskullClientImplTest {
         
         // Verify URL is properly encoded with special characters
         // @ should be encoded as %40, # should be encoded as %23
-        verify(mockHttpClient).doGet(
+        verify(mockHttpClient).doGetWithRetry(
                 eq("https://test.grayskull.com/v1/projects/project/secrets/secret%40domain%23tag/data"),
                 any(TypeReference.class),
                 eq(secretRef),
@@ -168,73 +250,19 @@ public class GrayskullClientImplTest {
         );
     }
 
-    @Test(expected = GrayskullException.class)
-    public void testGetSecret_nullResponse() throws Exception {
+    @Test
+    void testGetSecret_nullResponse() throws Exception {
         // Given
         String secretRef = "project:secret";
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
                 .thenReturn(null);
 
         // When/Then
-        client.getSecret(secretRef);
-    }
-
-    @Test(expected = GrayskullException.class)
-    public void testGetSecret_httpClientThrowsRetryableException() throws Exception {
-        // Given
-        String secretRef = "project:secret";
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
-                .thenThrow(new RetryableException("Network error"));
-
-        // When/Then - should exhaust retries and wrap in GrayskullException
-        client.getSecret(secretRef);
+        assertThrows(GrayskullException.class, () -> client.getSecret(secretRef));
     }
 
     @Test
-    public void testGetSecret_retriesOnRetryableException() throws Exception {
-        // Given
-        String secretRef = "project:secret";
-        SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
-
-        // Mock to fail twice, then succeed on third attempt
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
-                .thenThrow(new RetryableException("Timeout"))
-                .thenThrow(new RetryableException("Timeout"))
-                .thenReturn(expectedSecret);
-
-        // When
-        SecretValue result = client.getSecret(secretRef);
-
-        // Then - should succeed after retries
-        assertNotNull(result);
-        assertEquals(expectedSecret.getDataVersion(), result.getDataVersion());
-        
-        // Verify httpClient was called 3 times (2 failures + 1 success)
-        verify(mockHttpClient, times(3)).doGet(anyString(), any(TypeReference.class), anyString(), anyString());
-    }
-
-    @Test
-    public void testGetSecret_noRetryOnNonRetryableException() throws Exception {
-        // Given
-        String secretRef = "project:secret";
-        when(mockHttpClient.doGet(anyString(), any(TypeReference.class), anyString(), anyString()))
-                .thenThrow(new GrayskullException(404, "Not found"));
-
-        // When/Then
-        try {
-            client.getSecret(secretRef);
-            fail("Expected GrayskullException to be thrown");
-        } catch (GrayskullException e) {
-            assertEquals(404, e.getStatusCode());
-            assertEquals("Not found", e.getMessage());
-        }
-        
-        // Verify httpClient was called only once (no retries)
-        verify(mockHttpClient, times(1)).doGet(anyString(), any(TypeReference.class), anyString(), anyString());
-    }
-
-    @Test
-    public void testRegisterRefreshHook_success() {
+    void testRegisterRefreshHook_success() {
         // Given
         String secretRef = "secengg-stage:secret-1";
         AtomicInteger callCount = new AtomicInteger(0);
@@ -245,53 +273,51 @@ public class GrayskullClientImplTest {
         };
 
         // When
-        RefreshHookHandle handle = client.registerRefreshHook(secretRef, hook);
+        RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
 
         // Then
         assertNotNull(handle);
-        assertEquals(secretRef, handle.getSecretRef());
-        assertTrue(handle.isActive());
+        // No-op implementation returns empty string and is always inactive
+        assertEquals("", handle.getSecretRef());
+        assertFalse(handle.isActive());
         
         // Verify hook was never called (placeholder implementation)
         assertEquals(0, callCount.get());
     }
 
     @Test
-    public void testRegisterRefreshHook_canUnregister() {
+    void testRegisterRefreshHook_canUnregister() {
         // Given
         String secretRef = "secengg-stage:secret-1";
-        SecretRefreshHook hook = secretVal -> System.out.println("woooo");
+        SecretRefreshHook hook = secretVal -> System.out.println("test");
 
         // When
-        RefreshHookHandle handle = client.registerRefreshHook(secretRef, hook);
-        assertTrue(handle.isActive());
+        RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
         
+        // unRegister() is a no-op but shouldn't throw
         handle.unRegister();
-
-        // Then
-        assertFalse(handle.isActive());
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testRegisterRefreshHook_nullSecretRef() {
-        // When/Then
-        client.registerRefreshHook(null, secretVal -> {});
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testRegisterRefreshHook_emptySecretRef() {
-        // When/Then
-        client.registerRefreshHook("", secretVal -> {});
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testRegisterRefreshHook_nullHook() {
-        // When/Then
-        client.registerRefreshHook("project:secret", null);
     }
 
     @Test
-    public void testClose_cleansUpResources() {
+    void testRegisterRefreshHook_nullSecretRef() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook(null, secretVal -> {}));
+    }
+
+    @Test
+    void testRegisterRefreshHook_emptySecretRef() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook("", secretVal -> {}));
+    }
+
+    @Test
+    void testRegisterRefreshHook_nullHook() {
+        // When/Then
+        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook("project:secret", null));
+    }
+
+    @Test
+    void testClose_cleansUpResources() {
         // When
         client.close();
 
@@ -300,9 +326,9 @@ public class GrayskullClientImplTest {
     }
 
     @Test
-    public void testClose_handlesNullHttpClient() throws Exception {
+    void testClose_handlesNullHttpClient() throws Exception {
         // Given - create client with null http client
-        GrayskullClientImpl clientWithNullHttp = new GrayskullClientImpl(mockAuthProvider, properties);
+        GrayskullClientImpl clientWithNullHttp = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);
         Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
         httpClientField.setAccessible(true);
         httpClientField.set(clientWithNullHttp, null);
