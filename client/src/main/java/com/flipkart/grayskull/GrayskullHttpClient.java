@@ -28,11 +28,8 @@ class GrayskullHttpClient {
     private final MetricsPublisher metricsPublisher;
     private final RetryUtil retryUtil;
 
-    GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullClientConfiguration clientConfiguration) {
-        this(authHeaderProvider, clientConfiguration, true);
-    }
 
-    GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullClientConfiguration clientConfiguration, boolean enableMetrics) {
+    GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullClientConfiguration clientConfiguration) {
         this.authHeaderProvider = authHeaderProvider;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new ParameterNamesModule());
@@ -47,7 +44,7 @@ class GrayskullHttpClient {
                 .build();
         
         // Initialize metrics publisher if enabled
-        this.metricsPublisher = enableMetrics ? new MetricsPublisher() : null;
+        this.metricsPublisher = clientConfiguration.isEnableMetrics() ? new MetricsPublisher() : null;
         
         // Initialize retry utility
         this.retryUtil = new RetryUtil(clientConfiguration.getMaxRetries(), clientConfiguration.getMinRetryDelay());
@@ -89,7 +86,8 @@ class GrayskullHttpClient {
             // Record metrics 
             if (metricsPublisher != null) {
                 long duration = System.nanoTime() - startTime;
-                metricsPublisher.recordRequest(methodName, statusCode, duration, secretRef);
+                long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
+                metricsPublisher.recordRequest(methodName, statusCode, durationMs, secretRef);
             }
         }
     }
@@ -119,6 +117,10 @@ class GrayskullHttpClient {
                 } else {
                     throw new GrayskullException(statusCode, "Request failed: " + errorBody);
                 }
+            }
+
+            if (response.body() == null) {
+                throw new GrayskullException("Empty response body from server");
             }
 
             String responseBody = response.body().string();

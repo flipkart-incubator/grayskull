@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Implementation of the Grayskull client.
@@ -49,7 +50,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
         this.baseUrl = grayskullClientConfiguration.getHost();
         this.authHeaderProvider = authHeaderProvider;
         this.grayskullClientConfiguration = grayskullClientConfiguration;
-        this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullClientConfiguration, grayskullClientConfiguration.isEnableMetrics());
+        this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullClientConfiguration);
     }
     
     /**

@@ -5,7 +5,6 @@ import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
-import com.flipkart.grayskull.models.exceptions.RetryableException;
 import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import org.junit.jupiter.api.AfterEach;
@@ -267,7 +266,7 @@ class GrayskullClientImplTest {
         String secretRef = "secengg-stage:secret-1";
         AtomicInteger callCount = new AtomicInteger(0);
         
-        SecretRefreshHook hook = secretVal -> {
+        SecretRefreshHook hook = (error,secretVal) -> {
             callCount.incrementAndGet();
             System.out.println("Secret refreshed: " + secretVal);
         };
@@ -289,7 +288,7 @@ class GrayskullClientImplTest {
     void testRegisterRefreshHook_canUnregister() {
         // Given
         String secretRef = "secengg-stage:secret-1";
-        SecretRefreshHook hook = secretVal -> System.out.println("test");
+        SecretRefreshHook hook = (error,secretVal) -> System.out.println("test");
 
         // When
         RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
@@ -301,13 +300,13 @@ class GrayskullClientImplTest {
     @Test
     void testRegisterRefreshHook_nullSecretRef() {
         // When/Then
-        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook(null, secretVal -> {}));
+        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook(null, (error,secretVal) -> {}));
     }
 
     @Test
     void testRegisterRefreshHook_emptySecretRef() {
         // When/Then
-        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook("", secretVal -> {}));
+        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook("", (error,secretVal) -> {}));
     }
 
     @Test

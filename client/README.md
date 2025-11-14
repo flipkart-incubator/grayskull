@@ -82,7 +82,7 @@ public class Example {
             new BasicAuthHeaderProvider("username", "password");
         
         // 3. Initialize and use the client
-        GrayskullClient grayskullClient = GrayskullClientImpl(authProvider, config);
+        GrayskullClient grayskullClient = new GrayskullClientImpl(authProvider, config);
         SecretValue secret = grayskullClient.getSecret("my-project:secret-1");
         System.out.println(secret.getPublicPart());
 
@@ -154,7 +154,7 @@ Registers a callback to be invoked when a secret is updated.
 **Returns:**
 - `RefreshHandlerRef` - Handle for managing the hook lifecycle
 
-**Note:** ⚠️ This is a placeholder implementation. Hooks can be registered but wont be invoked until server sent events support is added in a future release. Including this code now ensures forward compatibility.
+**Note:** ⚠️ This is a placeholder implementation. Hooks can be registered but won't be invoked until server sent events support is added in a future release. Including this code now ensures forward compatibility.
 
 **Example:**
 ```java

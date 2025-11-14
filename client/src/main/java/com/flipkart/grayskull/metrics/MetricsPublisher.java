@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 /**
  * MetricsPublisher is responsible for recording and exposing metrics.
  * <p>
- * This publisher uses micrometer for metrics if avaiable in the classpath, otherwise defaults to Mbeans.
+ * This publisher uses micrometer for metrics if available in the classpath, otherwise defaults to Mbeans.
  * </p>
  *
  * <p>

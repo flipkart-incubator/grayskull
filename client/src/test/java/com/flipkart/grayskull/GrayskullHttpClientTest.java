@@ -53,6 +53,7 @@ class GrayskullHttpClientTest {
         config.setMaxRetries(3);
         config.setMinRetryDelay(50); // Short delay for faster tests
         config.setMaxConnections(10);
+        config.setEnableMetrics(false);
 
         lenient().when(mockAuthProvider.getAuthHeader()).thenReturn("Bearer test-token");
 
@@ -72,7 +73,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_success() {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "public-value", "private-value");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
 
@@ -99,7 +100,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_includesAuthHeader() throws InterruptedException {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
 
         mockWebServer.enqueue(new MockResponse()
@@ -125,7 +126,7 @@ class GrayskullHttpClientTest {
     void testDoGetWithRetry_nullAuthHeader_throwsException() {
         // Given
         when(mockAuthProvider.getAuthHeader()).thenReturn(null);
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
 
         // When/Then
         assertThrows(IllegalStateException.class, () ->
@@ -143,7 +144,7 @@ class GrayskullHttpClientTest {
     void testDoGetWithRetry_emptyAuthHeader_throwsException() {
         // Given
         when(mockAuthProvider.getAuthHeader()).thenReturn("   ");
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
 
         // When/Then
         assertThrows(IllegalStateException.class, () ->
@@ -160,7 +161,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_retriesOnRetryableException() throws InterruptedException {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
 
@@ -189,7 +190,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_retriesOnNetworkError() throws InterruptedException {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
 
@@ -216,7 +217,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_retriesOn429RateLimiting() throws InterruptedException {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
 
@@ -243,7 +244,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_exhaustsRetries_throwsGrayskullException() {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
 
         // Mock to always fail with 500
         for (int i = 0; i < config.getMaxRetries(); i++) {
@@ -269,7 +270,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_noRetryOnNonRetryableException() {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
 
         // Mock 404 - non-retryable
         mockWebServer.enqueue(new MockResponse().setResponseCode(404).setBody("Not Found"));
@@ -291,7 +292,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_400BadRequest_noRetry() {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
 
         mockWebServer.enqueue(new MockResponse().setResponseCode(400).setBody("Bad Request"));
 
@@ -312,7 +313,7 @@ class GrayskullHttpClientTest {
     @Test
     void testDoGetWithRetry_401Unauthorized_noRetry() {
         // Given
-        httpClient = new GrayskullHttpClient(mockAuthProvider, config, false);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
 
         mockWebServer.enqueue(new MockResponse().setResponseCode(401).setBody("Unauthorized"));
 

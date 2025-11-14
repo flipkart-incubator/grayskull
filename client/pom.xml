@@ -19,10 +19,10 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         
         <!-- Dependency versions -->
-        <okhttp.version>4.9.3</okhttp.version>
+        <okhttp.version>4.12.0</okhttp.version>
         <slf4j.version>1.7.36</slf4j.version>
         <lombok.version>1.18.30</lombok.version>
-        <micrometer.version>1.11.0</micrometer.version>
+        <micrometer.version>1.16.0</micrometer.version>
         <junit.version>5.10.1</junit.version>
         <mockito.version>5.7.0</mockito.version>
     </properties>
