@@ -27,7 +27,6 @@ Java client library for interacting with the Grayskull secret management service
 ✅ **Thread-Safe** - Concurrent request handling with connection pooling  
 ✅ **Pluggable Auth** - Custom authentication provider support  
 ✅ **Java 8+ Compatible** - Works with Java 8 through Java 21  
-✅ **Zero Config** - Sensible defaults, minimal configuration required  
 
 ## Integration
 
@@ -90,7 +89,11 @@ public class Example {
 
         HikariConfig hikariConfig;
         HikariDataSource dataSource = new HikariDataSource(hikariConfig);
-        RefreshHandlerRef handle = grayskullClient.registerRefreshHook("my-project:secret-1", secretVal -> {
+        RefreshHandlerRef handle = grayskullClient.registerRefreshHook("my-project:secret-1", (error, secret) -> {
+            if (error != null) {
+                System.err.println("Failed to refresh secret: " + error.getMessage());
+                return;
+            }
             System.out.println(secret.getPublicPart());
             hikariConfig.setUsername(secret.getPublicPart());
             hikariConfig.setPassword(secret.getPrivatePart());
@@ -157,7 +160,13 @@ Registers a callback to be invoked when a secret is updated.
 ```java
 RefreshHandlerRef handle = client.registerRefreshHook(
     "my-project:api-key",
-    (updatedSecret) -> {
+    (error, updatedSecret) -> {
+        if (error != null) {
+            logger.error("Failed to refresh secret", error);
+            // Handle error: maybe keep using old credentials, send alert, etc.
+            return;
+        }
+        
         System.out.println("Secret updated! New version: " + updatedSecret.getDataVersion());
         updateCache(updatedSecret);
     }
