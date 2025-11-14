@@ -45,7 +45,7 @@ Java client library for interacting with the Grayskull secret management service
     <dependency>
         <groupId>io.micrometer</groupId>
         <artifactId>micrometer-core</artifactId>
-        <version>1.11.0</version>
+        <version>1.16.0</version>
         <optional>true</optional>
     </dependency>
 </dependencies>
@@ -58,7 +58,7 @@ dependencies {
     implementation 'com.flipkart.grayskull:client-impl:0.0.1-SNAPSHOT'
     
     // Optional: Micrometer for advanced metrics
-    implementation 'io.micrometer:micrometer-core:1.11.0'
+    implementation 'io.micrometer:micrometer-core:1.16.0'
 }
 ```
 
@@ -150,7 +150,7 @@ Registers a callback to be invoked when a secret is updated.
 **Returns:**
 - `RefreshHandlerRef` - Handle for managing the hook lifecycle
 
-**Note:** ⚠️ This is a placeholder implementation. Hooks can be registered but won't be invoked until server sent events support is added in a future release. Including this code now ensures forward compatibility.
+**Note:** ⚠️ This is a placeholder implementation. Hooks can be registered but won't be invoked until server-sent events support is added in a future release. Including this code now ensures forward compatibility.
 
 **Example:**
 ```java
@@ -329,10 +329,10 @@ The client automatically retries transient failures using exponential backoff wi
 | Dependency | Version | Required | Bundled |
 |------------|---------|----------|---------|
 | **Java Runtime** | 8+ | ✅ Yes | - | 
-| **OkHttp** | 4.9.3 | ✅ Yes | ✅ |
-| **SLF4J API** | 1.7.36 | ✅ Yes | ✅ | 
+| **OkHttp** | 4.12.0 | ✅ Yes | ✅ |
+| **SLF4J API** | 2.0.16 | ✅ Yes | ✅ | 
 | **Jackson Databind** | 2.15.3 | ✅ Yes | ✅ |
-| **Micrometer Core** | 1.11.0+ | ❌ No | ❌ |
+| **Micrometer Core** | 1.16.0+ | ❌ No | ❌ |
 
 
 ## Building from Source

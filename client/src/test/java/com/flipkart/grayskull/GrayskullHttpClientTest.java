@@ -53,7 +53,7 @@ class GrayskullHttpClientTest {
         config.setMaxRetries(3);
         config.setMinRetryDelay(50); // Short delay for faster tests
         config.setMaxConnections(10);
-        config.setEnableMetrics(false);
+        config.setMetricsEnabled(false);
 
         lenient().when(mockAuthProvider.getAuthHeader()).thenReturn("Bearer test-token");
 
@@ -85,9 +85,7 @@ class GrayskullHttpClientTest {
         // When
         SecretValue result = httpClient.doGetWithRetry(
                 mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {},
-                "project:secret",
-                "getSecret"
+                new TypeReference<Response<SecretValue>>() {}
         );
 
         // Then
@@ -111,9 +109,7 @@ class GrayskullHttpClientTest {
         // When
         httpClient.doGetWithRetry(
                 mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {},
-                "project:secret",
-                "getSecret"
+                new TypeReference<Response<SecretValue>>() {}
         );
 
         // Then
@@ -132,9 +128,7 @@ class GrayskullHttpClientTest {
         assertThrows(IllegalStateException.class, () ->
                 httpClient.doGetWithRetry(
                         mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {},
-                        "project:secret",
-                        "getSecret"
+                        new TypeReference<Response<SecretValue>>() {}
                 ),
                 "Auth header cannot be null or empty"
         );
@@ -150,9 +144,7 @@ class GrayskullHttpClientTest {
         assertThrows(IllegalStateException.class, () ->
                 httpClient.doGetWithRetry(
                         mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {},
-                        "project:secret",
-                        "getSecret"
+                        new TypeReference<Response<SecretValue>>() {}
                 )
         );
     }
@@ -176,9 +168,7 @@ class GrayskullHttpClientTest {
         // When
         SecretValue result = httpClient.doGetWithRetry(
                 mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {},
-                "project:secret",
-                "getSecret"
+                new TypeReference<Response<SecretValue>>() {}
         );
 
         // Then - should succeed after retries
@@ -204,9 +194,7 @@ class GrayskullHttpClientTest {
         // When
         SecretValue result = httpClient.doGetWithRetry(
                 mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {},
-                "project:secret",
-                "getSecret"
+                new TypeReference<Response<SecretValue>>() {}
         );
 
         // Then - should succeed after retry
@@ -231,9 +219,7 @@ class GrayskullHttpClientTest {
         // When
         SecretValue result = httpClient.doGetWithRetry(
                 mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {},
-                "project:secret",
-                "getSecret"
+                new TypeReference<Response<SecretValue>>() {}
         );
 
         // Then
@@ -255,9 +241,7 @@ class GrayskullHttpClientTest {
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
                         mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {},
-                        "project:secret",
-                        "getSecret"
+                        new TypeReference<Response<SecretValue>>() {}
                 )
         );
 
@@ -279,9 +263,7 @@ class GrayskullHttpClientTest {
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
                         mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {},
-                        "project:secret",
-                        "getSecret"
+                        new TypeReference<Response<SecretValue>>() {}
                 )
         );
 
@@ -300,9 +282,7 @@ class GrayskullHttpClientTest {
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
                         mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {},
-                        "project:secret",
-                        "getSecret"
+                        new TypeReference<Response<SecretValue>>() {}
                 )
         );
 
@@ -321,9 +301,7 @@ class GrayskullHttpClientTest {
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
                         mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {},
-                        "project:secret",
-                        "getSecret"
+                        new TypeReference<Response<SecretValue>>() {}
                 )
         );
 

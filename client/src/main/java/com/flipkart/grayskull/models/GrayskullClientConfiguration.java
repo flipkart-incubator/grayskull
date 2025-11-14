@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.models;
 
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Configuration properties for the Grayskull client.
@@ -95,7 +96,8 @@ public final class GrayskullClientConfiguration {
      * Default: true
      * </p>
      */
-    private boolean enableMetrics = true;
+    @Setter
+    private boolean metricsEnabled = true;
 
     /**
      * Sets the Grayskull server endpoint URL.
@@ -177,14 +179,5 @@ public final class GrayskullClientConfiguration {
             throw new IllegalArgumentException("Min retry delay must be at least 50ms, got: " + minRetryDelay);
         }
         this.minRetryDelay = minRetryDelay;
-    }
-
-    /**
-     * Sets whether to enable JMX metrics collection.
-     *
-     * @param enableMetrics true to enable metrics, false to disable
-     */
-    public void setEnableMetrics(boolean enableMetrics) {
-        this.enableMetrics = enableMetrics;
     }
 }

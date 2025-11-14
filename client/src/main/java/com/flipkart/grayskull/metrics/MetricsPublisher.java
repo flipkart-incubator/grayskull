@@ -42,16 +42,30 @@ public final class MetricsPublisher {
      * Record a metrics event.
      * If metrics are disabled through configuration, this method will be a no-op.
      *
-     * @param event      The SDK method name (e.g., "getSecret", "registerRefreshHook")
+     * @param url The URL path
      * @param statusCode The HTTP status code (e.g., 200, 404, 500)
      * @param durationMs The request duration in milliseconds
-     * @param secretRef  The secret reference (e.g., "project1:secret1")
      */
-    public void recordRequest(String event, int statusCode, long durationMs, String secretRef) {
+    public void recordRequest(String url, int statusCode, long durationMs) {
         if (!metricsEnabled) {
             return;
         }
-        recorder.recordRequest(event, statusCode, durationMs, secretRef);
+        recorder.recordRequest(url, statusCode, durationMs);
+    }
+    
+    /**
+     * Record a retry event.
+     * If metrics are disabled through configuration, this method will be a no-op.
+     *
+     * @param url The URL path
+     * @param attemptNumber The attempt number (1-indexed)
+     * @param success Whether the retry eventually succeeded
+     */
+    public void recordRetry(String url, int attemptNumber, boolean success) {
+        if (!metricsEnabled) {
+            return;
+        }
+        recorder.recordRetry(url, attemptNumber, success);
     }
 
     /**

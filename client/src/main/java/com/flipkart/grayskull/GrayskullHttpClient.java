@@ -44,52 +44,63 @@ class GrayskullHttpClient {
                 .build();
         
         // Initialize metrics publisher if enabled
-        this.metricsPublisher = clientConfiguration.isEnableMetrics() ? new MetricsPublisher() : null;
+        this.metricsPublisher = clientConfiguration.isMetricsEnabled() ? new MetricsPublisher() : null;
         
         // Initialize retry utility
         this.retryUtil = new RetryUtil(clientConfiguration.getMaxRetries(), clientConfiguration.getMinRetryDelay());
     }
 
-    <T> T doGetWithRetry(String url, TypeReference<Response<T>> responseType, String secretRef, String methodName) {
+    <T> T doGetWithRetry(String url, TypeReference<Response<T>> responseType) {
+        
+        long startTime = System.nanoTime();
+        final int[] attemptCount = {0};
+        final int[] lastStatusCode = {0};
+        boolean success = false;
+        
         try {
-            return retryUtil.retry(() -> doGet(url, responseType, secretRef, methodName));
+            T result = retryUtil.retry(() -> {
+                attemptCount[0]++;
+                ResponseWithStatus<T> responseWithStatus = doGet(url, responseType);
+                lastStatusCode[0] = responseWithStatus.getStatusCode();
+                return responseWithStatus.getResponse().getData();
+            });
+            
+            success = true;
+            return result;
             
         } catch (IllegalStateException | IllegalArgumentException e) {
             // Configuration or usage errors - rethrow as-is
             throw e;
+
         } catch (GrayskullException e) {
-            // GrayskullException (including exhausted retries) - rethrow as-is
+            // Capture status code (from non-retryable errors or exhausted retries)
+            lastStatusCode[0] = e.getStatusCode();
             throw e;
+
         } catch (Exception e) {
-            // Other unexpected exceptions - wrap in GrayskullException
             throw new GrayskullException("Unexpected error during HTTP request", e);
+
+        } finally {
+            // Record metrics for the entire operation (success or failure)
+            if (metricsPublisher != null) {
+                long duration = System.nanoTime() - startTime;
+                long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
+                metricsPublisher.recordRequest(url, lastStatusCode[0], durationMs);
+                
+                // If we had to retry (more than 1 attempt), record retry metric
+                if (attemptCount[0] > 1) {
+                    metricsPublisher.recordRetry(url, attemptCount[0], success);
+                }
+            }
         }
     }
 
-    <T> T doGet(String url, TypeReference<Response<T>> responseType, String secretRef, String methodName) throws RetryableException {
+    <T> ResponseWithStatus<T> doGet(String url, TypeReference<Response<T>> responseType) throws RetryableException {
         Request request = buildRequest(url)
                 .get()
                 .build();
 
-        // Execute request with timing
-        long startTime = System.nanoTime();
-        int statusCode = 0;
-        try {
-            ResponseWithStatus<T> result = executeRequest(request, responseType);
-            statusCode = result.getStatusCode();
-            Response<T> response = result.getResponse();
-            return response.getData();
-        } catch (GrayskullException e) {
-            statusCode = e.getStatusCode(); 
-            throw e;
-        } finally {
-            // Record metrics 
-            if (metricsPublisher != null) {
-                long duration = System.nanoTime() - startTime;
-                long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
-                metricsPublisher.recordRequest(methodName, statusCode, durationMs, secretRef);
-            }
-        }
+        return executeRequest(request, responseType);
     }
 
     private Request.Builder buildRequest(String url) {
@@ -113,7 +124,7 @@ class GrayskullHttpClient {
                 
                 // Determine if the error is retryable
                 if (isRetryableStatusCode(statusCode)) {
-                    throw new RetryableException("Request failed with retryable status " + statusCode + ": " + errorBody);
+                    throw new RetryableException(statusCode, "Request failed: " + errorBody);
                 } else {
                     throw new GrayskullException(statusCode, "Request failed: " + errorBody);
                 }

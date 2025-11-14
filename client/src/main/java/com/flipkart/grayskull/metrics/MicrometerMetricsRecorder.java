@@ -28,20 +28,30 @@ final class MicrometerMetricsRecorder implements MetricsRecorder {
     }
 
     @Override
-    public void recordRequest(String event, int statusCode, long durationMs, String secretRef) {
-        // Metric name: event.secretRef (e.g., "getSecret.project1:secret1")
-        // Tag: status (e.g., "200", "404", "500")
-        // This gives users both status-code-level and secret-level metrics
-        
-        String metricName = event + "_" + secretRef;
-        String timerKey = metricName + "." + statusCode;
+    public void recordRequest(String url, int statusCode, long durationMs) {
+        // Extract path from URL (e.g., /v1/project/test-project/secrets/test/data)
+        String path = URLNormalizer.normalize(url);
+        String timerKey = path + "." + statusCode;
         
         Timer timer = timers.computeIfAbsent(timerKey, k -> 
-            Timer.builder("grayskull_client_" + metricName)
+            Timer.builder("grayskull_client_request")
+                .tag("path", path)
                 .tag("status", String.valueOf(statusCode))
                 .register(meterRegistry)
         );
         timer.record(durationMs, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public void recordRetry(String url, int attemptNumber, boolean success) {
+        String path = URLNormalizer.normalize(url);
+        
+        // Record retry counter
+        meterRegistry.counter("grayskull_client_retry",
+                "path", path,
+                "attempt", String.valueOf(attemptNumber),
+                "status", success ? "success" : "failure")
+                .increment();
     }
 
     @Override

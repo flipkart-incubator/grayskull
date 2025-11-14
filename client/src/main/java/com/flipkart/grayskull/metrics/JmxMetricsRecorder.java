@@ -12,13 +12,17 @@ import java.util.concurrent.atomic.AtomicLong;
 final class JmxMetricsRecorder implements MetricsRecorder {
     
     private final ConcurrentHashMap<String, DurationTracker> durationTrackers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, RetryTracker> retryTrackers = new ConcurrentHashMap<>();
 
     @Override
-    public void recordRequest(String event, int statusCode, long durationMs, String secretRef) {
+    public void recordRequest(String url, int statusCode, long durationMs) {
+        // Extract path from URL (e.g., /v1/project/grayskull-stage/secrets/test/data)
+        String path = URLNormalizer.normalize(url);
+        
         // Record to two trackers: one with status (granular), one without (overall)
         
-        // 1. Granular tracker with status code - per-status metrics
-        String statusKey = event + "." + statusCode + "." + secretRef;
+        // Granular tracker with status code - per-status metrics
+        String statusKey = path + "." + statusCode;
         durationTrackers.computeIfAbsent(statusKey, k -> {
             try {
                 ObjectName name = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
@@ -30,9 +34,8 @@ final class JmxMetricsRecorder implements MetricsRecorder {
             }
         }).record(durationMs);
         
-        // 2. Overall tracker without status code - combined metrics across all statuses
-        String overallKey = event + "." + secretRef;
-        durationTrackers.computeIfAbsent(overallKey, k -> {
+        // Overall tracker without status code - combined metrics across all statuses
+        durationTrackers.computeIfAbsent(path, k -> {
             try {
                 ObjectName name = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
                 DurationTracker tracker = new DurationTracker();
@@ -42,6 +45,37 @@ final class JmxMetricsRecorder implements MetricsRecorder {
                 throw new RuntimeException("Failed to register JMX overall duration tracker for: " + k, e);
             }
         }).record(durationMs);
+    }
+
+    @Override
+    public void recordRetry(String url, int attemptNumber, boolean success) {
+        String path = URLNormalizer.normalize(url);
+        String status = success ? "success" : "failure";
+        
+        // Path-level tracker (per path, combining success and failure)
+        retryTrackers.computeIfAbsent("path." + path, k -> {
+            try {
+                ObjectName name = new ObjectName("Grayskull:type=HttpClientRetryMetrics,name=" + ObjectName.quote(k));
+                RetryTracker tracker = new RetryTracker();
+                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, name);
+                return tracker;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to register JMX path-level retry tracker for: " + k, e);
+            }
+        }).record(attemptNumber);
+        
+        // Path + status tracker (most granular)
+        String granularKey = "path." + path + ".status." + status;
+        retryTrackers.computeIfAbsent(granularKey, k -> {
+            try {
+                ObjectName name = new ObjectName("Grayskull:type=HttpClientRetryMetrics,name=" + ObjectName.quote(k));
+                RetryTracker tracker = new RetryTracker();
+                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, name);
+                return tracker;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to register JMX granular retry tracker for: " + k, e);
+            }
+        }).record(attemptNumber);
     }
 
     @Override
@@ -118,6 +152,54 @@ final class JmxMetricsRecorder implements MetricsRecorder {
         @Override
         public long getCount() {
             return count.get();
+        }
+    }
+    
+    /**
+     * JMX MBean interface for exposing retry metrics.
+     */
+    public interface RetryTrackerMBean {
+        long getTotalRetries();
+        long getMaxAttempts();
+        double getAverageAttempts();
+    }
+    
+    /**
+     * JMX MBean implementation for retry tracking.
+     */
+    public static final class RetryTracker implements RetryTrackerMBean {
+        private final AtomicLong count = new AtomicLong(0);
+        private final AtomicLong totalAttempts = new AtomicLong(0);
+        private final AtomicLong maxAttempts = new AtomicLong(0);
+        
+        public void record(int attemptNumber) {
+            count.incrementAndGet();
+            totalAttempts.addAndGet(attemptNumber);
+            
+            // Update max attempts
+            long currentMax;
+            do {
+                currentMax = maxAttempts.get();
+                if (attemptNumber <= currentMax) {
+                    break;
+                }
+            } while (!maxAttempts.compareAndSet(currentMax, attemptNumber));
+        }
+        
+        @Override
+        public long getTotalRetries() {
+            return count.get();
+        }
+        
+        @Override
+        public long getMaxAttempts() {
+            return maxAttempts.get();
+        }
+        
+        @Override
+        public double getAverageAttempts() {
+            long c = count.get();
+            return c > 0 ? (double) totalAttempts.get() / c : 0;
         }
     }
 }

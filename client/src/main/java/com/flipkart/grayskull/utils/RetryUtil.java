@@ -69,7 +69,7 @@ public final class RetryUtil {
                 
                 if (attempt == maxAttempt) {
                     log.error("[retry:{}] Max retry attempts reached ({}), throwing exception", retryId, maxAttempt);
-                    throw new GrayskullException("Failed after " + maxAttempt + " retry attempts: " + e.getMessage(), e);
+                    throw new GrayskullException(e.getStatusCode(), "Failed after " + maxAttempt + " retry attempts: " + e.getMessage(), e);
                 }
                 
                 // Sleep before next retry (exponential backoff)

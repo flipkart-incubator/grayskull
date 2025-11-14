@@ -146,7 +146,7 @@ class GrayskullClientImplTest {
         String secretRef = "my-project:database-password";
         SecretValue expectedSecret = new SecretValue(1, "username", "password123");
 
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
                 .thenReturn(expectedSecret);
 
         // When
@@ -161,9 +161,7 @@ class GrayskullClientImplTest {
         // Verify correct URL was called
         verify(mockHttpClient).doGetWithRetry(
                 eq("https://test.grayskull.com/v1/projects/my-project/secrets/database-password/data"),
-                any(TypeReference.class),
-                eq(secretRef),
-                eq("getSecret")
+                any(TypeReference.class)
         );
     }
 
@@ -203,7 +201,7 @@ class GrayskullClientImplTest {
         String secretRef = "my-project:secret:with:colons";
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
 
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
                 .thenReturn(expectedSecret);
 
         // When
@@ -215,9 +213,7 @@ class GrayskullClientImplTest {
         // Verify URL is properly encoded - colons after the first one are encoded as %3A
         verify(mockHttpClient).doGetWithRetry(
                 eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret%3Awith%3Acolons/data"),
-                any(TypeReference.class),
-                eq(secretRef),
-                eq("getSecret")
+                any(TypeReference.class)
         );
     }
 
@@ -227,7 +223,7 @@ class GrayskullClientImplTest {
         String secretRef = "project:secret@domain#tag";
         SecretValue expectedSecret = new SecretValue(1, "username", "password");
 
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
                 .thenReturn(expectedSecret);
 
         // When
@@ -243,9 +239,7 @@ class GrayskullClientImplTest {
         // @ should be encoded as %40, # should be encoded as %23
         verify(mockHttpClient).doGetWithRetry(
                 eq("https://test.grayskull.com/v1/projects/project/secrets/secret%40domain%23tag/data"),
-                any(TypeReference.class),
-                eq(secretRef),
-                eq("getSecret")
+                any(TypeReference.class)
         );
     }
 
@@ -253,7 +247,7 @@ class GrayskullClientImplTest {
     void testGetSecret_nullResponse() throws Exception {
         // Given
         String secretRef = "project:secret";
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class), anyString(), anyString()))
+        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
                 .thenReturn(null);
 
         // When/Then

@@ -25,6 +25,8 @@ import java.nio.charset.StandardCharsets;
  */
 public final class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
+    private static final TypeReference<Response<SecretValue>> SECRET_VALUE_TYPE_REFERENCE = 
+            new TypeReference<Response<SecretValue>>() {};
     
     private final String baseUrl;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
@@ -94,7 +96,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
         String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
         
         // Fetch the secret with automatic retry logic
-        SecretValue secretValue = httpClient.doGetWithRetry(url, new TypeReference<Response<SecretValue>>() {}, secretRef, "getSecret");
+        SecretValue secretValue = httpClient.doGetWithRetry(url, SECRET_VALUE_TYPE_REFERENCE);
         
         if (secretValue == null) {
             throw new GrayskullException("No data in response");
