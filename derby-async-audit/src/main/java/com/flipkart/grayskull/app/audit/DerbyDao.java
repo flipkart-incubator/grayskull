@@ -66,8 +66,8 @@ public class DerbyDao {
             Map<Long, AuditEntry> auditEntries = new HashMap<>();
             while (resultSet.next()) {
                 long id = resultSet.getLong(1);
-                String eventSting = resultSet.getString(2);
-                AuditEntry auditEntry = objectMapper.readValue(eventSting, AuditEntry.class);
+                String eventString = resultSet.getString(2);
+                AuditEntry auditEntry = objectMapper.readValue(eventString, AuditEntry.class);
                 auditEntries.put(id, auditEntry);
             }
             return auditEntries;
