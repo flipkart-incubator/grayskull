@@ -266,7 +266,7 @@ class GrayskullClientImplTest {
         String secretRef = "secengg-stage:secret-1";
         AtomicInteger callCount = new AtomicInteger(0);
         
-        SecretRefreshHook hook = (error,secretVal) -> {
+        SecretRefreshHook hook = (secretVal) -> {
             callCount.incrementAndGet();
             System.out.println("Secret refreshed: " + secretVal);
         };
@@ -288,7 +288,7 @@ class GrayskullClientImplTest {
     void testRegisterRefreshHook_canUnregister() {
         // Given
         String secretRef = "secengg-stage:secret-1";
-        SecretRefreshHook hook = (error,secretVal) -> System.out.println("test");
+        SecretRefreshHook hook = (secretVal) -> System.out.println("test");
 
         // When
         RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
@@ -300,13 +300,13 @@ class GrayskullClientImplTest {
     @Test
     void testRegisterRefreshHook_nullSecretRef() {
         // When/Then
-        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook(null, (error,secretVal) -> {}));
+        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook(null, (secretVal) -> {}));
     }
 
     @Test
     void testRegisterRefreshHook_emptySecretRef() {
         // When/Then
-        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook("", (error,secretVal) -> {}));
+        assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook("", (secretVal) -> {}));
     }
 
     @Test

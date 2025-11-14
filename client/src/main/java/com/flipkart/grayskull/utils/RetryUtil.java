@@ -5,6 +5,8 @@ import com.flipkart.grayskull.models.exceptions.RetryableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.UUID;
+
 /**
  * Utility class for retrying operations with exponential backoff.
  * <p>
@@ -48,29 +50,31 @@ public final class RetryUtil {
      * @throws Exception if the task throws a non-retryable exception
      */
     public <T> T retry(CheckedSupplier<T> task) throws Exception {
+        // Generate a short retry ID to track this retry sequence in logs
+        String retryId = UUID.randomUUID().toString().substring(0, 8);
         long currentInterval = interval;
         Exception lastException = null;
         
         for (int attempt = 1; attempt <= maxAttempt; attempt++) {
             try {
-                log.debug("Executing task, attempt {} of {}", attempt, maxAttempt);
+                log.debug("[retry:{}] Executing task, attempt {} of {}", retryId, attempt, maxAttempt);
                 T result = task.get();
                 if (attempt > 1) {
-                    log.info("Task succeeded on attempt {}", attempt);
+                    log.info("[retry:{}] Task succeeded on attempt {}", retryId, attempt);
                 }
                 return result;
             } catch (RetryableException e) {
                 lastException = e;
-                log.warn("Retryable exception on attempt {} of {}: {}", attempt, maxAttempt, e.getMessage());
+                log.warn("[retry:{}] Retryable exception on attempt {} of {}: {}", retryId, attempt, maxAttempt, e.getMessage());
                 
                 if (attempt == maxAttempt) {
-                    log.error("Max retry attempts reached ({}), throwing exception", maxAttempt);
+                    log.error("[retry:{}] Max retry attempts reached ({}), throwing exception", retryId, maxAttempt);
                     throw new GrayskullException("Failed after " + maxAttempt + " retry attempts: " + e.getMessage(), e);
                 }
                 
                 // Sleep before next retry (exponential backoff)
                 try {
-                    log.debug("Waiting {}ms before retry", currentInterval);
+                    log.debug("[retry:{}] Waiting {}ms before retry", retryId, currentInterval);
                     Thread.sleep(currentInterval);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();

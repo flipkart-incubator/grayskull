@@ -89,11 +89,7 @@ public class Example {
 
         HikariConfig hikariConfig;
         HikariDataSource dataSource = new HikariDataSource(hikariConfig);
-        RefreshHandlerRef handle = grayskullClient.registerRefreshHook("my-project:secret-1", (error, secret) -> {
-            if (error != null) {
-                System.err.println("Failed to refresh secret: " + error.getMessage());
-                return;
-            }
+        RefreshHandlerRef handle = grayskullClient.registerRefreshHook("my-project:secret-1", (secret) -> {
             System.out.println(secret.getPublicPart());
             hikariConfig.setUsername(secret.getPublicPart());
             hikariConfig.setPassword(secret.getPrivatePart());
@@ -160,13 +156,7 @@ Registers a callback to be invoked when a secret is updated.
 ```java
 RefreshHandlerRef handle = client.registerRefreshHook(
     "my-project:api-key",
-    (error, updatedSecret) -> {
-        if (error != null) {
-            logger.error("Failed to refresh secret", error);
-            // Handle error: maybe keep using old credentials, send alert, etc.
-            return;
-        }
-        
+    (updatedSecret) -> {
         System.out.println("Secret updated! New version: " + updatedSecret.getDataVersion());
         updateCache(updatedSecret);
     }
