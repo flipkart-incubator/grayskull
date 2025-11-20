@@ -34,7 +34,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
     private static final TypeReference<Response<SecretValue>> SECRET_VALUE_TYPE_REFERENCE = 
             new TypeReference<Response<SecretValue>>() {};
+            
     private static final String REQUEST_ID = "RequestId";
+    private static final String PROJECT_ID = "projectId";
+    private static final String SECRET_NAME = "secretName";
     
     private final String baseUrl;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
@@ -85,7 +88,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
      */
     @Override
     public SecretValue getSecret(String secretRef) {
-        String requestId = resolveRequestId();
+        String requestId = generateRequestId();
         MDC.put(REQUEST_ID, requestId);
 
         long startTime = System.nanoTime();
@@ -112,7 +115,11 @@ public final class GrayskullClientImpl implements GrayskullClient {
                         "projectId and secretName cannot be empty in secretRef: " + secretRef);
             }
 
-            log.debug("[RequestId:{}] Fetching secret: projectId={}, secretName={}", MDC.get(REQUEST_ID), projectId, secretName);
+            // Put context in MDC for automatic inclusion in all log statements
+            MDC.put(PROJECT_ID, projectId);
+            MDC.put(SECRET_NAME, secretName);
+
+            log.debug("Fetching secret");
 
             // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
             String encodedProjectId = urlEncode(projectId);
@@ -145,6 +152,11 @@ public final class GrayskullClientImpl implements GrayskullClient {
                 
                 metricsPublisher.recordRequest("getSecret." + secretRef, statusCode, durationMs);
             }
+            
+            // Clean up MDC context
+            MDC.remove(PROJECT_ID);
+            MDC.remove(SECRET_NAME);
+            MDC.remove(REQUEST_ID);
         }
     }
 
@@ -199,7 +211,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
         }
     }
 
-    private String resolveRequestId() {
+    private String generateRequestId() {
         return UUID.randomUUID().toString();
     }
 }

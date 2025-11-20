@@ -14,6 +14,7 @@ Java client library for interacting with the Grayskull secret management service
 - [Configuration](#configuration)
 - [Authentication](#authentication)
 - [Metrics](#metrics)
+- [Logging & Observability](#logging--observability)
 - [Error Handling](#error-handling)
 - [Compatibility Matrix](#compatibility-matrix)
 - [Building from Source](#building-from-source)
@@ -290,6 +291,57 @@ Two MBeans per secret:
 ```java
 config.setMetricsEnabled(false);  // No metrics overhead
 ```
+
+## Logging & Observability
+
+The SDK uses SLF4J for logging and leverages **MDC (Mapped Diagnostic Context)** for rich contextual logging without cluttering your code.
+
+### Automatic Context Propagation
+
+The client automatically adds context to MDC for all operations:
+
+| MDC Key | Description | Example Value |
+|---------|-------------|---------------|
+| `RequestId` | Unique identifier for each request | `"abc-123-def-456"` |
+| `projectId` | Grayskull project ID | `"my-project"` |
+| `secretName` | Name of the secret being accessed | `"database-password"` |
+
+
+### Configuring Your Logging Pattern
+
+To take advantage of MDC context, update your logging configuration (Logback, Log4j2, etc.).
+
+#### Logback Example
+
+Add to your `logback.xml` or `logback-spring.xml`:
+
+```xml
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [RequestId:%X{RequestId}] [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+    
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+    
+    <!-- Enable debug logging for Grayskull -->
+    <logger name="com.flipkart.grayskull" level="DEBUG"/>
+</configuration>
+```
+
+💡 **Reference Configuration:** A complete example configuration is included in the SDK JAR at `logback-example.xml`. You can:
+- View it in the [source code](src/main/resources/logback-example.xml)
+- Extract it from the JAR: `jar xf client-impl-*.jar logback-example.xml`
+- Copy the pattern above directly into your logging configuration
+
+### MDC Cleanup
+
+The SDK automatically cleans up its MDC keys after each operation, ensuring no memory leaks or cross-thread contamination. Your application's existing MDC context (trace IDs, user IDs, etc.) remains untouched.
 
 ## Error Handling
 
