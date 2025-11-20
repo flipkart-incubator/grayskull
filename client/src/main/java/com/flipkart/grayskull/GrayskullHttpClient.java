@@ -1,6 +1,7 @@
 package com.flipkart.grayskull;
 
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
+import com.flipkart.grayskull.constants.MDCKeys;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
@@ -17,7 +18,6 @@ import java.util.concurrent.TimeUnit;
 
 class GrayskullHttpClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullHttpClient.class);
-    private static final String REQUEST_ID = "RequestId";
 
     private final OkHttpClient httpClient;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
@@ -80,13 +80,14 @@ class GrayskullHttpClient {
                 .get()
                 .build();
 
-        log.debug("Executing GET request to: {}", url);
+        String requestId = MDC.get(MDCKeys.GRAYSKULL_REQUEST_ID);
+        log.debug("[RequestId:{}] Executing GET request to: {}", requestId, url);
         HttpResponse httpResponse = executeRequest(request);
 
         String body = httpResponse.getBody();
         int bodyLength = body != null ? body.length() : 0;
-        log.debug("Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes", 
-                url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
+        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes", 
+                requestId, url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
         
         return httpResponse;
     }
@@ -100,7 +101,7 @@ class GrayskullHttpClient {
         }
         requestBuilder.addHeader("Authorization", authHeader);
 
-        String requestId = MDC.get(REQUEST_ID);
+        String requestId = MDC.get(MDCKeys.GRAYSKULL_REQUEST_ID);
         if (requestId != null && !requestId.isEmpty()) {
             requestBuilder.addHeader("X-Request-Id", requestId);
         }

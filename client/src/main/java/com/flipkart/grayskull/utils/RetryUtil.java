@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.utils;
 
+import com.flipkart.grayskull.constants.MDCKeys;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.models.exceptions.RetryableException;
 import org.slf4j.Logger;
@@ -51,27 +52,28 @@ public final class RetryUtil {
     public <T> T retry(CheckedSupplier<T> task) throws Exception {
         long currentInterval = interval;
         Exception lastException = null;
+        String requestId = MDC.get(MDCKeys.GRAYSKULL_REQUEST_ID);
         
         for (int attempt = 1; attempt <= maxAttempt; attempt++) {
             try {
-                log.debug("Executing task, attempt {} of {}", attempt, maxAttempt);
+                log.debug("[RequestId:{}] Executing task, attempt {} of {}", requestId, attempt, maxAttempt);
                 T result = task.get();
                 if (attempt > 1) {
-                    log.info("Task succeeded on attempt {}", attempt);
+                    log.info("[RequestId:{}] Task succeeded on attempt {}", requestId, attempt);
                 }
                 return result;
             } catch (RetryableException e) {
                 lastException = e;
-                log.warn("Retryable exception on attempt {} of {}: {}", attempt, maxAttempt, e.getMessage());
+                log.warn("[RequestId:{}] Retryable exception on attempt {} of {}: {}", requestId, attempt, maxAttempt, e.getMessage());
                 
                 if (attempt == maxAttempt) {
-                    log.error("Max retry attempts reached ({}), throwing exception", maxAttempt);
+                    log.error("[RequestId:{}] Max retry attempts reached ({}), throwing exception", requestId, maxAttempt);
                     throw new GrayskullException(e.getStatusCode(), "Failed after " + maxAttempt + " retry attempts: " + e.getMessage(), e);
                 }
                 
                 // Sleep before next retry (exponential backoff)
                 try {
-                    log.debug("Waiting {}ms before retry", currentInterval);
+                    log.debug("[RequestId:{}] Waiting {}ms before retry", requestId, currentInterval);
                     Thread.sleep(currentInterval);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();

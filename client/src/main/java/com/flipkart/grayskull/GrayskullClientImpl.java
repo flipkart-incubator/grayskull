@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
+import com.flipkart.grayskull.constants.MDCKeys;
 import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.response.HttpResponse;
@@ -34,10 +35,6 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
     private static final TypeReference<Response<SecretValue>> SECRET_VALUE_TYPE_REFERENCE = 
             new TypeReference<Response<SecretValue>>() {};
-            
-    private static final String REQUEST_ID = "RequestId";
-    private static final String PROJECT_ID = "projectId";
-    private static final String SECRET_NAME = "secretName";
     
     private final String baseUrl;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
@@ -89,7 +86,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
     @Override
     public SecretValue getSecret(String secretRef) {
         String requestId = generateRequestId();
-        MDC.put(REQUEST_ID, requestId);
+        MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, requestId);
 
         long startTime = System.nanoTime();
         
@@ -116,10 +113,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
             }
 
             // Put context in MDC for automatic inclusion in all log statements
-            MDC.put(PROJECT_ID, projectId);
-            MDC.put(SECRET_NAME, secretName);
+            MDC.put(MDCKeys.PROJECT_ID, projectId);
+            MDC.put(MDCKeys.SECRET_NAME, secretName);
 
-            log.debug("Fetching secret");
+            log.debug("[RequestId:{}] Fetching secret", requestId);
 
             // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
             String encodedProjectId = urlEncode(projectId);
@@ -154,9 +151,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
             }
             
             // Clean up MDC context
-            MDC.remove(PROJECT_ID);
-            MDC.remove(SECRET_NAME);
-            MDC.remove(REQUEST_ID);
+            MDC.remove(MDCKeys.PROJECT_ID);
+            MDC.remove(MDCKeys.SECRET_NAME);
+            MDC.remove(MDCKeys.GRAYSKULL_REQUEST_ID);
         }
     }
 
@@ -175,6 +172,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
      */
     @Override
     public RefreshHandlerRef registerRefreshHook(String secretRef, SecretRefreshHook hook) {
+        String requestId = generateRequestId();
+        MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, requestId);
+
         if (secretRef == null || secretRef.isEmpty()) {
             throw new IllegalArgumentException("secretRef cannot be null or empty");
         }
@@ -182,7 +182,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             throw new IllegalArgumentException("hook cannot be null");
         }
         
-        log.debug("Registering refresh hook for secret: {} (placeholder implementation)", secretRef);
+        log.debug("[RequestId:{}] Registering refresh hook (placeholder implementation)", requestId);
         
         // TODO: Implement actual hook invocation when server-side events support is added
         return NoOpRefreshHandlerRef.INSTANCE;

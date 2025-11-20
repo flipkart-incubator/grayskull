@@ -302,7 +302,7 @@ The client automatically adds context to MDC for all operations:
 
 | MDC Key | Description | Example Value |
 |---------|-------------|---------------|
-| `RequestId` | Unique identifier for each request | `"abc-123-def-456"` |
+| `GrayskullRequestId` | Unique identifier for each request | `"abc-123-def-456"` |
 | `projectId` | Grayskull project ID | `"my-project"` |
 | `secretName` | Name of the secret being accessed | `"database-password"` |
 
@@ -311,7 +311,7 @@ The client automatically adds context to MDC for all operations:
 The SDK automatically includes the `X-Request-Id` header in all HTTP requests to the Grayskull server. This enables end-to-end request correlation:
 
 ```
-Client Log:  [RequestId:abc-123] Fetching secret
+Client Log:  [GrayskullRequestId:abc-123] Fetching secret
 HTTP Header: X-Request-Id: abc-123
 Server Log:  [RequestId:abc-123] Processing secret request
 ```
@@ -332,7 +332,7 @@ Add to your `logback.xml` or `logback-spring.xml`:
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
-                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [RequestId:%X{RequestId}] [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
+                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [GrayskullRequestId:%X{GrayskullRequestId}] [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
             </pattern>
         </encoder>
     </appender>
@@ -353,7 +353,7 @@ Add to your `logback.xml` or `logback-spring.xml`:
 
 ### MDC Cleanup
 
-The SDK automatically cleans up its MDC keys (`RequestId`, `projectId`, `secretName`) after each operation, ensuring no memory leaks or cross-thread contamination. Your application's existing MDC context (trace IDs, user IDs, etc.) remains untouched.
+The SDK automatically cleans up its MDC keys (`GrayskullRequestId`, `projectId`, `secretName`) after each operation, ensuring no memory leaks or cross-thread contamination. Your application's existing MDC context (trace IDs, user IDs, etc.) remains untouched.
 
 ## Error Handling
 

@@ -17,7 +17,7 @@
         <encoder>
             <!-- 
               Pattern that includes MDC context from Grayskull client:
-              - %X{RequestId} - Unique request ID for correlation
+              - %X{grayskullRequestId} - Unique request ID for correlation
               - %X{projectId} - Grayskull project ID
               - %X{secretName} - Secret name being accessed
               
@@ -25,7 +25,7 @@
               Grayskull client without needing to explicitly include them.
             -->
             <pattern>
-                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [RequestId:%X{RequestId}] [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
+                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [GrayskullRequestId:%X{GrayskullRequestId}] [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
             </pattern>
         </encoder>
     </appender>
