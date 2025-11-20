@@ -1,9 +1,6 @@
 name: Publish to Clojars
 
-on:
-  workflow_dispatch: {}
-  pull_request:
-    branches: [ "main" ]
+on: workflow_dispatch
 
 jobs:
   publish:
@@ -19,10 +16,13 @@ jobs:
           server-id: clojars
           server-username: grayskull-oss
           server-password: ${{ secrets.DEPLOY_TOKEN }}
-      - name: Build with Maven
-        run: ./mvnw -B clean install gpg:sign -Dgpg.signer=bc
+      - name: Store gpg key
+        run: echo $GPG_SIGNING_KEY_BASE64 | base64 -d > /tmp/gpg.key
         env:
-          MAVEN_GPG_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_SIGNING_KEY_BASE64: ${{ secrets.GPG_SIGNING_KEY }}
+      - name: Build with Maven
+        run: ./mvnw -B clean install gpg:sign -Dgpg.signer=bc -Dgpg.keyFilePath=/tmp/gpg.key
+        env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
       - name: Deploy spi to Clojars
         run: |
