@@ -127,7 +127,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             SecretValue secretValue = response.getData();
 
             if (secretValue == null) {
-                throw new GrayskullException("No data in response");
+                throw new GrayskullException(500, "No data in response");
             }
             
             return secretValue;
@@ -136,7 +136,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             // JSON parsing errors are not retryable - they indicate a permanent problem
             throw new GrayskullException("Failed to parse response: ", e);
         } catch (GrayskullException e) {
-            statusCode = e.getStatusCode() != 0 ? e.getStatusCode() : 500;
+            statusCode = e.getStatusCode();
             throw e;
         } finally {
             if (metricsPublisher != null) {
