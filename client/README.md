@@ -288,7 +288,7 @@ Two MBeans per secret:
 ### Disabling Metrics
 
 ```java
-config.setEnableMetrics(false);  // No metrics overhead
+config.setMetricsEnabled(false);  // No metrics overhead
 ```
 
 ## Error Handling

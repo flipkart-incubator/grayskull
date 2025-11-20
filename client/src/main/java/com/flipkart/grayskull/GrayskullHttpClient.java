@@ -73,8 +73,7 @@ class GrayskullHttpClient {
                 metricsPublisher.recordRetry(url, attemptCount[0], finalAttemptSuccess);
             }
             
-            // Clear MDC to prevent memory leaks
-            MDC.clear();
+            MDC.remove(REQUEST_ID);
         }
     }
     
@@ -85,8 +84,9 @@ class GrayskullHttpClient {
 
         log.debug("[RequestId:{}] Executing GET request to: {}", MDC.get(REQUEST_ID), url);
         HttpResponse httpResponse = executeRequest(request);
-        
-        int bodyLength = httpResponse.getBody().length();
+
+        String body = httpResponse.getBody();
+        int bodyLength = body != null ? body.length() : 0;
         log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes", 
                 MDC.get(REQUEST_ID), url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
         

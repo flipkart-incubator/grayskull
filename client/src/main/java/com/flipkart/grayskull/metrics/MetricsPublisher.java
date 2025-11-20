@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
  * Example usage:
  * <pre>
  *     MetricsPublisher publisher = new MetricsPublisher();
- *     publisher.recordRequest("getSecret", 200, 150, "project1:secret1");
+ *     publisher.recordRequest("getSecret.project1:secret1", 200, 150);
  * </pre>
  * </p>
  *
@@ -42,7 +42,7 @@ public final class MetricsPublisher {
      * Record a metrics event.
      * If metrics are disabled through configuration, this method will be a no-op.
      *
-     * @param url The URL path
+     * @param name The URL path
      * @param statusCode The HTTP status code (e.g., 200, 404, 500)
      * @param durationMs The request duration in milliseconds
      */
