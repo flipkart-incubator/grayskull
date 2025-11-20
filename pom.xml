@@ -205,5 +205,11 @@
 
         </plugins>
     </build>
+    <distributionManagement>
+        <repository>
+            <id>clojars</id>
+            <url>https://repo.clojars.org/repo</url>
+        </repository>
+    </distributionManagement>
 
 </project>
