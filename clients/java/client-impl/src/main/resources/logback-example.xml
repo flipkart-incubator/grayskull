@@ -25,7 +25,7 @@
               Grayskull client without needing to explicitly include them.
             -->
             <pattern>
-                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [GrayskullRequestId:%X{GrayskullRequestId}] [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
+                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
             </pattern>
         </encoder>
     </appender>

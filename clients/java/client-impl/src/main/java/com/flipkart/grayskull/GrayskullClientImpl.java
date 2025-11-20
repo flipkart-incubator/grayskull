@@ -116,7 +116,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             MDC.put(MDCKeys.PROJECT_ID, projectId);
             MDC.put(MDCKeys.SECRET_NAME, secretName);
 
-            log.debug("[RequestId:{}] Fetching secret", requestId);
+            log.debug("[RequestId:{}] Fetching secret for secretRef: {}", requestId, secretRef);
 
             // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
             String encodedProjectId = urlEncode(projectId);
@@ -174,18 +174,23 @@ public final class GrayskullClientImpl implements GrayskullClient {
     public RefreshHandlerRef registerRefreshHook(String secretRef, SecretRefreshHook hook) {
         String requestId = generateRequestId();
         MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, requestId);
+        try {
 
-        if (secretRef == null || secretRef.isEmpty()) {
-            throw new IllegalArgumentException("secretRef cannot be null or empty");
+            if (secretRef == null || secretRef.isEmpty()) {
+                throw new IllegalArgumentException("secretRef cannot be null or empty");
+            }
+            if (hook == null) {
+                throw new IllegalArgumentException("hook cannot be null");
+            }
+
+            log.debug("[RequestId:{}] Registering refresh hook for secretRef:{} (placeholder implementation)", requestId, secretRef);
+
+            // TODO: Implement actual hook invocation when server-side events support is added
+            return NoOpRefreshHandlerRef.INSTANCE;
+
+        } finally {
+            MDC.remove(MDCKeys.GRAYSKULL_REQUEST_ID);
         }
-        if (hook == null) {
-            throw new IllegalArgumentException("hook cannot be null");
-        }
-        
-        log.debug("[RequestId:{}] Registering refresh hook (placeholder implementation)", requestId);
-        
-        // TODO: Implement actual hook invocation when server-side events support is added
-        return NoOpRefreshHandlerRef.INSTANCE;
     }
 
     /**

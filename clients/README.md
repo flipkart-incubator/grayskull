@@ -347,7 +347,7 @@ Add to your `logback.xml` or `logback-spring.xml`:
 ```
 
 💡 **Reference Configuration:** A complete example configuration is included in the SDK JAR at `logback-example.xml`. You can:
-- View it in the [source code](src/main/resources/logback-example.xml)
+- View it in the [source code](java/client-impl/src/main/resources/logback-example.xml)
 - Extract it from the JAR: `jar xf client-impl-*.jar logback-example.xml`
 - Copy the pattern above directly into your logging configuration
 

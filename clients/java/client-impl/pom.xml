@@ -4,24 +4,21 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.flipkart.grayskull</groupId>
+    <parent>
+        <groupId>com.flipkart.grayskull</groupId>
+        <artifactId>java-clients</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
     <artifactId>client-impl</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    <packaging>jar</packaging>
     
-    <name>Grayskull Java Client</name>
-    <description>Grayskull Java Client SDK (Java 8+)</description>
-    <url>https://github.com/flipkart/grayskull-oss</url>
+    <name>Grayskull Java Client Implementation</name>
+    <description>Implementation of Grayskull Java Client SDK (Java 8+)</description>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        
-        <!-- Dependency versions -->
+        <!-- client-impl specific dependency versions -->
         <okhttp.version>4.12.0</okhttp.version>
         <slf4j.version>2.0.16</slf4j.version>
-        <lombok.version>1.18.30</lombok.version>
         <micrometer.version>1.16.0</micrometer.version>
         <junit.version>5.10.1</junit.version>
         <mockito.version>5.7.0</mockito.version>
@@ -32,7 +29,7 @@
         <dependency>
             <groupId>com.flipkart.grayskull</groupId>
             <artifactId>client-api</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
+            <version>${project.parent.version}</version>
         </dependency>
 
         <dependency>
@@ -45,13 +42,6 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -96,28 +86,5 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
-                <configuration>
-                    <source>8</source>
-                    <target>8</target>
-                    <encoding>UTF-8</encoding>
-                    <parameters>true</parameters>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 
 </project>
