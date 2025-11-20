@@ -1,8 +1,13 @@
 package com.flipkart.grayskull;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
+import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
+import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.hooks.NoOpRefreshHandlerRef;
@@ -11,10 +16,12 @@ import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.models.response.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Implementation of the Grayskull client.
@@ -27,11 +34,14 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
     private static final TypeReference<Response<SecretValue>> SECRET_VALUE_TYPE_REFERENCE = 
             new TypeReference<Response<SecretValue>>() {};
+    private static final String REQUEST_ID = "RequestId";
     
     private final String baseUrl;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
     private final GrayskullClientConfiguration grayskullClientConfiguration;
     private final GrayskullHttpClient httpClient;
+    private final ObjectMapper objectMapper;
+    private final MetricsPublisher metricsPublisher;
 
     /**
      * Creates a new Grayskull client implementation.
@@ -53,6 +63,12 @@ public final class GrayskullClientImpl implements GrayskullClient {
         this.authHeaderProvider = authHeaderProvider;
         this.grayskullClientConfiguration = grayskullClientConfiguration;
         this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullClientConfiguration);
+        
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new ParameterNamesModule());
+        
+        // Initialize metrics publisher if enabled
+        this.metricsPublisher = grayskullClientConfiguration.isMetricsEnabled() ? new MetricsPublisher() : null;
     }
     
     /**
@@ -69,40 +85,67 @@ public final class GrayskullClientImpl implements GrayskullClient {
      */
     @Override
     public SecretValue getSecret(String secretRef) {
-        if (secretRef == null || secretRef.isEmpty()) {
-            throw new IllegalArgumentException("secretRef cannot be null or empty");
-        }
+        String requestId = resolveRequestId();
+        MDC.put(REQUEST_ID, requestId);
 
-        // Parse secretRef format: "projectId:secretName"
-        String[] parts = secretRef.split(":", 2);
-        if (parts.length != 2) {
-            throw new IllegalArgumentException(
-                    "Invalid secretRef format. Expected 'projectId:secretName', got: " + secretRef);
-        }
-
-        String projectId = parts[0];
-        String secretName = parts[1];
-
-        if (projectId.isEmpty() || secretName.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "projectId and secretName cannot be empty in secretRef: " + secretRef);
-        }
-
-        log.debug("Fetching secret: projectId={}, secretName={}", projectId, secretName);
-
-        // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
-        String encodedProjectId = urlEncode(projectId);
-        String encodedSecretName = urlEncode(secretName);
-        String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
+        long startTime = System.nanoTime();
         
-        // Fetch the secret with automatic retry logic
-        SecretValue secretValue = httpClient.doGetWithRetry(url, SECRET_VALUE_TYPE_REFERENCE);
-        
-        if (secretValue == null) {
-            throw new GrayskullException("No data in response");
+        int statusCode = 0;
+
+        try {
+            if (secretRef == null || secretRef.isEmpty()) {
+                throw new IllegalArgumentException("secretRef cannot be null or empty");
+            }
+
+            // Parse secretRef format: "projectId:secretName"
+            String[] parts = secretRef.split(":", 2);
+            if (parts.length != 2) {
+                throw new IllegalArgumentException(
+                        "Invalid secretRef format. Expected 'projectId:secretName', got: " + secretRef);
+            }
+
+            String projectId = parts[0];
+            String secretName = parts[1];
+
+            if (projectId.isEmpty() || secretName.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "projectId and secretName cannot be empty in secretRef: " + secretRef);
+            }
+
+            log.debug("[RequestId:{}] Fetching secret: projectId={}, secretName={}", MDC.get(REQUEST_ID), projectId, secretName);
+
+            // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
+            String encodedProjectId = urlEncode(projectId);
+            String encodedSecretName = urlEncode(secretName);
+            String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
+            
+            // Fetch the secret with automatic retry logic
+            HttpResponse httpResponse = httpClient.doGetWithRetry(url);
+            statusCode = httpResponse.getStatusCode();
+            
+            Response<SecretValue> response = objectMapper.readValue(httpResponse.getBody(), SECRET_VALUE_TYPE_REFERENCE);
+            SecretValue secretValue = response.getData();
+
+            if (secretValue == null) {
+                throw new GrayskullException("No data in response");
+            }
+            
+            return secretValue;
+            
+        } catch (JsonProcessingException e) {
+            // JSON parsing errors are not retryable - they indicate a permanent problem
+            throw new GrayskullException("Failed to parse response: ", e);
+        } catch (GrayskullException e) {
+            statusCode = e.getStatusCode() != 0 ? e.getStatusCode() : 500;
+            throw e;
+        } finally {
+            if (metricsPublisher != null) {
+                long duration = System.nanoTime() - startTime;
+                long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
+                
+                metricsPublisher.recordRequest("getSecret." + secretRef, statusCode, durationMs);
+            }
         }
-        
-        return secretValue;
     }
 
     /**
@@ -154,5 +197,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
         } catch (UnsupportedEncodingException e) {
             throw new GrayskullException(500, "Failed to URL encode value: " + value, e);
         }
+    }
+
+    private String resolveRequestId() {
+        return UUID.randomUUID().toString();
     }
 }

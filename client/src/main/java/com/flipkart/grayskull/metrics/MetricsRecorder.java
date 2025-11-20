@@ -10,11 +10,11 @@ interface MetricsRecorder {
      * Record a request with its duration.
      * The recorder automatically tracks both count and duration statistics.
      *
-     * @param url The URL path
+     * @param name The URL path
      * @param statusCode The HTTP status code
      * @param durationMs The duration in milliseconds
      */
-    void recordRequest(String url, int statusCode, long durationMs);
+    void recordRequest(String name, int statusCode, long durationMs);
     
     /**
      * Record a retry attempt for a request.

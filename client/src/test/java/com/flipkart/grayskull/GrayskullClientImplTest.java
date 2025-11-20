@@ -1,12 +1,15 @@
 package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
+import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
+import com.flipkart.grayskull.models.response.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,7 @@ class GrayskullClientImplTest {
 
     private GrayskullClientConfiguration grayskullClientConfiguration;
     private GrayskullClientImpl client;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -44,6 +48,7 @@ class GrayskullClientImplTest {
         grayskullClientConfiguration.setReadTimeout(10000);
         
         client = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);
+        objectMapper = new ObjectMapper();
         
         // Inject mock HTTP client using reflection
         Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
@@ -145,9 +150,10 @@ class GrayskullClientImplTest {
         // Given
         String secretRef = "my-project:database-password";
         SecretValue expectedSecret = new SecretValue(1, "username", "password123");
+        HttpResponse httpResponse = createHttpResponse(expectedSecret);
 
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
-                .thenReturn(expectedSecret);
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(httpResponse);
 
         // When
         SecretValue result = client.getSecret(secretRef);
@@ -160,8 +166,7 @@ class GrayskullClientImplTest {
         
         // Verify correct URL was called
         verify(mockHttpClient).doGetWithRetry(
-                eq("https://test.grayskull.com/v1/projects/my-project/secrets/database-password/data"),
-                any(TypeReference.class)
+                eq("https://test.grayskull.com/v1/projects/my-project/secrets/database-password/data")
         );
     }
 
@@ -200,9 +205,10 @@ class GrayskullClientImplTest {
         // Given
         String secretRef = "my-project:secret:with:colons";
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
+        HttpResponse httpResponse = createHttpResponse(expectedSecret);
 
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
-                .thenReturn(expectedSecret);
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(httpResponse);
 
         // When
         SecretValue result = client.getSecret(secretRef);
@@ -212,8 +218,7 @@ class GrayskullClientImplTest {
         
         // Verify URL is properly encoded - colons after the first one are encoded as %3A
         verify(mockHttpClient).doGetWithRetry(
-                eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret%3Awith%3Acolons/data"),
-                any(TypeReference.class)
+                eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret%3Awith%3Acolons/data")
         );
     }
 
@@ -222,9 +227,10 @@ class GrayskullClientImplTest {
         // Given - secret name contains @ and # characters
         String secretRef = "project:secret@domain#tag";
         SecretValue expectedSecret = new SecretValue(1, "username", "password");
+        HttpResponse httpResponse = createHttpResponse(expectedSecret);
 
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
-                .thenReturn(expectedSecret);
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(httpResponse);
 
         // When
         SecretValue result = client.getSecret(secretRef);
@@ -238,8 +244,7 @@ class GrayskullClientImplTest {
         // Verify URL is properly encoded with special characters
         // @ should be encoded as %40, # should be encoded as %23
         verify(mockHttpClient).doGetWithRetry(
-                eq("https://test.grayskull.com/v1/projects/project/secrets/secret%40domain%23tag/data"),
-                any(TypeReference.class)
+                eq("https://test.grayskull.com/v1/projects/project/secrets/secret%40domain%23tag/data")
         );
     }
 
@@ -247,8 +252,12 @@ class GrayskullClientImplTest {
     void testGetSecret_nullResponse() throws Exception {
         // Given
         String secretRef = "project:secret";
-        when(mockHttpClient.doGetWithRetry(anyString(), any(TypeReference.class)))
-                .thenReturn(null);
+        Response<SecretValue> response = new Response<>(null, "No Data");
+        String json = objectMapper.writeValueAsString(response);
+        HttpResponse httpResponse = new HttpResponse(200, json, "application/json", "http/1.1");
+        
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(httpResponse);
 
         // When/Then
         assertThrows(GrayskullException.class, () -> client.getSecret(secretRef));
@@ -329,5 +338,10 @@ class GrayskullClientImplTest {
         // When/Then - should not throw exception
         clientWithNullHttp.close();
     }
+    
+    private HttpResponse createHttpResponse(SecretValue secretValue) throws Exception {
+        Response<SecretValue> response = new Response<>(secretValue, "Success");
+        String json = objectMapper.writeValueAsString(response);
+        return new HttpResponse(200, json, "application/json", "http/1.1");
+    }
 }
-

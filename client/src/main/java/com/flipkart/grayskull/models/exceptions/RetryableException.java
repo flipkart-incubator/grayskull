@@ -28,5 +28,10 @@ public final class RetryableException extends Exception {
         super(message);
         this.statusCode = statusCode;
     }
+
+    public RetryableException(int statusCode, String message, Throwable cause) {
+        super(message);
+        this.statusCode = statusCode;
+    }
 }
 

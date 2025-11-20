@@ -46,11 +46,11 @@ public final class MetricsPublisher {
      * @param statusCode The HTTP status code (e.g., 200, 404, 500)
      * @param durationMs The request duration in milliseconds
      */
-    public void recordRequest(String url, int statusCode, long durationMs) {
+    public void recordRequest(String name, int statusCode, long durationMs) {
         if (!metricsEnabled) {
             return;
         }
-        recorder.recordRequest(url, statusCode, durationMs);
+        recorder.recordRequest(name, statusCode, durationMs);
     }
     
     /**

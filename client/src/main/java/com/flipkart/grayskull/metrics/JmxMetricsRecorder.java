@@ -15,19 +15,16 @@ final class JmxMetricsRecorder implements MetricsRecorder {
     private final ConcurrentHashMap<String, RetryTracker> retryTrackers = new ConcurrentHashMap<>();
 
     @Override
-    public void recordRequest(String url, int statusCode, long durationMs) {
-        // Extract path from URL (e.g., /v1/project/grayskull-stage/secrets/test/data)
-        String path = URLNormalizer.normalize(url);
-        
+    public void recordRequest(String name, int statusCode, long durationMs) {
         // Record to two trackers: one with status (granular), one without (overall)
-        
+
         // Granular tracker with status code - per-status metrics
-        String statusKey = path + "." + statusCode;
+        String statusKey = name + "." + statusCode;
         durationTrackers.computeIfAbsent(statusKey, k -> {
             try {
-                ObjectName name = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
+                ObjectName metricName = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
                 DurationTracker tracker = new DurationTracker();
-                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, name);
+                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, metricName);
                 return tracker;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to register JMX duration tracker for: " + k, e);
@@ -35,11 +32,11 @@ final class JmxMetricsRecorder implements MetricsRecorder {
         }).record(durationMs);
         
         // Overall tracker without status code - combined metrics across all statuses
-        durationTrackers.computeIfAbsent(path, k -> {
+        durationTrackers.computeIfAbsent(name, k -> {
             try {
-                ObjectName name = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
+                ObjectName metricName = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
                 DurationTracker tracker = new DurationTracker();
-                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, name);
+                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, metricName);
                 return tracker;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to register JMX overall duration tracker for: " + k, e);

@@ -194,7 +194,7 @@ All configuration properties with their defaults and constraints.
 | `maxConnections` | `int` | `10` | > 0 | Connection pool size |
 | `maxRetries` | `int` | `3` | 1-10 | Number of retry attempts for transient failures |
 | `minRetryDelay` | `int` | `100` | ≥ 50 ms | Base delay between retries (exponential backoff) |
-| `enableMetrics` | `boolean` | `true` | true/false | Enable/disable metrics collection |
+| `metricsEnabled` | `boolean` | `true` | true/false | Enable/disable metrics collection |
 
 ## Authentication
 

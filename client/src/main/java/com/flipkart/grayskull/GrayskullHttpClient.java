@@ -1,29 +1,25 @@
 package com.flipkart.grayskull;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
+import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.models.exceptions.RetryableException;
 import com.flipkart.grayskull.metrics.MetricsPublisher;
-import com.flipkart.grayskull.models.response.Response;
-import com.flipkart.grayskull.models.response.ResponseWithStatus;
 import com.flipkart.grayskull.utils.RetryUtil;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 class GrayskullHttpClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullHttpClient.class);
+    private static final String REQUEST_ID = "RequestId";
 
     private final OkHttpClient httpClient;
-    private final ObjectMapper objectMapper;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
     private final MetricsPublisher metricsPublisher;
     private final RetryUtil retryUtil;
@@ -31,8 +27,6 @@ class GrayskullHttpClient {
 
     GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullClientConfiguration clientConfiguration) {
         this.authHeaderProvider = authHeaderProvider;
-        this.objectMapper = new ObjectMapper();
-        this.objectMapper.registerModule(new ParameterNamesModule());
         
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(clientConfiguration.getConnectionTimeout(), TimeUnit.MILLISECONDS)
@@ -50,57 +44,53 @@ class GrayskullHttpClient {
         this.retryUtil = new RetryUtil(clientConfiguration.getMaxRetries(), clientConfiguration.getMinRetryDelay());
     }
 
-    <T> T doGetWithRetry(String url, TypeReference<Response<T>> responseType) {
-        
-        long startTime = System.nanoTime();
+    HttpResponse doGetWithRetry(String url) {
         final int[] attemptCount = {0};
-        final int[] lastStatusCode = {0};
-        boolean success = false;
+        boolean finalAttemptSuccess = false;
         
         try {
-            T result = retryUtil.retry(() -> {
+            HttpResponse result = retryUtil.retry(() -> {
                 attemptCount[0]++;
-                ResponseWithStatus<T> responseWithStatus = doGet(url, responseType);
-                lastStatusCode[0] = responseWithStatus.getStatusCode();
-                return responseWithStatus.getResponse().getData();
+                return doGet(url);
             });
             
-            success = true;
+            finalAttemptSuccess = true;
             return result;
             
         } catch (IllegalStateException | IllegalArgumentException e) {
             // Configuration or usage errors - rethrow as-is
             throw e;
-
+        
         } catch (GrayskullException e) {
-            // Capture status code (from non-retryable errors or exhausted retries)
-            lastStatusCode[0] = e.getStatusCode();
+            // GrayskullException already has proper context (retry exhaustion, etc.) - rethrow as-is
             throw e;
-
+            
         } catch (Exception e) {
-            throw new GrayskullException("Unexpected error during HTTP request", e);
+            throw new GrayskullException(500, "Unexpected error during HTTP request", e);
 
         } finally {
-            // Record metrics for the entire operation (success or failure)
-            if (metricsPublisher != null) {
-                long duration = System.nanoTime() - startTime;
-                long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
-                metricsPublisher.recordRequest(url, lastStatusCode[0], durationMs);
-                
-                // If we had to retry (more than 1 attempt), record retry metric
-                if (attemptCount[0] > 1) {
-                    metricsPublisher.recordRetry(url, attemptCount[0], success);
-                }
+            if (metricsPublisher != null && attemptCount[0] > 1) {
+                metricsPublisher.recordRetry(url, attemptCount[0], finalAttemptSuccess);
             }
+            
+            // Clear MDC to prevent memory leaks
+            MDC.clear();
         }
     }
-
-    <T> ResponseWithStatus<T> doGet(String url, TypeReference<Response<T>> responseType) throws RetryableException {
+    
+    HttpResponse doGet(String url) throws RetryableException {
         Request request = buildRequest(url)
                 .get()
                 .build();
 
-        return executeRequest(request, responseType);
+        log.debug("[RequestId:{}] Executing GET request to: {}", MDC.get(REQUEST_ID), url);
+        HttpResponse httpResponse = executeRequest(request);
+        
+        int bodyLength = httpResponse.getBody().length();
+        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes", 
+                MDC.get(REQUEST_ID), url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
+        
+        return httpResponse;
     }
 
     private Request.Builder buildRequest(String url) {
@@ -115,7 +105,7 @@ class GrayskullHttpClient {
         return requestBuilder;
     }
 
-    private <T> ResponseWithStatus<T> executeRequest(Request request, TypeReference<Response<T>> responseType) throws RetryableException {
+    private HttpResponse executeRequest(Request request) throws RetryableException {
         try (okhttp3.Response response = httpClient.newCall(request).execute()) {
             int statusCode = response.code();
             
@@ -130,24 +120,14 @@ class GrayskullHttpClient {
                 }
             }
 
-            if (response.body() == null) {
-                throw new GrayskullException("Empty response body from server");
-            }
-
-            String responseBody = response.body().string();
-            log.debug("Received response from {} with status: {}", request.url(), statusCode);
-
-            try {
-                Response<T> responseTemplate = objectMapper.readValue(responseBody, responseType);
-                return new ResponseWithStatus<>(statusCode, responseTemplate);
-            } catch (JsonProcessingException e) {
-                // JSON parsing errors are not retryable - they indicate a permanent problem
-                throw new GrayskullException("Failed to parse response: " + e.getMessage(), e);
-            }
+            String responseBody = response.body() != null ? response.body().string() : null;
+            String contentType = response.header("Content-Type", "unknown");
+            String protocol = response.protocol().toString();
+            return new HttpResponse(statusCode, responseBody, contentType, protocol);
 
         } catch (IOException e) {
             // Network/IO errors (timeouts, connection issues) are generally transient and worth retrying
-            throw new RetryableException(e.getMessage(), e);
+            throw new RetryableException(500, "Error communicating with Grayskull server", e);
         }
     }
     

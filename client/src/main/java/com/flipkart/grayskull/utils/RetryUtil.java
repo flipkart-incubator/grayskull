@@ -4,8 +4,7 @@ import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.models.exceptions.RetryableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.UUID;
+import org.slf4j.MDC;
 
 /**
  * Utility class for retrying operations with exponential backoff.
@@ -19,6 +18,7 @@ import java.util.UUID;
 public final class RetryUtil {
     private static final Logger log = LoggerFactory.getLogger(RetryUtil.class);
     private static final long MAX_WAIT_TIME_MS = 60000; // 1 minute
+    private static final String REQUEST_ID = "RequestId";
 
     private final int maxAttempt;
     private final int interval;
@@ -50,31 +50,29 @@ public final class RetryUtil {
      * @throws Exception if the task throws a non-retryable exception
      */
     public <T> T retry(CheckedSupplier<T> task) throws Exception {
-        // Generate a short retry ID to track this retry sequence in logs
-        String retryId = UUID.randomUUID().toString().substring(0, 8);
         long currentInterval = interval;
         Exception lastException = null;
         
         for (int attempt = 1; attempt <= maxAttempt; attempt++) {
             try {
-                log.debug("[retry:{}] Executing task, attempt {} of {}", retryId, attempt, maxAttempt);
+                log.debug("[RequestId:{}] Executing task, attempt {} of {}", MDC.get(REQUEST_ID), attempt, maxAttempt);
                 T result = task.get();
                 if (attempt > 1) {
-                    log.info("[retry:{}] Task succeeded on attempt {}", retryId, attempt);
+                    log.info("[RequestId:{}] Task succeeded on attempt {}", MDC.get(REQUEST_ID), attempt);
                 }
                 return result;
             } catch (RetryableException e) {
                 lastException = e;
-                log.warn("[retry:{}] Retryable exception on attempt {} of {}: {}", retryId, attempt, maxAttempt, e.getMessage());
+                log.warn("[RequestId:{}] Retryable exception on attempt {} of {}: {}", MDC.get(REQUEST_ID), attempt, maxAttempt, e.getMessage());
                 
                 if (attempt == maxAttempt) {
-                    log.error("[retry:{}] Max retry attempts reached ({}), throwing exception", retryId, maxAttempt);
+                    log.error("[RequestId:{}] Max retry attempts reached ({}), throwing exception", MDC.get(REQUEST_ID), maxAttempt);
                     throw new GrayskullException(e.getStatusCode(), "Failed after " + maxAttempt + " retry attempts: " + e.getMessage(), e);
                 }
                 
                 // Sleep before next retry (exponential backoff)
                 try {
-                    log.debug("[retry:{}] Waiting {}ms before retry", retryId, currentInterval);
+                    log.debug("[RequestId:{}] Waiting {}ms before retry", MDC.get(REQUEST_ID), currentInterval);
                     Thread.sleep(currentInterval);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();

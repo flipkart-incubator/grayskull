@@ -2,7 +2,7 @@ package com.flipkart.grayskull.models.response;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
@@ -15,6 +15,7 @@ import lombok.Getter;
  * @param <T> the type of the data field
  */
 @Getter
+@AllArgsConstructor(onConstructor = @__(@JsonCreator))
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class Response<T> {
     
@@ -27,19 +28,4 @@ public final class Response<T> {
      * A human-readable message describing the response.
      */
     private final String message;
-
-    /**
-     * Constructor for JSON deserialization.
-     *
-     * @param data    The actual response data
-     * @param message A human-readable message describing the response
-     */
-    @JsonCreator
-    public Response(
-            @JsonProperty("data") T data,
-            @JsonProperty("message") String message) {
-        this.data = data;
-        this.message = message;
-    }
 }
-

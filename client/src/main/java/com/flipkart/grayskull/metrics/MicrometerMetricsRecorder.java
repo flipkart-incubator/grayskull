@@ -28,14 +28,13 @@ final class MicrometerMetricsRecorder implements MetricsRecorder {
     }
 
     @Override
-    public void recordRequest(String url, int statusCode, long durationMs) {
+    public void recordRequest(String name, int statusCode, long durationMs) {
         // Extract path from URL (e.g., /v1/project/test-project/secrets/test/data)
-        String path = URLNormalizer.normalize(url);
-        String timerKey = path + "." + statusCode;
-        
+        String timerKey = name + "." + statusCode;
+
         Timer timer = timers.computeIfAbsent(timerKey, k -> 
             Timer.builder("grayskull_client_request")
-                .tag("path", path)
+                .tag("operation", name)
                 .tag("status", String.valueOf(statusCode))
                 .register(meterRegistry)
         );

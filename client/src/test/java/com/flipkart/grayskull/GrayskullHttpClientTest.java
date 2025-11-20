@@ -1,9 +1,9 @@
 package com.flipkart.grayskull;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
+import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.models.response.Response;
@@ -76,23 +76,22 @@ class GrayskullHttpClientTest {
         httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "public-value", "private-value");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
+        String jsonResponse = toJson(response);
 
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
-                .setBody(toJson(response))
+                .setBody(jsonResponse)
                 .addHeader("Content-Type", "application/json"));
 
         // When
-        SecretValue result = httpClient.doGetWithRetry(
-                mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {}
+        HttpResponse result = httpClient.doGetWithRetry(
+                mockWebServer.url("/test").toString()
         );
 
         // Then
         assertNotNull(result);
-        assertEquals(expectedSecret.getDataVersion(), result.getDataVersion());
-        assertEquals(expectedSecret.getPrivatePart(), result.getPrivatePart());
-        assertEquals(expectedSecret.getPublicPart(), result.getPublicPart());
+        assertEquals(200, result.getStatusCode());
+        assertEquals(jsonResponse, result.getBody());
     }
 
     @Test
@@ -108,8 +107,7 @@ class GrayskullHttpClientTest {
 
         // When
         httpClient.doGetWithRetry(
-                mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {}
+                mockWebServer.url("/test").toString()
         );
 
         // Then
@@ -127,8 +125,7 @@ class GrayskullHttpClientTest {
         // When/Then
         assertThrows(IllegalStateException.class, () ->
                 httpClient.doGetWithRetry(
-                        mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {}
+                        mockWebServer.url("/test").toString()
                 ),
                 "Auth header cannot be null or empty"
         );
@@ -143,8 +140,7 @@ class GrayskullHttpClientTest {
         // When/Then
         assertThrows(IllegalStateException.class, () ->
                 httpClient.doGetWithRetry(
-                        mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {}
+                        mockWebServer.url("/test").toString()
                 )
         );
     }
@@ -156,24 +152,25 @@ class GrayskullHttpClientTest {
         httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
+        String jsonResponse = toJson(response);
 
         // Mock to fail twice with 500, then succeed
         mockWebServer.enqueue(new MockResponse().setResponseCode(500).setBody("Internal Server Error"));
         mockWebServer.enqueue(new MockResponse().setResponseCode(503).setBody("Service Unavailable"));
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
-                .setBody(toJson(response))
+                .setBody(jsonResponse)
                 .addHeader("Content-Type", "application/json"));
 
         // When
-        SecretValue result = httpClient.doGetWithRetry(
-                mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {}
+        HttpResponse result = httpClient.doGetWithRetry(
+                mockWebServer.url("/test").toString()
         );
 
         // Then - should succeed after retries
         assertNotNull(result);
-        assertEquals(expectedSecret.getDataVersion(), result.getDataVersion());
+        assertEquals(200, result.getStatusCode());
+        assertEquals(jsonResponse, result.getBody());
         assertEquals(3, mockWebServer.getRequestCount(), "Should have made 3 requests (2 failures + 1 success)");
     }
 
@@ -183,22 +180,24 @@ class GrayskullHttpClientTest {
         httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
+        String jsonResponse = toJson(response);
 
         // Mock to fail with connection reset, then succeed
         mockWebServer.enqueue(new MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_AT_START));
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
-                .setBody(toJson(response))
+                .setBody(jsonResponse)
                 .addHeader("Content-Type", "application/json"));
 
         // When
-        SecretValue result = httpClient.doGetWithRetry(
-                mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {}
+        HttpResponse result = httpClient.doGetWithRetry(
+                mockWebServer.url("/test").toString()
         );
 
         // Then - should succeed after retry
         assertNotNull(result);
+        assertEquals(200, result.getStatusCode());
+        assertEquals(jsonResponse, result.getBody());
         assertEquals(2, mockWebServer.getRequestCount(), "Should have made 2 requests");
     }
 
@@ -208,22 +207,24 @@ class GrayskullHttpClientTest {
         httpClient = new GrayskullHttpClient(mockAuthProvider, config);
         SecretValue expectedSecret = new SecretValue(1, "pub", "priv");
         Response<SecretValue> response = new Response<>(expectedSecret, "Success");
+        String jsonResponse = toJson(response);
 
         // Mock to fail with rate limiting, then succeed
         mockWebServer.enqueue(new MockResponse().setResponseCode(429).setBody("Too Many Requests"));
         mockWebServer.enqueue(new MockResponse()
                 .setResponseCode(200)
-                .setBody(toJson(response))
+                .setBody(jsonResponse)
                 .addHeader("Content-Type", "application/json"));
 
         // When
-        SecretValue result = httpClient.doGetWithRetry(
-                mockWebServer.url("/test").toString(),
-                new TypeReference<Response<SecretValue>>() {}
+        HttpResponse result = httpClient.doGetWithRetry(
+                mockWebServer.url("/test").toString()
         );
 
         // Then
         assertNotNull(result);
+        assertEquals(200, result.getStatusCode());
+        assertEquals(jsonResponse, result.getBody());
         assertEquals(2, mockWebServer.getRequestCount());
     }
 
@@ -240,8 +241,7 @@ class GrayskullHttpClientTest {
         // When/Then
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
-                        mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {}
+                        mockWebServer.url("/test").toString()
                 )
         );
 
@@ -262,8 +262,7 @@ class GrayskullHttpClientTest {
         // When/Then
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
-                        mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {}
+                        mockWebServer.url("/test").toString()
                 )
         );
 
@@ -281,8 +280,7 @@ class GrayskullHttpClientTest {
         // When/Then
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
-                        mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {}
+                        mockWebServer.url("/test").toString()
                 )
         );
 
@@ -300,8 +298,7 @@ class GrayskullHttpClientTest {
         // When/Then
         GrayskullException exception = assertThrows(GrayskullException.class, () ->
                 httpClient.doGetWithRetry(
-                        mockWebServer.url("/test").toString(),
-                        new TypeReference<Response<SecretValue>>() {}
+                        mockWebServer.url("/test").toString()
                 )
         );
 
@@ -317,4 +314,3 @@ class GrayskullHttpClientTest {
         }
     }
 }
-
