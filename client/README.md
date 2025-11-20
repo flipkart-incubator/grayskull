@@ -306,6 +306,18 @@ The client automatically adds context to MDC for all operations:
 | `projectId` | Grayskull project ID | `"my-project"` |
 | `secretName` | Name of the secret being accessed | `"database-password"` |
 
+### Distributed Tracing
+
+The SDK automatically includes the `X-Request-Id` header in all HTTP requests to the Grayskull server. This enables end-to-end request correlation:
+
+```
+Client Log:  [RequestId:abc-123] Fetching secret
+HTTP Header: X-Request-Id: abc-123
+Server Log:  [RequestId:abc-123] Processing secret request
+```
+
+This makes it easy to trace a single request through your entire system, from client to server and back.
+
 
 ### Configuring Your Logging Pattern
 
@@ -341,7 +353,7 @@ Add to your `logback.xml` or `logback-spring.xml`:
 
 ### MDC Cleanup
 
-The SDK automatically cleans up its MDC keys after each operation, ensuring no memory leaks or cross-thread contamination. Your application's existing MDC context (trace IDs, user IDs, etc.) remains untouched.
+The SDK automatically cleans up its MDC keys (`RequestId`, `projectId`, `secretName`) after each operation, ensuring no memory leaks or cross-thread contamination. Your application's existing MDC context (trace IDs, user IDs, etc.) remains untouched.
 
 ## Error Handling
 

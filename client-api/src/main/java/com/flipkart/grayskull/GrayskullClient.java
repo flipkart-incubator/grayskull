@@ -22,16 +22,9 @@ public interface GrayskullClient extends AutoCloseable {
     SecretValue getSecret(String secretRef);
 
     /**
-     * Registers a callback hook to be invoked when a secret is updated.
-     * <p>
-     * <b>Note:</b> This is currently a placeholder implementation. Hooks can be registered
-     * but will not be invoked until server-sent events support is added in a future release.
-     * Including this API now ensures forward compatibility when the feature is fully implemented.
-     * <p>
-     * When fully implemented, the hook will be called asynchronously whenever the server
-     * pushes an update for the monitored secret.
+     * Registers a callback hook to be invoked when a secret is updated. 
+     * The hook will be called asynchronously whenever the server pushes an update for the monitored secret.
      * 
-     *
      * @param secretRef the secret reference to monitor, in format {@code "projectId:secretName"}
      * @param hook the callback function to execute when the secret is updated
      * @return a {@link RefreshHandlerRef} handle that can be used to unregister the hook

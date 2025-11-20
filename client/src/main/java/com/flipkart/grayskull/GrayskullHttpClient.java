@@ -100,6 +100,11 @@ class GrayskullHttpClient {
         }
         requestBuilder.addHeader("Authorization", authHeader);
 
+        String requestId = MDC.get(REQUEST_ID);
+        if (requestId != null && !requestId.isEmpty()) {
+            requestBuilder.addHeader("X-Request-Id", requestId);
+        }
+
         return requestBuilder;
     }
 
