@@ -1,4 +1,4 @@
-name: Publish to Clojars
+name: Publish Clients to Clojars
 
 on: workflow_dispatch
 
