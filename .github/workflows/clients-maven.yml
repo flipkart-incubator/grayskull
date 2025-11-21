@@ -1,0 +1,48 @@
+# This workflow builds the Grayskull Java Client SDK independently from the main project
+# The clients are a separate Maven project targeting Java 8+ for broader compatibility
+
+name: Clients CI with Maven
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'clients/java/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'clients/java/**'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 8
+      uses: actions/setup-java@v4
+      with:
+        java-version: '8'
+        distribution: 'temurin'
+        cache: maven
+    
+    - name: Build Java Clients with Maven
+      working-directory: clients/java
+      run: mvn -B clean install
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: Client Test Results
+        path: |
+          clients/java/**/target/surefire-reports/*.xml
+    
+    - name: Publish code coverage
+      uses: codecov/codecov-action@v4
+      with:
+        files: "clients/java/*/target/site/jacoco/jacoco.xml"
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: clients
+
