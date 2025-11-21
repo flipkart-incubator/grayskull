@@ -46,7 +46,7 @@ Java client library for interacting with the Grayskull secret management service
     <dependency>
         <groupId>io.micrometer</groupId>
         <artifactId>micrometer-core</artifactId>
-        <version>1.16.0</version>
+        <version>1.12.7</version>
         <optional>true</optional>
     </dependency>
 </dependencies>
@@ -59,7 +59,7 @@ dependencies {
     implementation 'com.flipkart.grayskull:client-impl:0.0.1-SNAPSHOT'
     
     // Optional: Micrometer for advanced metrics
-    implementation 'io.micrometer:micrometer-core:1.16.0'
+    implementation 'io.micrometer:micrometer-core:1.12.7'
 }
 ```
 
@@ -396,7 +396,18 @@ The client automatically retries transient failures using exponential backoff wi
 | **OkHttp** | 4.12.0 | ✅ Yes | ✅ |
 | **SLF4J API** | 2.0.16 | ✅ Yes | ✅ | 
 | **Jackson Databind** | 2.15.3 | ✅ Yes | ✅ |
-| **Micrometer Core** | 1.16.0+ | ❌ No | ❌ |
+| **Micrometer Core** | 1.12.7+ | ❌ No | ❌ |
+
+> **Note:** If you need Java 8 compatibility, use Micrometer 1.12.x (last version supporting Java 8). Micrometer 1.13+ requires Java 17.
+
+### Test Dependencies (Development Only)
+
+| Dependency | Version | Purpose |
+|------------|---------|---------|
+| **JUnit Jupiter** | 5.10.1 | Test framework |
+| **Mockito** | 4.11.0 | Mocking framework (4.x for Java 8) |
+| **Logback** | 1.3.14 | Test logging |
+| **MockWebServer** | 4.12.0 | HTTP mocking |
 
 
 ## Building from Source
@@ -411,17 +422,12 @@ The client automatically retries transient failures using exponential backoff wi
 ```bash
 # Clone the repository
 git clone https://github.com/flipkart/grayskull-oss.git
-cd grayskull-oss
+cd grayskull-oss/clients/java
 
-# Build client-api
-cd client-api
+# Build all modules (client-api + client-impl)
 mvn clean install
 cd ..
 
-# Build client-impl
-cd client
-mvn clean install
-cd ..
 ```
 
 
