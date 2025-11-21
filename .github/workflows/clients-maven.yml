@@ -46,3 +46,12 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
         flags: clients
 
+  event_file:
+    name: "Event File"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Event File
+          path: ${{ github.event_path }}
