@@ -20,12 +20,9 @@ jobs:
         run: echo $GPG_SIGNING_KEY_BASE64 | base64 -d > /tmp/gpg.key
         env:
           GPG_SIGNING_KEY_BASE64: ${{ secrets.GPG_SIGNING_KEY }}
-      - name: Build with Maven
-        run: ./mvnw -B clean install gpg:sign -Dgpg.signer=bc -Dgpg.keyFilePath=/tmp/gpg.key
+      - name: Build and deploy modules to Clojars
+        run: ./mvnw -B -pl '!simple-app' clean package gpg:sign install deploy -Dgpg.signer=bc -Dgpg.keyFilePath=/tmp/gpg.key
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
-      - name: Deploy modules to Clojars
-        run: ./mvnw -B -pl '!simple-app' deploy
-        env:
           MAVEN_USERNAME: grayskull-dev
           MAVEN_PASSWORD: ${{ secrets.DEPLOY_TOKEN }}

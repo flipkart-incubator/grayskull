@@ -175,6 +175,9 @@
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <failOnViolation>true</failOnViolation>
+                    <sourceDirectories>
+                        <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+                    </sourceDirectories>
                 </configuration>
                 <executions>
                     <execution>
