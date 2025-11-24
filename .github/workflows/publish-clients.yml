@@ -14,16 +14,15 @@ jobs:
           distribution: 'temurin'
           cache: maven
           server-id: clojars
-          server-username: grayskull-dev
-          server-password: ${{ secrets.DEPLOY_TOKEN }}
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
       - name: Store gpg key
         run: echo $GPG_SIGNING_KEY_BASE64 | base64 -d > /tmp/gpg.key
         env:
           GPG_SIGNING_KEY_BASE64: ${{ secrets.GPG_SIGNING_KEY }}
-      - name: Build with Maven
-        run: ./mvnw -B -f clients/java/pom.xml clean install gpg:sign -Dgpg.signer=bc -Dgpg.keyFilePath=/tmp/gpg.key
+      - name: Build and Deploy to clojars
+        run: ./mvnw -B -f clients/java/pom.xml clean package gpg:sign install deploy -Dgpg.signer=bc -Dgpg.keyFilePath=/tmp/gpg.key
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
-      - name: Deploy clients to Clojars
-        run: |
-          ./mvnw -B -f clients/java/pom.xml deploy
+          MAVEN_USERNAME: grayskull-dev
+          MAVEN_PASSWORD: ${{ secrets.DEPLOY_TOKEN }}

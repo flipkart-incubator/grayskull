@@ -13,6 +13,13 @@
     <description>Grayskull Java Client SDK (Java 8+)</description>
     <url>https://github.com/flipkart/grayskull-oss</url>
 
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
     <modules>
         <module>client-api</module>
         <module>client-impl</module>

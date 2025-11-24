@@ -15,6 +15,13 @@
     <name>Grayskull Java Client API</name>
     <description>API interfaces and models for Grayskull Java Client</description>
 
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
     <!-- All dependencies inherited from parent:
          - lombok
          - jackson-databind
