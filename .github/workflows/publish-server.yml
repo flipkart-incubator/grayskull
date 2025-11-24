@@ -24,9 +24,5 @@ jobs:
         run: ./mvnw -B clean install gpg:sign -Dgpg.signer=bc -Dgpg.keyFilePath=/tmp/gpg.key
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
-      - name: Deploy spi to Clojars
-        run: ./mvnw -B -f spi/pom.xml deploy
-      - name: Deploy server to Clojars
-        run: ./mvnw -B -f server/pom.xml deploy
-      - name: Deploy derby-async-audit to Clojars
-        run: ./mvnw -B -f derby-async-audit/pom.xml deploy
+      - name: Deploy modules to Clojars
+        run: ./mvnw -B -pl '!simple-app' deploy
