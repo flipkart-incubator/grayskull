@@ -24,13 +24,13 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Shared dependency versions -->
-        <lombok.version>1.18.30</lombok.version>
-        <jackson.version>2.15.3</jackson.version>
+        <lombok.version>1.18.42</lombok.version>
+        <jackson.version>2.20.1</jackson.version>
 
         <!-- Plugin versions -->
-        <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.2.3</maven-surefire-plugin.version>
-        <jacoco-maven-plugin.version>0.8.11</jacoco-maven-plugin.version>
+        <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+        <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
     </properties>
 
     <!-- Dependencies inherited by ALL child modules -->
