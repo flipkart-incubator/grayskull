@@ -5,13 +5,20 @@
     <parent>
         <groupId>com.flipkart.grayskull</groupId>
         <artifactId>parent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>server</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
     <name>grayskull</name>
     <description>grayskull</description>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
     <properties>
         <java.version>21</java.version>
         <maven.compiler.source>21</maven.compiler.source>

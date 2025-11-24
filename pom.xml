@@ -5,10 +5,17 @@
 
     <groupId>com.flipkart.grayskull</groupId>
     <artifactId>parent</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0</version>
 
     <packaging>pom</packaging>
     <description>Secret management service for flipkart</description>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
 
     <properties>
         <java.version>21</java.version>
@@ -17,7 +24,7 @@
         <logback-access-starter.version>4.5.2</logback-access-starter.version>
         <logback-access-tomcat.version>2.0.6</logback-access-tomcat.version>
         <swagger.openapi.version>2.8.8</swagger.openapi.version>
-        <grayskull.version>0.0.1-SNAPSHOT</grayskull.version>
+        <grayskull.version>0.1.0</grayskull.version>
         <spring-cloud.version>2025.0.0</spring-cloud.version>
         <spring-boot.version>3.5.0</spring-boot.version>
         <jackson.version>2.17.2</jackson.version>
@@ -168,6 +175,9 @@
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <failOnViolation>true</failOnViolation>
+                    <sourceDirectories>
+                        <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+                    </sourceDirectories>
                 </configuration>
                 <executions>
                     <execution>
@@ -205,5 +215,11 @@
 
         </plugins>
     </build>
+    <distributionManagement>
+        <repository>
+            <id>clojars</id>
+            <url>https://repo.clojars.org</url>
+        </repository>
+    </distributionManagement>
 
 </project>
