@@ -15,7 +15,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <logback-access-starter.version>4.5.2</logback-access-starter.version>
-        <logback-access-tomcat.version>2.0.6</logback-access-tomcat.version>
+        <logback-access-tomcat.version>2.0.7</logback-access-tomcat.version>
         <swagger.openapi.version>2.8.8</swagger.openapi.version>
         <grayskull.version>0.0.1-SNAPSHOT</grayskull.version>
         <spring-cloud.version>2025.0.0</spring-cloud.version>
