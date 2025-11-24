@@ -25,14 +25,8 @@ jobs:
         env:
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
       - name: Deploy spi to Clojars
-        run: |
-          cd spi/
-          ./mvnw -B deploy
+        run: ./mvnw -B -f spi/pom.xml deploy
       - name: Deploy server to Clojars
-        run: |
-          cd server/
-          ./mvnw -B deploy
+        run: ./mvnw -B -f server/pom.xml deploy
       - name: Deploy derby-async-audit to Clojars
-        run: |
-          cd derby-async-audit/
-          ./mvnw -B deploy
+        run: ./mvnw -B -f derby-async-audit/pom.xml deploy
