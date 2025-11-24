@@ -1,0 +1,29 @@
+name: Publish Clients to Clojars
+
+on: workflow_dispatch
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: maven
+          server-id: clojars
+          server-username: grayskull-oss
+          server-password: ${{ secrets.DEPLOY_TOKEN }}
+      - name: Store gpg key
+        run: echo $GPG_SIGNING_KEY_BASE64 | base64 -d > /tmp/gpg.key
+        env:
+          GPG_SIGNING_KEY_BASE64: ${{ secrets.GPG_SIGNING_KEY }}
+      - name: Build with Maven
+        run: ./mvnw -B -f clients/java/pom.xml clean install gpg:sign -Dgpg.signer=bc -Dgpg.keyFilePath=/tmp/gpg.key
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
+      - name: Deploy clients to Clojars
+        run: |
+          ./mvnw -B -f clients/java/pom.xml deploy

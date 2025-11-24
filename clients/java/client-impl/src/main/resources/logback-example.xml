@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Example Logback Configuration for Grayskull Client Library
+  
+  This is a sample configuration showing how to configure logging patterns
+  to automatically include MDC context from the Grayskull client library.
+  
+  To use this configuration:
+  1. Copy this pattern to your application's logback.xml or logback-spring.xml
+  2. Customize as needed for your application
+  
+  Note: This file is NOT automatically loaded by Logback - it's for reference only.
+-->
+<configuration>
+    
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- 
+              Pattern that includes MDC context from Grayskull client:
+              - %X{grayskullRequestId} - Unique request ID for correlation
+              - %X{projectId} - Grayskull project ID
+              - %X{secretName} - Secret name being accessed
+              
+              These will automatically appear in all log statements from the
+              Grayskull client without needing to explicitly include them.
+            -->
+            <pattern>
+                %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [ProjectId:%X{projectId}] [SecretName:%X{secretName}] - %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+    
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+    
+    <!-- Enable debug logging for Grayskull client -->
+    <logger name="com.flipkart.grayskull" level="DEBUG"/>
+    
+</configuration>
+
