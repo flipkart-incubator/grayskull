@@ -40,7 +40,7 @@ jobs:
           clients/java/**/target/surefire-reports/*.xml
     
     - name: Publish code coverage
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         files: "clients/java/*/target/site/jacoco/jacoco.xml"
         token: ${{ secrets.CODECOV_TOKEN }}
