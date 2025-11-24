@@ -13,8 +13,17 @@ updates:
     open-pull-requests-limit: 2
     schedule:
       interval: "weekly"
+    groups:
+      dev-deps:
+        dependency-type: "development"
+      prod-deps:
+        dependency-type: "production"
   - package-ecosystem: "github-actions"
     target-branch: "main"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions-deps:
+        patterns:
+          - "*"
