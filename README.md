@@ -40,6 +40,17 @@ The server starts on <http://localhost:8080> with Swagger UI at `/swagger-ui.htm
 
 ### 3. Use the Java Client
 
+Add clojars repository to your `pom.xml`:
+
+```xml
+<repositories>
+    <repository>
+        <id>clojars</id>
+        <url>https://repo.clojars.org</url>
+    </repository>
+</repositories>
+```
+
 Add dependency:
 
 ```xml
@@ -142,8 +153,6 @@ The Java SDK provides a robust, production-ready client with:
 - **Metrics Integration** - Micrometer and JMX support
 - **Structured Logging** - MDC context for request tracing
 
-See the [detailed client documentation](clients/java/README.md) for advanced usage.
-
 Clients are provided as separate modules in the `clients` folder. For now only Java clients are provided, with support for Java 8 and higher.
 ```text
 clients/              # Client libraries
@@ -151,6 +160,8 @@ clients/              # Client libraries
     ├── client-api/   # Public interfaces
     └── client-impl/  # Implementation
 ```
+
+See the [detailed client documentation](clients/java/README.md) for advanced usage.
 
 ## Configuration
 
@@ -164,17 +175,42 @@ Create a java application similar to `simple-app` and add the server's dependenc
 </dependency>
 ```
 Optionally add own implementations of `GrayskullAuthenticationProvider` and `GrayskullAuthorizationProvider` in the application.  
-If your implementations are in a separate jar like `derby-async-audit` then make sure that spring boot scans them first like below
-assuming your SPI implementations are in `com.example.spi.impl` and application is in `com.example.app`
+
+For example if you want to override default authentication implementation with own implementation then add this in your application where spring boot can scan it.
+```text
+com.example.app
+├── authentication
+|   └── MyAuthenticationProvider.java
+└── MyGrayskullApplication.java
+```
+
 ```java
-@SpringBootApplication(scanBasePackages = {"com.example.spi.impl", "com.flipkart.app"})
-public class GrayskullApplication {
+public class MyAuthenticationProvider implements GrayskullAuthenticationProvider {
+    // authentication provider implementation
+}
+```
+```java
+@SpringBootApplication
+public class MyGrayskullApplication {
     public static void main(String[] args) {
-        SpringApplication.run(GrayskullApplication.class, args);
+        SpringApplication.run(MyGrayskullApplication.class, args);
     }
 }
 ```
-This way own SPI implementations are picked up first instead of simple implementations provided in `server` and used by the server.  
+Now spring boot should recognize `MyAuthenticationProvider` as the default `GrayskullAuthenticationProvider` and should inject it wherever required.
+
+---
+
+**Note**
+If your SPI implementations are in a separate dependency/package then you can add the required dependencies (order does not matter) in your application and add that package to `scanBasePackages` in the `@SpringBootApplication` annotation. don't forget to add the own package as well otherwise it will not get scanned.
+
+Assuming `com.example.spi.impl` is the package of SPI implementations and `com.example.app` is the main application package then the annotation should something like this.
+```java
+@SpringBootApplication(scanBasePackages = {"com.example.spi.impl", "com.example.app"})
+```
+This way own SPI implementations are picked up first instead of simple implementations provided in `server` and used by the server.
+
+---
 
 
 ## Development
