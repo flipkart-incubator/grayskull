@@ -19,7 +19,14 @@ public class ReadOnlyAspect {
     private final ReadOnlyAppProperties readOnlyAppProperties;
 
     public ReadOnlyAspect(ReadOnlyAppProperties readOnlyAppProperties) {
+
         this.readOnlyAppProperties = readOnlyAppProperties;
+
+    }
+
+    public ReadOnlyAspect(ReadOnlyAppProperties readOnlyAppProperties, int dummy) {
+        this.readOnlyAppProperties = readOnlyAppProperties;
+
     }
 
     /**
