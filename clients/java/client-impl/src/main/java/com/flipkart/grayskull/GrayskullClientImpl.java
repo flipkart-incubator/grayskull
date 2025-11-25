@@ -157,6 +157,80 @@ public final class GrayskullClientImpl implements GrayskullClient {
         }
     }
 
+
+    private SecretValue getSecret2(String secretRef) {
+        String requestId = generateRequestId();
+        MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, requestId);
+
+        long startTime = System.nanoTime();
+        
+        int statusCode = 0;
+
+        try {
+            if (secretRef == null || secretRef.isEmpty()) {
+                throw new IllegalArgumentException("secretRef cannot be null or empty");
+            }
+
+            // Parse secretRef format: "projectId:secretName"
+            String[] parts = secretRef.split(":", 2);
+            if (parts.length != 2) {
+                throw new IllegalArgumentException(
+                        "Invalid secretRef format. Expected 'projectId:secretName', got: " + secretRef);
+            }
+
+            String projectId = parts[0];
+            String secretName = parts[1];
+
+            if (projectId.isEmpty() || secretName.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "projectId and secretName cannot be empty in secretRef: " + secretRef);
+            }
+
+            // Put context in MDC for automatic inclusion in all log statements
+            MDC.put(MDCKeys.PROJECT_ID, projectId);
+            MDC.put(MDCKeys.SECRET_NAME, secretName);
+
+            log.debug("[RequestId:{}] Fetching secret for secretRef: {}", requestId, secretRef);
+
+            // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
+            String encodedProjectId = urlEncode(projectId);
+            String encodedSecretName = urlEncode(secretName);
+            String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
+            
+            // Fetch the secret with automatic retry logic
+            HttpResponse httpResponse = httpClient.doGetWithRetry(url);
+            statusCode = httpResponse.getStatusCode();
+            
+            Response<SecretValue> response = objectMapper.readValue(httpResponse.getBody(), SECRET_VALUE_TYPE_REFERENCE);
+            SecretValue secretValue = response.getData();
+
+            if (secretValue == null) {
+                throw new GrayskullException(500, "No data in response");
+            }
+            
+            return secretValue;
+            
+        } catch (JsonProcessingException e) {
+            // JSON parsing errors are not retryable - they indicate a permanent problem
+            throw new GrayskullException("Failed to parse response: ", e);
+        } catch (GrayskullException e) {
+            statusCode = e.getStatusCode();
+            throw e;
+        } finally {
+            if (metricsPublisher != null) {
+                long duration = System.nanoTime() - startTime;
+                long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
+                
+                metricsPublisher.recordRequest("getSecret." + secretRef, statusCode, durationMs);
+            }
+            
+            // Clean up MDC context
+            MDC.remove(MDCKeys.PROJECT_ID);
+            MDC.remove(MDCKeys.SECRET_NAME);
+            MDC.remove(MDCKeys.GRAYSKULL_REQUEST_ID);
+        }
+    }
+    
     /**
      * Registers a refresh hook for a secret.
      * <p>
