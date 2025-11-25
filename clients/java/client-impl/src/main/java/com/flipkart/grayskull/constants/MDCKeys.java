@@ -25,7 +25,7 @@ public final class MDCKeys {
      */
     public static final String SECRET_NAME = "secretName";
 
-    public static final dummy = "dummy";
+    public static final String dummy = "dummy";
     
     private MDCKeys() {
         throw new AssertionError("Cannot instantiate constants class");
