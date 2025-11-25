@@ -1,6 +1,6 @@
 # Grayskull Java Client SDK
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../../LICENSE)
 
 Java client library for interacting with the Grayskull secret management service.
 
@@ -347,7 +347,7 @@ Add to your `logback.xml` or `logback-spring.xml`:
 ```
 
 💡 **Reference Configuration:** A complete example configuration is included in the SDK JAR at `logback-example.xml`. You can:
-- View it in the [source code](java/client-impl/src/main/resources/logback-example.xml)
+- View it in the [source code](client-impl/src/main/resources/logback-example.xml)
 - Extract it from the JAR: `jar xf client-impl-*.jar logback-example.xml`
 - Copy the pattern above directly into your logging configuration
 
@@ -433,7 +433,7 @@ cd ..
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](../LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](../../LICENSE) file for details.
 
 ```
 Copyright 2025 Flipkart
