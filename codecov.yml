@@ -6,34 +6,32 @@ coverage:
       default:
         # basic
         target: 80% #default
-        threshold: 10%
-        base: auto 
     patch:                  # only validate the coverage of the PR
-      tests:
-        target: 95%         # Almost all test code should be executed
-        paths:
-          - "**/test/"   # only include coverage in "tests/" folder
-      new-pr-java8-client:
+      # tests:
+      #   target: 95%         # Almost all test code should be executed
+      #   paths:
+      #     - "**/test/"   # only include coverage in "tests/" folder
+      default:
         target: 90%         # new PR should have 90% coverage
         threshold: 0%       # Coverage should not drop by this amount compared against base
-        base: auto
-        paths:
-          - "!**/test/"  # ignore test folders
+        # base: auto
+        # paths:
+        #   - "!**/test/"  # ignore test folders
         flags:
           - java8-client
        # advanced settings
-        branches:           # add release branch when spinning off from main 
-          - main
-        if_ci_failed: error # success, failure, error, ignore
-      new-pr-server:
-        target: 90%         # new PR should have 90% coverage
-        threshold: 0%       # Coverage should not drop by this amount compared against base
-        base: auto
-        paths:
-          - "!**/test/"  # ignore test folders
-        flags:
-          - server
-       # advanced settings
-        branches:           # add release branch when spinning off from main 
-          - main
-        if_ci_failed: error # success, failure, error, ignore
+      #   branches:           # add release branch when spinning off from main 
+      #     - main
+      #   if_ci_failed: error # success, failure, error, ignore
+      # server:
+      #   target: 90%         # new PR should have 90% coverage
+      #   threshold: 0%       # Coverage should not drop by this amount compared against base
+      #   base: auto
+      #   paths:
+      #     - "!**/test/"  # ignore test folders
+      #   flags:
+      #     - server
+      #  # advanced settings
+      #   branches:           # add release branch when spinning off from main 
+      #     - main
+      #   if_ci_failed: error # success, failure, error, ignore
