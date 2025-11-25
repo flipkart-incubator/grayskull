@@ -80,7 +80,7 @@ String dbPassword = secret.getPrivatePart();
 
 Both `server` and `derby-async-audit` depend on the SPI layer. `server` for using interfaces in SPI layer and `derby-async-audit` for providing one implementation in SPI layer.
 
-```
+```text
 
               +---------------+
               |               |
@@ -107,7 +107,7 @@ Both `server` and `derby-async-audit` depend on the SPI layer. `server` for usin
 ### Pluggable Components Architecture
 Server has some components like Authentication Manager, Authorization Manager, Cryptography Manager depend on SPI interfaces for which different implementations can be plugged. Below is the diagram which shows how these managers and SPI are involved in normal HTTP request flow. `server` component provides simple implementations of all the SPIs.
 
-```
+```text
 HTTP Request                                                                                   
      |                                                                     
      v                                                                     
@@ -144,8 +144,8 @@ The Java SDK provides a robust, production-ready client with:
 
 See the [detailed client documentation](clients/java/README.md) for advanced usage.
 
-Clients are provided as separate modules in the `clients` folder. for now only java 8 clients are provided.
-```
+Clients are provided as separate modules in the `clients` folder. For now only Java clients are provided, with support for Java 8 and higher.
+```text
 clients/              # Client libraries
 └── java/             # Java SDK
     ├── client-api/   # Public interfaces
@@ -196,7 +196,7 @@ This way own SPI implementations are picked up first instead of simple implement
 
 ```bash
 # All tests
-mvn clean test
+./mvnw clean test
 ```
 This should also generate code coverage report in `target/site/jacoco` folder of all modules 
 
@@ -218,9 +218,9 @@ This should also generate code coverage report in `target/site/jacoco` folder of
 ### Development Workflow
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to own fork (`git push fork feature/amazing-feature`)
+2. Create a feature branch (`git checkout -b feature`)
+3. Commit your changes (`git commit -m 'Brief description about the feature'`)
+4. Push to own fork (`git push fork feature`)
 5. Open a Pull Request
 
 ### Code Standards
@@ -241,7 +241,7 @@ This should also generate code coverage report in `target/site/jacoco` folder of
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-```
+```text
 Copyright 2025 Flipkart
 
 Licensed under the Apache License, Version 2.0 (the "License");
