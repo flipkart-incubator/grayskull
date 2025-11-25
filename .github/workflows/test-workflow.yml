@@ -42,4 +42,4 @@ jobs:
           event_file: artifacts/Event File/event.json
           event_name: ${{ github.event.workflow_run.event }}
           files: "artifacts/**/*.xml"
-          check_name: "Test Results"
+          check_name: ${{ github.event.workflow_run.name == 'Server' && 'Test Results (Server)' || 'Test Results (Java 8 Client)' }}
