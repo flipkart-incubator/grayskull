@@ -126,4 +126,11 @@
         </plugins>
     </build>
 
+    <distributionManagement>
+        <repository>
+            <id>clojars</id>
+            <url>https://repo.clojars.org</url>
+        </repository>
+    </distributionManagement>
+
 </project>
