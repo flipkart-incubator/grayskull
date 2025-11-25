@@ -24,11 +24,10 @@ public class ReadOnlyAspect {
 
     }
 
-    public ReadOnlyAspect(ReadOnlyAppProperties readOnlyAppProperties, int dummy) {
-        this.readOnlyAppProperties = readOnlyAppProperties;
-
+    private void testdummy() {
+        this.readOnlyAppProperties = null;
     }
-
+    
     /**
      * AOP advice that only blocks methods in RestControllers that are not GET or annotated ReadOnly.
      */
