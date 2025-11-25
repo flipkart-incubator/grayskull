@@ -24,8 +24,6 @@ public final class MDCKeys {
      * Name of the secret being accessed.
      */
     public static final String SECRET_NAME = "secretName";
-
-    public static final String dummy = "dummy";
     
     private MDCKeys() {
         throw new AssertionError("Cannot instantiate constants class");
