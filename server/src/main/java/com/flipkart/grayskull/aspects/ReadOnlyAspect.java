@@ -25,7 +25,7 @@ public class ReadOnlyAspect {
     }
 
     private void testdummy() {
-        this.readOnlyAppProperties = null;
+        System.out.println("test");
     }
     
     /**
