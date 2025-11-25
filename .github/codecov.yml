@@ -2,6 +2,12 @@
 
 coverage:
   status:
+    project: #add everything under here, more options at https://docs.codecov.com/docs/commit-status
+      default:
+        # basic
+        target: 80% #default
+        threshold: 10%
+        base: auto 
     patch:                  # only validate the coverage of the PR
       tests:
         target: 95%         # Almost all test code should be executed
