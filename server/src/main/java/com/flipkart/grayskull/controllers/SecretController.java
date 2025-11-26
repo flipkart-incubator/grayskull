@@ -118,7 +118,8 @@ public class SecretController {
             @PathVariable("version") @Min(1) int version,
             @RequestParam(name = "state", required = false) Optional<LifecycleState> state) {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
-        Map<String, String> auditMetadata = Map.of("publicPart", response.getPublicPart());
+        String publicPart = response.getPublicPart();
+        Map<String, String> auditMetadata = publicPart == null ? Map.of() : Map.of("publicPart", publicPart);
         String userId = SecurityContextHolder.getContext().getAuthentication().getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)

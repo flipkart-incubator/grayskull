@@ -82,11 +82,12 @@ class SecretControllerTest {
                 .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, null, expectedAuditMetadata));
     }
 
-    @Test
+    @ParameterizedTest
     @DisplayName("Should successfully read secret version and log audit")
-    void shouldSuccessfullyReadSecretVersion() {
+    @MethodSource("shouldSuccessfullyReadSecretValueProvider")
+    void shouldSuccessfullyReadSecretVersion(String publicPart, Map<String, String> expectedMetadata) {
         // Arrange
-        SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart("public-data").dataVersion(5).build();
+        SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
 
         when(secretService.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty())).thenReturn(expectedResponse);
@@ -104,6 +105,6 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, null, Map.of("publicPart", expectedResponse.getPublicPart())));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, null, expectedMetadata));
     }
 }
