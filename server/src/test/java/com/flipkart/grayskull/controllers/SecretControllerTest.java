@@ -9,6 +9,8 @@ import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -45,11 +47,21 @@ class SecretControllerTest {
         SecurityContextHolder.clearContext();
     }
 
-    @Test
+    private static Object[][] shouldSuccessfullyReadSecretValueProvider() {
+        return new Object[][]{
+                new Object[]{"public-data", Map.of("publicPart", "public-data")},
+                new Object[]{"", Map.of("publicPart", "")},
+                new Object[]{null, Map.of()}
+        };
+    }
+
+
+    @ParameterizedTest
     @DisplayName("Should successfully read secret data value and log audit")
-    void shouldSuccessfullyReadSecretValue() {
+    @MethodSource("shouldSuccessfullyReadSecretValueProvider")
+    void shouldSuccessfullyReadSecretValue(String publicPart, Map<String, String> expectedAuditMetadata) {
         // Arrange
-        SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart("public-data").dataVersion(5).build();
+        SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
 
         when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME)).thenReturn(expectedResponse);
@@ -67,7 +79,7 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, null, Map.of("publicPart", expectedResponse.getPublicPart())));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, null, expectedAuditMetadata));
     }
 
     @Test

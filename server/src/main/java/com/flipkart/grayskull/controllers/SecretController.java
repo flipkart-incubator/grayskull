@@ -73,7 +73,8 @@ public class SecretController {
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
-        Map<String, String> auditMetadata = Map.of("publicPart", response.getPublicPart());
+        String publicPart = response.getPublicPart();
+        Map<String, String> auditMetadata = publicPart == null ? Map.of() : Map.of("publicPart", publicPart);
         String userId = SecurityContextHolder.getContext().getAuthentication().getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)

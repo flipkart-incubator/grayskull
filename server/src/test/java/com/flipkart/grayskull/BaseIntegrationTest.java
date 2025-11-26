@@ -58,7 +58,11 @@ public abstract class BaseIntegrationTest {
     // region Helper Methods
 
     protected ResultActions performCreateSecret(String projectId, String secretName, String secretValue, String username) throws Exception {
-        CreateSecretRequest createRequest = buildCreateSecretRequest(secretName, secretValue);
+        return performCreateSecret(projectId, secretName, "public-part", secretValue, username);
+    }
+
+    protected ResultActions performCreateSecret(String projectId, String secretName, String publicPart, String secretValue, String username) throws Exception {
+        CreateSecretRequest createRequest = buildCreateSecretRequest(secretName, publicPart, secretValue);
         return mockMvc.perform(post("/v1/projects/{projectId}/secrets", projectId)
                 .with(user(username))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -104,8 +108,8 @@ public abstract class BaseIntegrationTest {
                 .with(user(username)));
     }
 
-    private CreateSecretRequest buildCreateSecretRequest(String name, String value) {
-        SecretDataPayload payload = new SecretDataPayload("public-part", value);
+    private CreateSecretRequest buildCreateSecretRequest(String name, String publicPart, String value) {
+        SecretDataPayload payload = new SecretDataPayload(publicPart, value);
         CreateSecretRequest createRequest = new CreateSecretRequest();
         createRequest.setName(name);
         createRequest.setProvider(SecretProvider.SELF);

@@ -51,6 +51,27 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
         }
 
         @Test
+        void shouldCreateAndReadSecretWithNullPublicPart() throws Exception {
+            final String projectId = "project-create-read";
+            final String secretName = "public-null-secret";
+            final String secretValue = "my-secret-value";
+
+            // Act & Assert: Create the secret
+            performCreateSecret(projectId, secretName, null, secretValue, ADMIN_USER)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.name").value(secretName))
+                    .andExpect(jsonPath("$.data.currentDataVersion").value(1))
+                    .andExpect(jsonPath("$.message").value("Successfully created secret."));
+
+            // Act & Assert: Read the secret's value
+            performReadSecretValue(projectId, secretName, ADMIN_USER)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.privatePart").value(secretValue))
+                    .andExpect(jsonPath("$.data.publicPart").doesNotExist())
+                    .andExpect(jsonPath("$.message").value("Successfully read secret value."));
+        }
+
+        @Test
         void shouldUpgradeSecret() throws Exception {
             final String projectId = "project-upgrade";
             final String secretName = "upgradable-secret";
