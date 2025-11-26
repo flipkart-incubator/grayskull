@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.TimeUnit;
 
 class GrayskullHttpClient {
@@ -129,8 +130,12 @@ class GrayskullHttpClient {
             String protocol = response.protocol().toString();
             return new HttpResponse(statusCode, responseBody, contentType, protocol);
 
+        } catch (SocketTimeoutException e) {
+            // Timeout errors (connection or read timeout)
+            throw new RetryableException(500, "Timeout while communicating with Grayskull server", e);
+            
         } catch (IOException e) {
-            // Network/IO errors (timeouts, connection issues) are generally transient and worth retrying
+            // Network/IO errors are generally transient and worth retrying
             throw new RetryableException(500, "Error communicating with Grayskull server", e);
         }
     }
