@@ -24,7 +24,6 @@ public class SecretDataBase {
      * Public part (non-sensitive).
      * Maximum length is 10,000 characters.
      */
-    @NotBlank
     @Size(max = 10000, message = "Public part must not exceed 10,000 characters")
     private String publicPart;
     
