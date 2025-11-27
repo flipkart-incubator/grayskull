@@ -10,12 +10,13 @@ import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -47,19 +48,10 @@ class SecretControllerTest {
         SecurityContextHolder.clearContext();
     }
 
-    private static Object[][] shouldSuccessfullyReadSecretValueProvider() {
-        return new Object[][]{
-                new Object[]{"public-data", Map.of("publicPart", "public-data")},
-                new Object[]{"", Map.of("publicPart", "")},
-                new Object[]{null, Map.of()}
-        };
-    }
-
-
     @ParameterizedTest
     @DisplayName("Should successfully read secret data value and log audit")
-    @MethodSource("shouldSuccessfullyReadSecretValueProvider")
-    void shouldSuccessfullyReadSecretValue(String publicPart, Map<String, String> expectedAuditMetadata) {
+    @CsvSource({"'public-part'", "''", "null"})
+    void shouldSuccessfullyReadSecretValue(String publicPart) {
         // Arrange
         SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
@@ -76,6 +68,8 @@ class SecretControllerTest {
         // Verify audit logging
         ArgumentCaptor<AuditEntry> auditEntryArgumentCaptor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(auditEntryArgumentCaptor.capture());
+        Map<String, String> expectedAuditMetadata = new HashMap<>();
+        expectedAuditMetadata.put("publicPart", publicPart);
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
@@ -84,8 +78,8 @@ class SecretControllerTest {
 
     @ParameterizedTest
     @DisplayName("Should successfully read secret version and log audit")
-    @MethodSource("shouldSuccessfullyReadSecretValueProvider")
-    void shouldSuccessfullyReadSecretVersion(String publicPart, Map<String, String> expectedMetadata) {
+    @CsvSource({"'public-part'", "''", "null"})
+    void shouldSuccessfullyReadSecretVersion(String publicPart) {
         // Arrange
         SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
@@ -102,6 +96,8 @@ class SecretControllerTest {
         // Verify audit logging
         ArgumentCaptor<AuditEntry> auditEntryArgumentCaptor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(auditEntryArgumentCaptor.capture());
+        Map<String, String> expectedMetadata = new HashMap<>();
+        expectedMetadata.put("publicPart", publicPart);
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
