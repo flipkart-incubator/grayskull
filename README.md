@@ -116,7 +116,19 @@ Both `server` and `derby-async-audit` depend on the SPI layer. `server` for usin
 
 ```
 ### Pluggable Components Architecture
-Server has some components like Authentication Manager, Authorization Manager, Cryptography Manager depend on SPI interfaces for which different implementations can be plugged. Below is the diagram which shows how these managers and SPI are involved in normal HTTP request flow. `server` component provides simple implementations of all the SPIs.
+Server is designed to be a framework like structure in which you can plug in your implementation of some key components like Authentication, Authorization etc.
+
+As of now Grayskull supports 5 pluggable components:
+1. **Authentication ([GrayskullAuthenticationProvider](spi/src/main/java/com/flipkart/grayskull/spi/GrayskullAuthenticationProvider.java))**: Validates user identity from HTTP requests. By default, a simple implementation is provided in server module which accepts any username and password in basic authentication.
+2. **Authorization ([GrayskullAuthorizationProvider](spi/src/main/java/com/flipkart/grayskull/spi/GrayskullAuthorizationProvider.java))**: Determines if authenticated users can perform specific actions on resources. By default, a simple implementation is provided in server module which allows the permissions to be configured in application.properties.
+3. **Cryptography ([EncryptionService](spi/src/main/java/com/flipkart/grayskull/spi/EncryptionService.java))**: Encrypts/decrypts secret data before storage and after retrieval. By default, a simple implementation is provided in server module which uses ChaCha20 encryption with keys present in application.properties.
+4. **Audit ([AsyncAuditLogger](spi/src/main/java/com/flipkart/grayskull/spi/AsyncAuditLogger.java))**: Logs security events and access patterns asynchronously. This is required for auditing things in async mainly used for auditing read API calls without any impact on latency. By default, a simple implementation is provided which just logs to DB in a separate virtual thread. an addition implementation is provided which uses Apache Derby on local disk as intermediate queue for audit events.
+5. **Storage ([repositories](spi/src/main/java/com/flipkart/grayskull/spi/repositories))**: Persists secret metadata, data, and audit information. As of now it is MongoDB based implementation provided in server module.
+
+By having a pluggable architecture like this, Grayskull can provide the core logic and SPIs and let the users implement their own SPIs as per their requirements. And by making it framework like structure and being provided as a dependency, you can directly add to maven/gradle project easily without having to deal with jars separately.
+
+
+Below is the diagram which shows how these SPI are involved in normal HTTP request flow. `server` component provides simple implementations of all the SPIs.
 
 ```text
 HTTP Request                                                                                   
@@ -145,28 +157,8 @@ HTTP Request
 +--------------------+     +------------------+                            
 ```
 
-### Clients SDK
-The Java SDK provides a robust, production-ready client with:
-
-- **Automatic Retries** - Exponential backoff for transient failures
-- **Connection Pooling** - Efficient HTTP connection management
-- **Metrics Integration** - Micrometer and JMX support
-- **Structured Logging** - MDC context for request tracing
-
-Clients are provided as separate modules in the `clients` folder. For now only Java clients are provided, with support for Java 8 and higher.
-```text
-clients/              # Client libraries
-└── java/             # Java SDK
-    ├── client-api/   # Public interfaces
-    └── client-impl/  # Implementation
-```
-
-See the [detailed client documentation](clients/java/README.md) for advanced usage.
-
-## Configuration
-
-### Using own implementation for authentication and authorization
-Create a java application similar to `simple-app` and add the server's dependency in `pom.xml`.
+### Using own implementations for SPIs
+Since server is built like a framework you can add this as dependency in your application and use your implementations for the given SPIs. If you want to have your own implementations for the SPIs then create a java application similar to `simple-app` and add the server's dependency in `pom.xml` and Add own implementations SPIs in the application.
 ```xml
 <dependency>
     <groupId>com.flipkart.grayskull</groupId>
@@ -174,7 +166,6 @@ Create a java application similar to `simple-app` and add the server's dependenc
     <version>0.1.0</version>
 </dependency>
 ```
-Optionally add own implementations of `GrayskullAuthenticationProvider` and `GrayskullAuthorizationProvider` in the application.  
 
 For example if you want to override default authentication implementation with own implementation then add this in your application where spring boot can scan it.
 ```text
@@ -207,10 +198,25 @@ If your SPI implementations are in a separate dependency/package then you can ad
 Assuming `com.example.spi.impl` is the package of SPI implementations and `com.example.app` is the main application package then the annotation should something like this.
 ```java
 @SpringBootApplication(scanBasePackages = {"com.example.spi.impl", "com.example.app"})
+public class MyGrayskullApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(MyGrayskullApplication.class, args);
+    }
+}
 ```
 This way own SPI implementations are picked up first instead of simple implementations provided in `server` and used by the server.
 
 ---
+
+### Clients SDK
+Clients are provided as separate modules in the `clients` folder. Following is the structure of the `clients` folder:
+```text
+clients
+└── java
+    ├── client-api
+    └── client-impl
+```
+For now only Java clients are provided, with support for Java 8 and higher. For usage and examples of the Java client see the [documentation](clients/java/README.md).
 
 
 ## Development
