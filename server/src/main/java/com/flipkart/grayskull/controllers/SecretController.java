@@ -22,6 +22,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -73,7 +74,8 @@ public class SecretController {
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
-        Map<String, String> auditMetadata = Map.of("publicPart", response.getPublicPart());
+        Map<String, String> auditMetadata = new HashMap<>();
+        auditMetadata.put("publicPart", response.getPublicPart());
         String userId = SecurityContextHolder.getContext().getAuthentication().getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)
@@ -117,7 +119,8 @@ public class SecretController {
             @PathVariable("version") @Min(1) int version,
             @RequestParam(name = "state", required = false) Optional<LifecycleState> state) {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
-        Map<String, String> auditMetadata = Map.of("publicPart", response.getPublicPart());
+        Map<String, String> auditMetadata = new HashMap<>();
+        auditMetadata.put("publicPart", response.getPublicPart());
         String userId = SecurityContextHolder.getContext().getAuthentication().getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)
