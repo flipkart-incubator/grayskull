@@ -12,22 +12,32 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Example usage:
  * <pre>
- *     MetricsPublisher publisher = new MetricsPublisher();
+ *     MetricsPublisher publisher = MetricsPublisher.getInstance();
  *     publisher.recordRequest("getSecret.project1:secret1", 200, 150);
  * </pre>
  * </p>
  *
  * Metrics are enabled by default but can be disabled through SDK configuration.
+ * This class follows the singleton pattern to ensure a single metrics publisher instance.
  */
 public final class MetricsPublisher {
     
     private static final Logger log = LoggerFactory.getLogger(MetricsPublisher.class);
+    private static final MetricsPublisher INSTANCE = new MetricsPublisher();
     private static volatile boolean metricsEnabled = true;
     
     private final MetricsRecorder recorder;
 
-    public MetricsPublisher() {
+    private MetricsPublisher() {
         this.recorder = detectRecorder();
+    }
+
+    /**
+     * Returns the singleton instance of MetricsPublisher.
+     * @return the singleton instance
+     */
+    public static MetricsPublisher getInstance() {
+        return INSTANCE;
     }
 
     /**

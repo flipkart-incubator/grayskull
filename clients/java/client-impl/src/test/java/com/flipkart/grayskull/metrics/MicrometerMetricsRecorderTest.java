@@ -5,6 +5,8 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -15,15 +17,26 @@ class MicrometerMetricsRecorderTest {
     private MeterRegistry meterRegistry;
     
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         // Clear the global registry before each test
         Metrics.globalRegistry.clear();
+        
+        // Clear static timers map using reflection to avoid stale references
+        clearStaticTimersMap();
         
         // Add a simple meter registry for testing
         meterRegistry = new SimpleMeterRegistry();
         Metrics.globalRegistry.add(meterRegistry);
         
         recorder = new MicrometerMetricsRecorder();
+    }
+    
+    private void clearStaticTimersMap() throws Exception {
+        // Use reflection to clear the static map in MicrometerMetricsRecorder
+        Field timersField = MicrometerMetricsRecorder.class.getDeclaredField("timers");
+        timersField.setAccessible(true);
+        Map<?, ?> timers = (Map<?, ?>) timersField.get(null);
+        timers.clear();
     }
     
     @Test

@@ -8,6 +8,8 @@ import javax.management.MBeanServer;
 import javax.management.ObjectInstance;
 import javax.management.ObjectName;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +33,22 @@ class JmxMetricsRecorderTest {
         for (ObjectInstance mbean : mbeans) {
             mBeanServer.unregisterMBean(mbean.getObjectName());
         }
+        
+        // Clear static tracker maps using reflection to avoid stale references after MBean unregistration
+        clearStaticTrackerMaps();
+    }
+    
+    private void clearStaticTrackerMaps() throws Exception {
+        // Use reflection to clear the static maps in JmxMetricsRecorder
+        Field durationTrackersField = JmxMetricsRecorder.class.getDeclaredField("durationTrackers");
+        durationTrackersField.setAccessible(true);
+        Map<?, ?> durationTrackers = (Map<?, ?>) durationTrackersField.get(null);
+        durationTrackers.clear();
+        
+        Field retryTrackersField = JmxMetricsRecorder.class.getDeclaredField("retryTrackers");
+        retryTrackersField.setAccessible(true);
+        Map<?, ?> retryTrackers = (Map<?, ?>) retryTrackersField.get(null);
+        retryTrackers.clear();
     }
     
     @Test

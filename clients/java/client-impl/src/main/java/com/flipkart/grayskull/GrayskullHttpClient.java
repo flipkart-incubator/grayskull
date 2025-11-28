@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.TimeUnit;
 
 class GrayskullHttpClient {
@@ -21,7 +22,6 @@ class GrayskullHttpClient {
 
     private final OkHttpClient httpClient;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
-    private final MetricsPublisher metricsPublisher;
     private final RetryUtil retryUtil;
 
 
@@ -36,9 +36,6 @@ class GrayskullHttpClient {
                         5,
                         TimeUnit.MINUTES))
                 .build();
-        
-        // Initialize metrics publisher if enabled
-        this.metricsPublisher = clientConfiguration.isMetricsEnabled() ? new MetricsPublisher() : null;
         
         // Initialize retry utility
         this.retryUtil = new RetryUtil(clientConfiguration.getMaxRetries(), clientConfiguration.getMinRetryDelay());
@@ -69,8 +66,8 @@ class GrayskullHttpClient {
             throw new GrayskullException(500, "Unexpected error during HTTP request", e);
 
         } finally {
-            if (metricsPublisher != null && attemptCount[0] > 1) {
-                metricsPublisher.recordRetry(url, attemptCount[0], finalAttemptSuccess);
+            if (attemptCount[0] > 1) {
+                MetricsPublisher.getInstance().recordRetry(url, attemptCount[0], finalAttemptSuccess);
             }
         }
     }
@@ -129,8 +126,12 @@ class GrayskullHttpClient {
             String protocol = response.protocol().toString();
             return new HttpResponse(statusCode, responseBody, contentType, protocol);
 
+        } catch (SocketTimeoutException e) {
+            // Timeout errors (connection or read timeout)
+            throw new RetryableException(500, "Timeout while communicating with Grayskull server", e);
+            
         } catch (IOException e) {
-            // Network/IO errors (timeouts, connection issues) are generally transient and worth retrying
+            // Network/IO errors are generally transient and worth retrying
             throw new RetryableException(500, "Error communicating with Grayskull server", e);
         }
     }
