@@ -41,7 +41,6 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private final GrayskullClientConfiguration grayskullClientConfiguration;
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final MetricsPublisher metricsPublisher;
 
     /**
      * Creates a new Grayskull client implementation.
@@ -67,8 +66,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new ParameterNamesModule());
         
-        // Initialize metrics publisher if enabled
-        this.metricsPublisher = grayskullClientConfiguration.isMetricsEnabled() ? new MetricsPublisher() : null;
+        // Configure metrics based on client configuration
+        MetricsPublisher.configure(grayskullClientConfiguration.isMetricsEnabled());
     }
     
     /**
@@ -143,12 +142,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
             statusCode = e.getStatusCode();
             throw e;
         } finally {
-            if (metricsPublisher != null) {
-                long duration = System.nanoTime() - startTime;
-                long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
-                
-                metricsPublisher.recordRequest("getSecret." + secretRef, statusCode, durationMs);
-            }
+            long duration = System.nanoTime() - startTime;
+            long durationMs = TimeUnit.NANOSECONDS.toMillis(duration);
+            MetricsPublisher.getInstance().recordRequest("getSecret." + secretRef, statusCode, durationMs);
             
             // Clean up MDC context
             MDC.remove(MDCKeys.PROJECT_ID);

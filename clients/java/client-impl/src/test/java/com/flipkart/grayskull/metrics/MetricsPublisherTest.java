@@ -15,8 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MetricsPublisherTest {
     
-    private MetricsPublisher publisher;
-    
     @BeforeEach
     void setUp() {
         // Reset metrics configuration
@@ -39,7 +37,7 @@ class MetricsPublisherTest {
     
     @Test
     void testRecordRequestWhenEnabled() throws Exception {
-        publisher = new MetricsPublisher();
+        MetricsPublisher publisher = MetricsPublisher.getInstance();
         MetricsPublisher.configure(true);
         
         String metricName = "test.enabled";
@@ -52,7 +50,7 @@ class MetricsPublisherTest {
     
     @Test
     void testRecordRequestWhenDisabled() {
-        publisher = new MetricsPublisher();
+        MetricsPublisher publisher = MetricsPublisher.getInstance();
         MetricsPublisher.configure(false);
         
         // Should not throw exception, just be a no-op
@@ -61,7 +59,7 @@ class MetricsPublisherTest {
     
     @Test
     void testRecordRetryWhenEnabled() {
-        publisher = new MetricsPublisher();
+        MetricsPublisher publisher = MetricsPublisher.getInstance();
         MetricsPublisher.configure(true);
         
         assertDoesNotThrow(() -> publisher.recordRetry("http://localhost:8080/v1/secrets", 2, true));
@@ -69,7 +67,7 @@ class MetricsPublisherTest {
     
     @Test
     void testRecordRetryWhenDisabled() {
-        publisher = new MetricsPublisher();
+        MetricsPublisher publisher = MetricsPublisher.getInstance();
         MetricsPublisher.configure(false);
         
         // Should not throw exception, just be a no-op
@@ -78,7 +76,7 @@ class MetricsPublisherTest {
     
     @Test
     void testConfigureEnableDisable() {
-        publisher = new MetricsPublisher();
+        MetricsPublisher publisher = MetricsPublisher.getInstance();
         
         // Enable
         MetricsPublisher.configure(true);
@@ -94,11 +92,14 @@ class MetricsPublisherTest {
     }
     
     @Test
-    void testMultiplePublisherInstances() {
-        MetricsPublisher publisher1 = new MetricsPublisher();
-        MetricsPublisher publisher2 = new MetricsPublisher();
+    void testSingletonInstance() {
+        MetricsPublisher publisher1 = MetricsPublisher.getInstance();
+        MetricsPublisher publisher2 = MetricsPublisher.getInstance();
         
-        // Both should work independently
+        // Both references should point to the same instance
+        assertSame(publisher1, publisher2);
+        
+        // Should work correctly
         assertDoesNotThrow(() -> {
             publisher1.recordRequest("test.p1", 200, 100L);
             publisher2.recordRequest("test.p2", 404, 50L);
@@ -108,7 +109,7 @@ class MetricsPublisherTest {
     
     @Test
     void testConcurrentRecording() throws InterruptedException {
-        publisher = new MetricsPublisher();
+        MetricsPublisher publisher = MetricsPublisher.getInstance();
         
         Thread[] threads = new Thread[10];
         for (int i = 0; i < threads.length; i++) {
@@ -130,14 +131,17 @@ class MetricsPublisherTest {
     }
     
     @Test
-    void testGlobalConfigurationAffectsAllInstances() {
-        MetricsPublisher publisher1 = new MetricsPublisher();
-        MetricsPublisher publisher2 = new MetricsPublisher();
+    void testGlobalConfigurationAffectsSingleton() {
+        MetricsPublisher publisher1 = MetricsPublisher.getInstance();
+        MetricsPublisher publisher2 = MetricsPublisher.getInstance();
+        
+        // Both references should be the same singleton
+        assertSame(publisher1, publisher2);
         
         // Disable globally
         MetricsPublisher.configure(false);
         
-        // Both publishers should respect the global setting
+        // Both references should respect the global setting (since they're the same instance)
         // These should be no-ops
         publisher1.recordRequest("test.global1", 200, 100L);
         publisher2.recordRequest("test.global2", 200, 100L);
