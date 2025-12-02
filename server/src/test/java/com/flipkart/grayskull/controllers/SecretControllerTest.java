@@ -9,11 +9,14 @@ import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -45,11 +48,12 @@ class SecretControllerTest {
         SecurityContextHolder.clearContext();
     }
 
-    @Test
+    @ParameterizedTest
     @DisplayName("Should successfully read secret data value and log audit")
-    void shouldSuccessfullyReadSecretValue() {
+    @CsvSource({"'public-part'", "''", "null"})
+    void shouldSuccessfullyReadSecretValue(String publicPart) {
         // Arrange
-        SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart("public-data").dataVersion(5).build();
+        SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
 
         when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME)).thenReturn(expectedResponse);
@@ -64,17 +68,20 @@ class SecretControllerTest {
         // Verify audit logging
         ArgumentCaptor<AuditEntry> auditEntryArgumentCaptor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(auditEntryArgumentCaptor.capture());
+        Map<String, String> expectedAuditMetadata = new HashMap<>();
+        expectedAuditMetadata.put("publicPart", publicPart);
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, null, Map.of("publicPart", expectedResponse.getPublicPart())));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, null, expectedAuditMetadata));
     }
 
-    @Test
+    @ParameterizedTest
     @DisplayName("Should successfully read secret version and log audit")
-    void shouldSuccessfullyReadSecretVersion() {
+    @CsvSource({"'public-part'", "''", "null"})
+    void shouldSuccessfullyReadSecretVersion(String publicPart) {
         // Arrange
-        SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart("public-data").dataVersion(5).build();
+        SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
 
         when(secretService.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty())).thenReturn(expectedResponse);
@@ -89,9 +96,11 @@ class SecretControllerTest {
         // Verify audit logging
         ArgumentCaptor<AuditEntry> auditEntryArgumentCaptor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(auditEntryArgumentCaptor.capture());
+        Map<String, String> expectedMetadata = new HashMap<>();
+        expectedMetadata.put("publicPart", publicPart);
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, null, Map.of("publicPart", expectedResponse.getPublicPart())));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, null, expectedMetadata));
     }
 }

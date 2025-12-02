@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.metrics;
 
+import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import java.lang.management.ManagementFactory;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,8 +12,9 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 final class JmxMetricsRecorder implements MetricsRecorder {
     
-    private final ConcurrentHashMap<String, DurationTracker> durationTrackers = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, RetryTracker> retryTrackers = new ConcurrentHashMap<>();
+    // Static maps shared across all instances to match global JMX MBean registration
+    private static final ConcurrentHashMap<String, DurationTracker> durationTrackers = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, RetryTracker> retryTrackers = new ConcurrentHashMap<>();
 
     @Override
     public void recordRequest(String name, int statusCode, long durationMs) {
@@ -24,7 +26,13 @@ final class JmxMetricsRecorder implements MetricsRecorder {
             try {
                 ObjectName metricName = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
                 DurationTracker tracker = new DurationTracker();
-                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, metricName);
+                MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+                
+                // Only register if not already registered
+                if (!mBeanServer.isRegistered(metricName)) {
+                    mBeanServer.registerMBean(tracker, metricName);
+                }
+                
                 return tracker;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to register JMX duration tracker for: " + k, e);
@@ -36,7 +44,13 @@ final class JmxMetricsRecorder implements MetricsRecorder {
             try {
                 ObjectName metricName = new ObjectName("Grayskull:type=HttpClientMetrics,name=" + ObjectName.quote(k));
                 DurationTracker tracker = new DurationTracker();
-                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, metricName);
+                MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+                
+                // Only register if not already registered 
+                if (!mBeanServer.isRegistered(metricName)) {
+                    mBeanServer.registerMBean(tracker, metricName);
+                }
+
                 return tracker;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to register JMX overall duration tracker for: " + k, e);
@@ -54,7 +68,13 @@ final class JmxMetricsRecorder implements MetricsRecorder {
             try {
                 ObjectName name = new ObjectName("Grayskull:type=HttpClientRetryMetrics,name=" + ObjectName.quote(k));
                 RetryTracker tracker = new RetryTracker();
-                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, name);
+                MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+                
+                // Only register if not already registered
+                if (!mBeanServer.isRegistered(name)) {
+                    mBeanServer.registerMBean(tracker, name);
+                }
+                
                 return tracker;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to register JMX path-level retry tracker for: " + k, e);
@@ -67,7 +87,13 @@ final class JmxMetricsRecorder implements MetricsRecorder {
             try {
                 ObjectName name = new ObjectName("Grayskull:type=HttpClientRetryMetrics,name=" + ObjectName.quote(k));
                 RetryTracker tracker = new RetryTracker();
-                ManagementFactory.getPlatformMBeanServer().registerMBean(tracker, name);
+                MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+                
+                // Only register if not already registered 
+                if (!mBeanServer.isRegistered(name)) {
+                    mBeanServer.registerMBean(tracker, name);
+                }
+                
                 return tracker;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to register JMX granular retry tracker for: " + k, e);

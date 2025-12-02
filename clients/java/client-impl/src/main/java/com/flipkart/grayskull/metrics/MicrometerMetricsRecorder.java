@@ -19,7 +19,8 @@ import java.util.concurrent.TimeUnit;
  */
 final class MicrometerMetricsRecorder implements MetricsRecorder {
     
-    private final ConcurrentHashMap<String, Timer> timers = new ConcurrentHashMap<>();
+    // Static map shared across all instances to match global MeterRegistry
+    private static final ConcurrentHashMap<String, Timer> timers = new ConcurrentHashMap<>();
     private final MeterRegistry meterRegistry;
 
     MicrometerMetricsRecorder() {
