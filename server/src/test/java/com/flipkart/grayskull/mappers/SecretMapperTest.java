@@ -1,19 +1,17 @@
 package com.flipkart.grayskull.mappers;
 
-import com.flipkart.grayskull.entities.SecretEntity;
 import com.flipkart.grayskull.entities.SecretDataEntity;
-import com.flipkart.grayskull.spi.models.Secret;
-import com.flipkart.grayskull.spi.models.SecretData;
-import com.flipkart.grayskull.spi.models.enums.LifecycleState;
+import com.flipkart.grayskull.entities.SecretEntity;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.SecretDataPayload;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
-import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
-import com.flipkart.grayskull.models.enums.SecretProvider;
-
+import com.flipkart.grayskull.models.dto.response.SecretResponse;
+import com.flipkart.grayskull.spi.models.Secret;
+import com.flipkart.grayskull.spi.models.SecretData;
+import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -51,7 +49,7 @@ class SecretMapperTest {
             SecretDataPayload payload = new SecretDataPayload("public-value", "private-value");
             CreateSecretRequest request = new CreateSecretRequest();
             request.setName("test-secret");
-            request.setProvider(SecretProvider.SELF);
+            request.setProvider("SELF");
             request.setProviderMeta(Map.of("key1", "value1"));
             request.setData(payload);
 
@@ -69,7 +67,7 @@ class SecretMapperTest {
             assertEquals(systemUser, secret.getUpdatedBy());
             assertEquals(1, secret.getMetadataVersion());
             assertEquals(1, secret.getCurrentDataVersion());
-            assertEquals(SecretProvider.SELF.toString(), secret.getProvider());
+            assertEquals("SELF", secret.getProvider());
             assertEquals(Map.of("key1", "value1"), secret.getProviderMeta());
         }
 

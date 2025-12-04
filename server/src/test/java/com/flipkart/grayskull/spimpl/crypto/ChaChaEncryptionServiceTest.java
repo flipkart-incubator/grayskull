@@ -3,10 +3,9 @@ package com.flipkart.grayskull.spimpl.crypto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ChaChaEncryptionServiceTest {
 
@@ -23,9 +22,8 @@ class ChaChaEncryptionServiceTest {
 
     @Test
     void encryptAndDecryptReturnsOriginalData() {
-        byte[] original = "SensitiveData123".getBytes(StandardCharsets.UTF_8);
-        byte[] encrypted = encryptionService.encrypt(original, KEY_ID);
-        byte[] decrypted = encryptionService.decrypt(encrypted, KEY_ID);
-        assertArrayEquals(original, decrypted);
+        String encrypted = encryptionService.encrypt("SensitiveData123", KEY_ID);
+        String decrypted = encryptionService.decrypt(encrypted, KEY_ID);
+        assertEquals("SensitiveData123", decrypted);
     }
 }
