@@ -4,18 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.SecretDataPayload;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
-import com.flipkart.grayskull.models.enums.SecretProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -38,16 +33,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 public abstract class BaseIntegrationTest {
-
-    @Container
-    static MongoDBContainer mongoDBContainer = new MongoDBContainer("mongo:latest");
-
-    @DynamicPropertySource
-    static void setProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.data.mongodb.uri", mongoDBContainer::getReplicaSetUrl);
-        registry.add("spring.data.mongodb.database", () -> "test");
-        registry.add("grayskull.crypto.keys.test-key", () -> "wVXG0jhpwG0DwTMt3sQK57hukC1Uhl/yUuvH9GOP3B4=");
-    }
 
     @Autowired
     protected MockMvc mockMvc;
@@ -103,16 +88,11 @@ public abstract class BaseIntegrationTest {
                 .with(user(username)));
     }
 
-    protected ResultActions performGetSecretByVersion(String projectId, String secretName, int version, String username) throws Exception {
-        return mockMvc.perform(get("/v1/projects/{projectId}/secrets/{secretName}/versions/{version}", projectId, secretName, version)
-                .with(user(username)));
-    }
-
     private CreateSecretRequest buildCreateSecretRequest(String name, String publicPart, String value) {
         SecretDataPayload payload = new SecretDataPayload(publicPart, value);
         CreateSecretRequest createRequest = new CreateSecretRequest();
         createRequest.setName(name);
-        createRequest.setProvider(SecretProvider.SELF);
+        createRequest.setProvider("SELF");
         createRequest.setData(payload);
         return createRequest;
     }

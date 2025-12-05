@@ -11,10 +11,7 @@ import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
-import org.mapstruct.InheritConfiguration;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.ReportingPolicy;
+import org.mapstruct.*;
 
 import java.util.UUID;
 
@@ -25,8 +22,8 @@ import java.util.UUID;
  * This mapper uses MapStruct to generate the implementation at compile-time,
  * ensuring high performance and type safety.
  */
-@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE, imports = { UUID.class,
-        LifecycleState.class })
+@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE, imports = { UUID.class})
+@AnnotateWith(GeneratedMapper.class)
 public interface SecretMapper {
 
     /**
@@ -42,7 +39,7 @@ public interface SecretMapper {
                 .currentDataVersion(1)
                 .lastRotated(null)
                 .state(LifecycleState.ACTIVE)
-                .provider(request.getProvider() != null ? request.getProvider().name() : null)
+                .provider(request.getProvider())
                 .providerMeta(request.getProviderMeta())
                 .metadataVersion(1)
                 .version(null)

@@ -93,4 +93,19 @@ public class GrayskullSecurity {
                         }))
                 .orElse(false);
     }
+
+    /**
+     * Checks if the current user has permission to perform a global-level action
+     * <br/>
+     * This method is designed for actions that are not project or secret-specific,
+     * such as creating other resources like secret providers.
+     *
+     * @param action     The action to authorize (e.g., "CREATE_PROVIDER").
+     * @return {@code true} if authorized, {@code false} otherwise.
+     */
+    public boolean hasPermission(String action) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        AuthorizationContext context = AuthorizationContext.forGlobal(authentication);
+        return authorizationProvider.isAuthorized(context, action);
+    }
 }

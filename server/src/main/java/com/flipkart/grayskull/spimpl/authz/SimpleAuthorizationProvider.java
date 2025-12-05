@@ -37,7 +37,7 @@ public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvid
 
         return authorizationProperties.getRules().stream()
             .filter(rule -> userMatches(rule, username))
-            .filter(rule -> projectMatches(rule, authorizationContext.getProjectId()))
+            .filter(rule -> projectMatches(rule, authorizationContext.getProjectId().orElse(null)))
             .filter(rule -> secretMatches(rule, authorizationContext.getSecretName().orElse(null)))
             .anyMatch(rule -> actionMatches(rule, action));
     }
