@@ -13,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,6 +34,7 @@ public class SecretProviderController {
     private final Validator validator;
 
     @GetMapping
+    @PreAuthorize("@grayskullSecurity.hasPermission('providers.list')")
     public ResponseEntity<List<SecretProvider>> listProviders() {
         log.debug("Received request to list all secret providers");
         
@@ -41,6 +43,7 @@ public class SecretProviderController {
     }
 
     @GetMapping("/{name}")
+    @PreAuthorize("@grayskullSecurity.hasPermission('providers.read')")
     public ResponseEntity<SecretProvider> getProvider(@PathVariable @NotBlank String name) {
         log.debug("Received request to get secret provider: {}", name);
         
@@ -49,6 +52,7 @@ public class SecretProviderController {
     }
 
     @PostMapping
+    @PreAuthorize("@grayskullSecurity.hasPermission('providers.create')")
     public ResponseEntity<SecretProvider> createProvider(@Valid @RequestBody CreateSecretProviderRequest request) {
         log.debug("Received request to create secret provider: {}", request.getName());
         validateAuthAttributes(request);
@@ -70,6 +74,7 @@ public class SecretProviderController {
 
 
     @PutMapping("/{name}")
+    @PreAuthorize("@grayskullSecurity.hasPermission('providers.update')")
     public ResponseEntity<SecretProvider> updateProvider(@PathVariable @NotBlank String name, @Valid @RequestBody SecretProviderRequest request) {
         log.debug("Received request to update secret provider: {}", name);
         validateAuthAttributes(request);

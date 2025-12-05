@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SecretProviderControllerIntegrationTest extends BaseIntegrationTest {
 
-    private static final String USERNAME = "test-user";
+    private static final String USERNAME = "admin";
     private static final String PROVIDERS_URL = "/v1/providers";
 
 
@@ -46,6 +46,13 @@ class SecretProviderControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[*].name", containsInAnyOrder("provider1", "provider2")));
+    }
+
+    @Test
+    void listProviders_NonAdminUser_ReturnsForbidden() throws Exception {
+        mockMvc.perform(get(PROVIDERS_URL).with(user("test-user")))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON));
     }
 
     @Test
