@@ -16,7 +16,7 @@ import jakarta.validation.constraints.Size;
 public class CreateSecretProviderRequest extends SecretProviderRequest {
     
     /**
-     * Provider name, must be unique (max 255 chars).
+     * Provider name, must be unique (max 50 chars).
      */
     @NotBlank
     @Size(max = 50)

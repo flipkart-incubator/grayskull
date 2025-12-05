@@ -44,22 +44,26 @@ public class SecretEncryptionUtil {
         }
     }
 
+    private boolean isReadWritable(PropertyDescriptor propertyDescriptor) {
+        return propertyDescriptor.getReadMethod() != null && propertyDescriptor.getWriteMethod() != null;
+    }
+
     private boolean isSensitive(PropertyDescriptor propertyDescriptor) {
-        boolean sensitive = false;
-        if (propertyDescriptor.getReadMethod() != null) {
-            sensitive = propertyDescriptor.getReadMethod().isAnnotationPresent(Sensitive.class);
-        }
-        if (!sensitive && propertyDescriptor.getWriteMethod() != null) {
-            sensitive = propertyDescriptor.getWriteMethod().isAnnotationPresent(Sensitive.class);
-        }
-        return sensitive;
+        return propertyDescriptor.getReadMethod().isAnnotationPresent(Sensitive.class) || propertyDescriptor.getWriteMethod().isAnnotationPresent(Sensitive.class);
+    }
+
+    private boolean isString(PropertyDescriptor propertyDescriptor) {
+        return propertyDescriptor.getPropertyType().equals(String.class);
     }
 
     public void encryptSensitiveFields(Object object, String keyId) {
+        if (object == null) {
+            return;
+        }
         try {
             BeanInfo beanInfo = Introspector.getBeanInfo(object.getClass());
             for (PropertyDescriptor propertyDescriptor : beanInfo.getPropertyDescriptors()) {
-                if (isSensitive(propertyDescriptor) && propertyDescriptor.getPropertyType().equals(String.class)) {
+                if (isReadWritable(propertyDescriptor) && isString(propertyDescriptor) && isSensitive(propertyDescriptor)) {
                     propertyDescriptor.getWriteMethod().invoke(object, encryptionService.encrypt((String) propertyDescriptor.getReadMethod().invoke(object), keyId));
                 }
             }

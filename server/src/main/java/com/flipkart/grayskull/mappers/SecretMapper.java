@@ -39,7 +39,7 @@ public interface SecretMapper {
                 .currentDataVersion(1)
                 .lastRotated(null)
                 .state(LifecycleState.ACTIVE)
-                .provider(request.getProvider() != null ? request.getProvider() : null)
+                .provider(request.getProvider())
                 .providerMeta(request.getProviderMeta())
                 .metadataVersion(1)
                 .version(null)

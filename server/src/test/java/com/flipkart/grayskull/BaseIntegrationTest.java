@@ -88,11 +88,6 @@ public abstract class BaseIntegrationTest {
                 .with(user(username)));
     }
 
-    protected void performGetSecretByVersion(String projectId, String secretName, int version, String username) throws Exception {
-        mockMvc.perform(get("/v1/projects/{projectId}/secrets/{secretName}/versions/{version}", projectId, secretName, version)
-                .with(user(username)));
-    }
-
     private CreateSecretRequest buildCreateSecretRequest(String name, String publicPart, String value) {
         SecretDataPayload payload = new SecretDataPayload(publicPart, value);
         CreateSecretRequest createRequest = new CreateSecretRequest();

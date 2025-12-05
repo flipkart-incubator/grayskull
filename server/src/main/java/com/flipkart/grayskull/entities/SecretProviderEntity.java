@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.springframework.data.annotation.AccessType;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -22,6 +23,7 @@ import java.time.Instant;
 @Document(collection = "secretProvider")
 @CompoundIndex(unique = true, useGeneratedName = true, def = "{'name': 1}")
 @NoArgsConstructor
+@AccessType(AccessType.Type.PROPERTY)
 public class SecretProviderEntity extends SecretProvider {
     @Id
     @JsonIgnore

@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.Map;
 
@@ -207,7 +206,8 @@ class SecretProviderControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(post(PROVIDERS_URL)
                 .with(user(USERNAME))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)));
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
     }
 
     private CreateSecretProviderRequest buildBasicProviderRequest(String name) {

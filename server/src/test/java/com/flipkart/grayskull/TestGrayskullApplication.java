@@ -1,9 +1,8 @@
 package com.flipkart.grayskull;
 
+import jakarta.annotation.PreDestroy;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.event.ContextStoppedEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.testcontainers.containers.MongoDBContainer;
 
@@ -25,8 +24,8 @@ public class TestGrayskullApplication {
 
     private final MongoDBContainer mongoDBContainer = new MongoDBContainer("mongo:latest");
 
-    @EventListener
-    public void onContextStoppedEvent(ContextStoppedEvent event) {
+    @PreDestroy
+    public void onContextStoppedEvent() {
         mongoDBContainer.stop();
     }
 
