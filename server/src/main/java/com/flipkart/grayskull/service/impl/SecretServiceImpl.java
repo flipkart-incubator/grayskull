@@ -155,6 +155,10 @@ public class SecretServiceImpl implements SecretService {
         
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
 
+        if (!"SELF".equals(secret.getProvider())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Upgrade secret is supported only for self-managed secrets");
+        }
+
         String keyId = resolveKmsKeyId(projectId);
         int newVersion = secret.getCurrentDataVersion() + 1;
 

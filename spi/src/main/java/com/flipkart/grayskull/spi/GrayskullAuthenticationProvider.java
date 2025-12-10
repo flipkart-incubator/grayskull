@@ -1,8 +1,8 @@
 package com.flipkart.grayskull.spi;
 
+import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.core.Authentication;
 
 /**
  * Interface for an authentication provider in the Grayskull security framework.
@@ -16,8 +16,8 @@ public interface GrayskullAuthenticationProvider {
 
     /**
      * Authenticate the request.
-     * If returned object is null, the request will be contniued and might fail later if the api is not open.
+     * If returned object is null, the request will be continued and might fail later if the api is not open.
      * If an AuthenticationException is thrown, the request will be rejected right away.
      */
-    Authentication authenticate(HttpServletRequest request);
+    GrayskullUser authenticate(HttpServletRequest request);
 }

@@ -13,7 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static com.flipkart.grayskull.controllers.GrayskullUserRequestPostProcessor.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
 /**

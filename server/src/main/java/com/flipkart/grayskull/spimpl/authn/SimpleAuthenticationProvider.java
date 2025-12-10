@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.spimpl.authn;
 
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
+import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.web.authentication.AuthenticationConverter;
@@ -13,6 +14,8 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationCo
  */
 public class SimpleAuthenticationProvider implements GrayskullAuthenticationProvider {
 
+    private static final String PROXY_HEADER = "x-proxy-user";
+
     private final AuthenticationConverter authenticationConverter = new BasicAuthenticationConverter();
     private AuthenticationManager authenticationManager;
 
@@ -22,11 +25,18 @@ public class SimpleAuthenticationProvider implements GrayskullAuthenticationProv
     }
 
     @Override
-    public Authentication authenticate(HttpServletRequest request) {
+    public GrayskullUser authenticate(HttpServletRequest request) {
         Authentication authRequest = authenticationConverter.convert(request);
         if (authRequest == null) {
             return null;
         }
-        return authenticationManager.authenticate(authRequest);
+        Authentication authenticate = authenticationManager.authenticate(authRequest);
+        String name = authenticate.getName();
+        String actor = null;
+        if (request.getHeader(PROXY_HEADER) != null) {
+            actor = name;
+            name = request.getHeader(PROXY_HEADER);
+        }
+        return new SimpleGrayskullUser(name, actor);
     }
 }
