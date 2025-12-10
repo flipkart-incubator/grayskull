@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.spi;
 
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
+import org.springframework.security.access.AccessDeniedException;
 
 /**
  * Interface for an authorization provider in the Grayskull security framework.
@@ -14,8 +15,8 @@ public interface GrayskullAuthorizationProvider {
      *
      * @param authorizationContext The context object containing information about the resource and principal.
      * @param action               The action being performed (e.g., from {@link com.flipkart.grayskull.models.authz.GrayskullActions}).
-     * @return {@code true} if the user is authorized, {@code false} otherwise.
+     * @throws AccessDeniedException when the user is not authorized to perform the action.
      */
-    boolean isAuthorized(AuthorizationContext authorizationContext, String action);
+    void isAuthorized(AuthorizationContext authorizationContext, String action) throws AccessDeniedException;
 
 } 

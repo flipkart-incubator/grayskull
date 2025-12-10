@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
+import static com.flipkart.grayskull.controllers.GrayskullUserRequestPostProcessor.user;
 import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -242,7 +242,7 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
         @Test
         void shouldReturnForbiddenWithoutCredentials() throws Exception {
             mockMvc.perform(get("/v1/projects/some-project/secrets"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test

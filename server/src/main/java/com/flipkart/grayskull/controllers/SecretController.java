@@ -38,7 +38,7 @@ public class SecretController {
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
-    @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, 'secrets.list')")
+    @PreAuthorize("@grayskullSecurity.ensureEmptyActor() and @grayskullSecurity.hasPermission(#projectId, 'secrets.list')")
     public ResponseTemplate<ListSecretsResponse> listSecrets(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @RequestParam(name = "offset", defaultValue = "0") @Min(0) int offset,
@@ -49,7 +49,7 @@ public class SecretController {
 
     @Operation(summary = "Creates a new secret for a given project.")
     @PostMapping
-    @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, 'secrets.create')")
+    @PreAuthorize("@grayskullSecurity.checkProviderAuthorization(#request.getProvider()) and @grayskullSecurity.hasPermission(#projectId, 'secrets.create')")
     public ResponseTemplate<SecretResponse> createSecret(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @Valid @RequestBody CreateSecretRequest request) {

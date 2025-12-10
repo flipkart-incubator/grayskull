@@ -5,6 +5,7 @@ import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
@@ -24,22 +25,25 @@ public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvid
     private final AuthorizationProperties authorizationProperties;
 
     @Override
-    public boolean isAuthorized(AuthorizationContext authorizationContext, String action) {
+    public void isAuthorized(AuthorizationContext authorizationContext, String action) {
         Authentication authentication = authorizationContext.getAuthentication();
         if (authentication == null) {
-            return false;
+            throw new AccessDeniedException("User is not authenticated");
         }
 
         String username = authentication.getName();
         if (authorizationProperties.getRules() == null) {
-            return false;
+            throw new AccessDeniedException("No authorization rules found");
         }
 
-        return authorizationProperties.getRules().stream()
-            .filter(rule -> userMatches(rule, username))
-            .filter(rule -> projectMatches(rule, authorizationContext.getProjectId().orElse(null)))
-            .filter(rule -> secretMatches(rule, authorizationContext.getSecretName().orElse(null)))
-            .anyMatch(rule -> actionMatches(rule, action));
+        boolean isAuthorized = authorizationProperties.getRules().stream()
+                .filter(rule -> userMatches(rule, username))
+                .filter(rule -> projectMatches(rule, authorizationContext.getProjectId().orElse(null)))
+                .filter(rule -> secretMatches(rule, authorizationContext.getSecretName().orElse(null)))
+                .anyMatch(rule -> actionMatches(rule, action));
+        if (!isAuthorized) {
+            throw new AccessDeniedException("User " + username + " is not authorized to perform action " + action);
+        }
     }
 
     private boolean userMatches(AuthorizationProperties.Rule rule, String username) {
