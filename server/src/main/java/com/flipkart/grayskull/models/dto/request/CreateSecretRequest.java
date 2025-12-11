@@ -3,6 +3,8 @@ package com.flipkart.grayskull.models.dto.request;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.HashMap;
 import java.util.Map;
 
 import jakarta.validation.Valid;
@@ -35,7 +37,7 @@ public class CreateSecretRequest {
      * Provider-specific metadata.
      * Examples: {"environment": "prod", "team": "backend", "db_instance": "mysql-01", "description": "API keys for payment service", "rotation_days": 30}
      */
-    private Map<String, Object> providerMeta;
+    private Map<String, Object> providerMeta = new HashMap<>();
 
     /**
      * Initial secret data (becomes version 1).

@@ -137,7 +137,6 @@ class SecretMapperTest {
             // Assert
             assertNotNull(secret);
             assertEquals("minimal-secret", secret.getName());
-            assertNull(secret.getProviderMeta());
             assertNull(secret.getSystemLabels());
         }
     }
