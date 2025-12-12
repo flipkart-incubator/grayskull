@@ -5,6 +5,7 @@ import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
+import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.RequiredArgsConstructor;
@@ -85,6 +86,7 @@ public class AuditAspect {
                     .resourceVersion(resourceVersion)
                     .action(audit.action().name())
                     .userId(getUserId())
+                    .actorId(getActorId())
                     .ips(requestUtils.getRemoteIPs())
                     .metadata(metadata)
                     .build();
@@ -105,6 +107,19 @@ public class AuditAspect {
         return Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication())
                 .map(Authentication::getName)
                 .orElse(DEFAULT_USER);
+    }
+
+    /**
+     * Retrieves the ID of the user who delegated the request if this was a delegated request.
+     * Otherwise, returns null.
+     * @return The ID of the user who delegated the request or null.
+     */
+    private String getActorId() {
+        return Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication())
+                .filter(GrayskullUser.class::isInstance)
+                .map(GrayskullUser.class::cast)
+                .flatMap(GrayskullUser::getActorName)
+                .orElse(null);
     }
 
     /**
