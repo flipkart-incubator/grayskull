@@ -75,7 +75,7 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", expectedIps, null, expectedAuditMetadata));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", null, expectedIps, null, expectedAuditMetadata));
     }
 
     @ParameterizedTest
@@ -103,7 +103,7 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", expectedIps, null, expectedMetadata));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", null, expectedIps, null, expectedMetadata));
     }
 
 
