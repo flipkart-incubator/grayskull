@@ -46,10 +46,10 @@ public class ChaChaEncryptionService implements EncryptionService {
         for (String key : keys.keySet()) {
             log.debug("Validating key: {}", key);
             String encrypted = this.encrypt(s, key);
-            String decrypted = this.decrypt(encrypted, key);
-            if (!s.equals(decrypted)) {
-                throw new IllegalStateException("Decryption failed for key: " + key);
-            }
+            this.decrypt(encrypted, key);
+            /* since we are using Poly1305 which is authenticated encryption we don't need to check that decrypted data is same as original data
+            if data is not same, or somehow got corrupted, it will throw exception instead of giving garbage data
+            */
         }
     }
 

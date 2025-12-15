@@ -5,7 +5,11 @@ import com.flipkart.grayskull.configuration.KmsConfig;
 import com.flipkart.grayskull.spi.EncryptionService;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.spi.models.SecretProvider;
+import com.flipkart.grayskull.spi.models.Sensitive;
 import com.flipkart.grayskull.spi.models.enums.AuthMechanism;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -14,6 +18,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
@@ -119,4 +124,64 @@ class SecretEncryptionUtilTest {
         assertEquals(defaultKeyId, authAttributes.get(SecretEncryptionUtil.KEY_ID_ATTRIBUTE));
         verifyNoInteractions(encryptionService);
     }
+
+    @Test
+    void encryptSensitiveFields_TestObject() {
+        TestSuccessEncryptionObject testObject = new TestSuccessEncryptionObject("onlyGetterPlain", "onlySetterPlain", 10, "annotationOnGetter", "annotationOnSetter");
+        when(encryptionService.encrypt(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(0) + "Encrypted");
+
+        secretEncryptionUtil.encryptSensitiveFields(testObject, "key1");
+
+        assertEquals("onlyGetterPlain", testObject.onlyGetter);
+        assertEquals("onlySetterPlain", testObject.onlySetter);
+        assertEquals(10, testObject.nonString);
+        assertEquals("annotationOnGetterEncrypted", testObject.annotationOnGetter);
+        assertEquals("annotationOnSetterEncrypted", testObject.annotationOnSetter);
+    }
+
+    @Test
+    void encryptSensitiveFields_ObjectNull() {
+
+        secretEncryptionUtil.encryptSensitiveFields(null, "key1");
+
+        verifyNoInteractions(encryptionService);
+    }
+
+    @Test
+    void encryptSensitiveFields_setterThrowsException() {
+        TestFailureObject testObject = new TestFailureObject("private");
+        when(encryptionService.encrypt(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(0) + "Encrypted");
+
+        assertThrows(IllegalStateException.class, () -> secretEncryptionUtil.encryptSensitiveFields(testObject, "key1"));
+    }
+
+
+    @AllArgsConstructor
+    private static class TestSuccessEncryptionObject {
+        @Getter(onMethod_ = @Sensitive)
+        private String onlyGetter;
+        @Setter(onMethod_ = @Sensitive)
+        private String onlySetter;
+        @Getter(onMethod_ = @Sensitive)
+        @Setter
+        private Object nonString;
+        @Getter(onMethod_ = @Sensitive)
+        @Setter
+        private String annotationOnGetter;
+        @Getter
+        @Setter(onMethod_ =  @Sensitive)
+        private String annotationOnSetter;
+    }
+
+    @AllArgsConstructor
+    private static class TestFailureObject {
+        @Getter
+        private String failedSetter;
+
+        @Sensitive
+        public void setFailedSetter(String failedSetter) {
+            throw new UnsupportedOperationException("Setter throws exception");
+        }
+    }
+
 }
