@@ -25,8 +25,12 @@ public class GrayskullErrorController extends AbstractErrorController {
         HttpStatus status = this.getStatus(request);
         Map<String, Object> errorAttributes = this.getErrorAttributes(request, ErrorAttributeOptions.defaults().including(ErrorAttributeOptions.Include.MESSAGE).including(ErrorAttributeOptions.Include.EXCEPTION));
         if (errorAttributes.containsKey("exception")) {
-            log.error("Exception occurred", (Exception) errorAttributes.get("exception"));
+            logException(errorAttributes);
         }
         return new ResponseEntity<>(ResponseTemplate.error(errorAttributes.get("message").toString(), errorAttributes.get("error").toString()), status);
+    }
+
+    void logException(Map<String, Object> errorAttributes) {
+        log.error("Exception occurred with message {}", errorAttributes.get("message").toString(), errorAttributes.get("exception"));
     }
 }

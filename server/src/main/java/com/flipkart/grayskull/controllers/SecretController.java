@@ -37,7 +37,7 @@ public class SecretController {
     private final SecretService secretService;
     private final AsyncAuditLogger asyncAuditLogger;
     private final RequestUtils requestUtils;
-    private final List<MetadataValidator> plugins;
+    private final List<MetadataValidator> metadataValidators;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -56,7 +56,7 @@ public class SecretController {
     public ResponseTemplate<SecretResponse> createSecret(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @Valid @RequestBody CreateSecretRequest request) {
-        plugins.forEach(plugin -> plugin.validateMetadata(request.getProvider(), request.getProviderMeta()));
+        metadataValidators.forEach(plugin -> plugin.validateMetadata(request.getProvider(), request.getProviderMeta()));
         SecretResponse response = secretService.createSecret(projectId, request);
         return ResponseTemplate.success(response, "Successfully created secret.");
     }
