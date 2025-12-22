@@ -1,5 +1,7 @@
 package com.flipkart.grayskull.service.impl;
 
+import com.flipkart.grayskull.exception.AlreadyExistsException;
+import com.flipkart.grayskull.exception.NotFoundException;
 import com.flipkart.grayskull.mappers.SecretProviderMapper;
 import com.flipkart.grayskull.models.dto.request.CreateSecretProviderRequest;
 import com.flipkart.grayskull.models.dto.request.SecretProviderRequest;
@@ -9,10 +11,9 @@ import com.flipkart.grayskull.spi.models.SecretProvider;
 import com.flipkart.grayskull.spi.repositories.SecretProviderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -39,7 +40,7 @@ public class SecretProviderServiceImpl implements SecretProviderService {
     @Override
     public SecretProvider getProvider(String name) {
         return secretProviderRepository.findByName(name)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret provider not found with name: " + name));
+                .orElseThrow(() -> new NotFoundException("Secret provider not found with name: " + name));
     }
 
     @Override
@@ -47,18 +48,18 @@ public class SecretProviderServiceImpl implements SecretProviderService {
     public SecretProvider createProvider(CreateSecretProviderRequest request) {
         log.debug("Creating secret provider with name: {}", request.getName());
         
-        // Check if provider with same name already exists
-        if (secretProviderRepository.findByName(request.getName()).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A secret provider with the same name " + request.getName() + " already exists.");
-        }
-        
         // Create new provider entity
         SecretProvider provider = secretProviderMapper.requestToSecretProvider(request);
         encryptionUtil.encryptSensitiveFields(provider);
-        SecretProvider savedProvider = secretProviderRepository.save(provider);
-        
-        log.info("Successfully created secret provider with name: {}", request.getName());
-        return savedProvider;
+
+        try {
+            SecretProvider savedProvider = secretProviderRepository.save(provider);
+
+            log.info("Successfully created secret provider with name: {}", request.getName());
+            return savedProvider;
+        } catch (DuplicateKeyException e) {
+            throw new AlreadyExistsException("A secret provider with the same name " + request.getName() + " already exists.");
+        }
     }
 
     @Override
@@ -68,7 +69,7 @@ public class SecretProviderServiceImpl implements SecretProviderService {
 
         // Check if the provider exists
         SecretProvider existingProvider = secretProviderRepository.findByName(name)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Secret provider not found with name: " + name));
+                .orElseThrow(() -> new NotFoundException("Secret provider not found with name: " + name));
         
         // Update the provider with new values
         secretProviderMapper.updateSecretProviderFromRequest(request, existingProvider);

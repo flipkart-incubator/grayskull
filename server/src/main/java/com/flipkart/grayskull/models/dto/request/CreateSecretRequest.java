@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.models.dto.request;
 
+import com.flipkart.grayskull.validators.ValidSecretProvider;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -29,6 +30,7 @@ public class CreateSecretRequest {
      * Provider managing this secret.
      */
     @NotBlank
+    @ValidSecretProvider
     private String provider;
 
     /**
