@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.models.dto.request.CreateSecretProviderRequest;
 import com.flipkart.grayskull.models.dto.request.SecretProviderRequest;
 import com.flipkart.grayskull.service.interfaces.SecretProviderService;
-import com.flipkart.grayskull.spi.models.SecretProvider;
 import com.flipkart.grayskull.spi.models.AuthAttributes;
+import com.flipkart.grayskull.spi.models.SecretProvider;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -70,6 +70,7 @@ public class SecretProviderController {
         if (!constraintViolations.isEmpty()) {
             throw new ConstraintViolationException(constraintViolations);
         }
+        request.setAuthAttributesProcessed(authAttributes);
     }
 
 

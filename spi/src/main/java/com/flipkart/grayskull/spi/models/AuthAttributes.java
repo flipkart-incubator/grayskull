@@ -1,4 +1,4 @@
 package com.flipkart.grayskull.spi.models;
 
-public interface AuthAttributes {
+public sealed interface AuthAttributes permits NoneAuthAttributes, BasicAuthAttributes, OAuth2AuthAttributes {
 }

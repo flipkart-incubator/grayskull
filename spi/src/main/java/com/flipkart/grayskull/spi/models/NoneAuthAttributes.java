@@ -6,7 +6,7 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class NoneAuthAttributes implements AuthAttributes {
+public final class NoneAuthAttributes implements AuthAttributes {
     /**
      * Explanation on why none is used as auth mechanism
      */

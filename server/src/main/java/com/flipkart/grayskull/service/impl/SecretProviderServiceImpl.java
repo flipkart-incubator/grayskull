@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.service.impl;
 
+import com.flipkart.grayskull.configuration.KmsConfig;
 import com.flipkart.grayskull.exception.AlreadyExistsException;
 import com.flipkart.grayskull.exception.NotFoundException;
 import com.flipkart.grayskull.mappers.SecretProviderMapper;
@@ -24,7 +25,8 @@ public class SecretProviderServiceImpl implements SecretProviderService {
 
     private final SecretProviderRepository secretProviderRepository;
     private final SecretProviderMapper secretProviderMapper;
-    private final SecretEncryptionUtil encryptionUtil;
+    private final SecretEncryptionUtil secretEncryptionUtil;
+    private final KmsConfig kmsConfig;
 
     /**
      * Lists all secret providers.
@@ -50,7 +52,7 @@ public class SecretProviderServiceImpl implements SecretProviderService {
         
         // Create new provider entity
         SecretProvider provider = secretProviderMapper.requestToSecretProvider(request);
-        encryptionUtil.encryptSensitiveFields(provider);
+        secretEncryptionUtil.encrypt(provider.getAuthAttributes(), kmsConfig.getDefaultKeyId());
 
         try {
             SecretProvider savedProvider = secretProviderRepository.save(provider);
@@ -73,7 +75,7 @@ public class SecretProviderServiceImpl implements SecretProviderService {
         
         // Update the provider with new values
         secretProviderMapper.updateSecretProviderFromRequest(request, existingProvider);
-        encryptionUtil.encryptSensitiveFields(existingProvider);
+        secretEncryptionUtil.encrypt(existingProvider.getAuthAttributes(), kmsConfig.getDefaultKeyId());
         SecretProvider updatedProvider = secretProviderRepository.save(existingProvider);
         
         log.info("Successfully updated secret provider with name: {}", name);

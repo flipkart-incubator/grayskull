@@ -1,9 +1,10 @@
 package com.flipkart.grayskull.models.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.flipkart.grayskull.spi.models.AuthAttributes;
 import com.flipkart.grayskull.spi.models.enums.AuthMechanism;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,7 +12,7 @@ import lombok.NoArgsConstructor;
 import java.util.Map;
 
 /**
- * Request to update an existing secret provider.
+ * Base request object to create and update a secret provider.
  */
 @Data
 @NoArgsConstructor
@@ -30,8 +31,7 @@ public class SecretProviderRequest {
      *          {"audience": "xyz", "issuer_url": "https://..."} for OAUTH2
      */
     @NotNull
-    @Size(max = 5)
-    private Map<@Size(max = 20) String, @Size(max = 100) String> authAttributes;
+    private Map<String, String> authAttributes;
 
     /**
      * Principal identifier for this provider.
@@ -39,4 +39,10 @@ public class SecretProviderRequest {
      */
     @NotBlank
     private String principal;
+
+    /**
+     * Field for storing authAttributes after they have been deserialized and validated
+     */
+    @JsonIgnore
+    private AuthAttributes authAttributesProcessed;
 }

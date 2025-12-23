@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.time.Instant;
-import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -16,7 +15,7 @@ import java.util.Map;
 public class SecretProvider {
     private String name;
     private AuthMechanism authMechanism;
-    private Map<String, String> authAttributes;
+    private AuthAttributes authAttributes;
     private String principal;
     private Instant creationTime;
     private Instant updatedTime;

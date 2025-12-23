@@ -74,7 +74,7 @@ class SecretProviderControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.name", is("basic-provider")))
                 .andExpect(jsonPath("$.authMechanism", is("BASIC")))
                 .andExpect(jsonPath("$.principal", is("test-principal")))
-                .andExpect(jsonPath("$.authAttributes.keys()", containsInAnyOrder("username","password", "kmsKeyId")))
+                .andExpect(jsonPath("$.authAttributes.keys()", containsInAnyOrder("username","password", "kmsKeyId", "encrypted")))
                 .andExpect(jsonPath("$.authAttributes.password", not(is("secret"))))
                 .andExpect(jsonPath("$.creationTime", notNullValue()));
     }
@@ -189,7 +189,7 @@ class SecretProviderControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.name", is("update-provider")))
                 .andExpect(jsonPath("$.authMechanism", is("OAUTH2")))
                 .andExpect(jsonPath("$.principal", is("updated-principal")))
-                .andExpect(jsonPath("$.authAttributes.keys()", containsInAnyOrder("audience","issuerUrl", "kmsKeyId")));
+                .andExpect(jsonPath("$.authAttributes.keys()", containsInAnyOrder("audience","issuerUrl")));
     }
 
     @Test

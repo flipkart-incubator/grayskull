@@ -4,14 +4,16 @@ import com.flipkart.grayskull.mappers.SecretProviderMapper;
 import com.flipkart.grayskull.models.dto.request.CreateSecretProviderRequest;
 import com.flipkart.grayskull.models.dto.request.SecretProviderRequest;
 import com.flipkart.grayskull.service.utils.SecretEncryptionUtil;
+import com.flipkart.grayskull.spi.models.BasicAuthAttributes;
 import com.flipkart.grayskull.spi.models.SecretProvider;
 import com.flipkart.grayskull.spi.models.enums.AuthMechanism;
 import com.flipkart.grayskull.spi.repositories.SecretProviderRepository;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import com.flipkart.grayskull.configuration.KmsConfig;
+import com.flipkart.grayskull.exception.AlreadyExistsException;
+import com.flipkart.grayskull.exception.NotFoundException;
+import org.springframework.dao.DuplicateKeyException;
 
-import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,7 +24,8 @@ class SecretProviderServiceImplTest {
     private final SecretProviderRepository repository = mock(SecretProviderRepository.class);
     private final SecretProviderMapper mapper = mock(SecretProviderMapper.class);
     private final SecretEncryptionUtil encryptionUtil = mock(SecretEncryptionUtil.class);
-    private final SecretProviderServiceImpl service = new SecretProviderServiceImpl(repository, mapper, encryptionUtil);
+    private final KmsConfig kmsConfig = mock(KmsConfig.class);
+    private final SecretProviderServiceImpl service = new SecretProviderServiceImpl(repository, mapper, encryptionUtil, kmsConfig);
 
     @Test
     void getProvider_ExistingProvider_ReturnsProvider() {
@@ -44,11 +47,10 @@ class SecretProviderServiceImplTest {
         when(repository.findByName("non-existent")).thenReturn(Optional.empty());
 
         // When & Then
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+        NotFoundException exception = assertThrows(NotFoundException.class,
             () -> service.getProvider("non-existent"));
-        
-        assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
-        assertTrue(exception.getReason().contains("Secret provider not found with name: non-existent"));
+
+        assertTrue(exception.getMessage().contains("Secret provider not found with name: non-existent"));
     }
 
     @Test
@@ -61,7 +63,7 @@ class SecretProviderServiceImplTest {
         SecretProvider mappedProvider = createProvider("new-provider");
         SecretProvider savedProvider = createProvider("new-provider");
         
-        when(repository.findByName("new-provider")).thenReturn(Optional.empty());
+        when(kmsConfig.getDefaultKeyId()).thenReturn("default-key");
         when(mapper.requestToSecretProvider(request)).thenReturn(mappedProvider);
         when(repository.save(mappedProvider)).thenReturn(savedProvider);
 
@@ -70,9 +72,8 @@ class SecretProviderServiceImplTest {
 
         // Then
         assertEquals(savedProvider, result);
-        verify(repository).findByName("new-provider");
         verify(mapper).requestToSecretProvider(request);
-        verify(encryptionUtil).encryptSensitiveFields(mappedProvider);
+        verify(encryptionUtil).encrypt(mappedProvider.getAuthAttributes(), "default-key");
         verify(repository).save(mappedProvider);
     }
 
@@ -81,18 +82,20 @@ class SecretProviderServiceImplTest {
         // Given
         CreateSecretProviderRequest request = new CreateSecretProviderRequest();
         request.setName("existing-provider");
-        
-        when(repository.findByName("existing-provider")).thenReturn(Optional.of(createProvider("existing-provider")));
+
+        SecretProvider mappedProvider = createProvider("existing-provider");
+        when(kmsConfig.getDefaultKeyId()).thenReturn("default-key");
+        when(mapper.requestToSecretProvider(request)).thenReturn(mappedProvider);
+        when(repository.save(mappedProvider)).thenThrow(new DuplicateKeyException("duplicate"));
 
         // When & Then
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+        AlreadyExistsException exception = assertThrows(AlreadyExistsException.class,
             () -> service.createProvider(request));
-        
-        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
-        assertTrue(exception.getReason().contains("A secret provider with the same name existing-provider already exists"));
-        verify(repository).findByName("existing-provider");
-        verifyNoInteractions(mapper, encryptionUtil);
-        verify(repository, never()).save(any());
+
+        assertTrue(exception.getMessage().contains("A secret provider with the same name existing-provider already exists"));
+        verify(mapper).requestToSecretProvider(request);
+        verify(encryptionUtil).encrypt(mappedProvider.getAuthAttributes(), "default-key");
+        verify(repository).save(mappedProvider);
     }
 
     @Test
@@ -105,6 +108,7 @@ class SecretProviderServiceImplTest {
         SecretProvider updatedProvider = createProvider("existing-provider");
         
         when(repository.findByName("existing-provider")).thenReturn(Optional.of(existingProvider));
+        when(kmsConfig.getDefaultKeyId()).thenReturn("default-key");
         when(repository.save(existingProvider)).thenReturn(updatedProvider);
 
         // When
@@ -114,7 +118,7 @@ class SecretProviderServiceImplTest {
         assertEquals(updatedProvider, result);
         verify(repository).findByName("existing-provider");
         verify(mapper).updateSecretProviderFromRequest(request, existingProvider);
-        verify(encryptionUtil).encryptSensitiveFields(existingProvider);
+        verify(encryptionUtil).encrypt(existingProvider.getAuthAttributes(), "default-key");
         verify(repository).save(existingProvider);
     }
 
@@ -125,11 +129,10 @@ class SecretProviderServiceImplTest {
         when(repository.findByName("non-existent")).thenReturn(Optional.empty());
 
         // When & Then
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+        NotFoundException exception = assertThrows(NotFoundException.class,
             () -> service.updateProvider("non-existent", request));
-        
-        assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
-        assertTrue(exception.getReason().contains("Secret provider not found with name: non-existent"));
+
+        assertTrue(exception.getMessage().contains("Secret provider not found with name: non-existent"));
         verify(repository).findByName("non-existent");
         verifyNoInteractions(mapper, encryptionUtil);
         verify(repository, never()).save(any());
@@ -139,7 +142,7 @@ class SecretProviderServiceImplTest {
         return SecretProvider.builder()
             .name(name)
             .authMechanism(AuthMechanism.BASIC)
-            .authAttributes(Map.of("username", "admin"))
+            .authAttributes(new BasicAuthAttributes())
             .principal("test-principal")
             .build();
     }
