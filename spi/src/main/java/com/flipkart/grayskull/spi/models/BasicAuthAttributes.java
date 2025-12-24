@@ -8,7 +8,7 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public final class BasicAuthAttributes extends EncryptableValue implements AuthAttributes {
+public final class BasicAuthAttributes extends EncryptableValue {
     @NotNull
     @Size(max = 50)
     private String username;

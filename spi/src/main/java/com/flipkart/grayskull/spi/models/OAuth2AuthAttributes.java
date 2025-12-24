@@ -6,7 +6,7 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public final class OAuth2AuthAttributes implements AuthAttributes {
+public final class OAuth2AuthAttributes {
     @NotNull
     private String audience;
     @NotNull

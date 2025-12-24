@@ -1,15 +1,17 @@
 package com.flipkart.grayskull.models.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.flipkart.grayskull.spi.models.AuthAttributes;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.flipkart.grayskull.spi.models.BasicAuthAttributes;
+import com.flipkart.grayskull.spi.models.NoneAuthAttributes;
+import com.flipkart.grayskull.spi.models.OAuth2AuthAttributes;
 import com.flipkart.grayskull.spi.models.enums.AuthMechanism;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.Map;
 
 /**
  * Base request object to create and update a secret provider.
@@ -31,7 +33,16 @@ public class SecretProviderRequest {
      *          {"audience": "xyz", "issuer_url": "https://..."} for OAUTH2
      */
     @NotNull
-    private Map<String, String> authAttributes;
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXTERNAL_PROPERTY, property = "authMechanism", defaultImpl = NoneAuthAttributes.class)
+    @JsonSubTypes(
+            {
+                    @JsonSubTypes.Type(value = BasicAuthAttributes.class, name = "BASIC"),
+                    @JsonSubTypes.Type(value = OAuth2AuthAttributes.class, name = "OAUTH2"),
+                    @JsonSubTypes.Type(value = NoneAuthAttributes.class, name = "NONE")
+            }
+    )
+    @Valid
+    private Object authAttributes;
 
     /**
      * Principal identifier for this provider.
@@ -39,10 +50,4 @@ public class SecretProviderRequest {
      */
     @NotBlank
     private String principal;
-
-    /**
-     * Field for storing authAttributes after they have been deserialized and validated
-     */
-    @JsonIgnore
-    private AuthAttributes authAttributesProcessed;
 }

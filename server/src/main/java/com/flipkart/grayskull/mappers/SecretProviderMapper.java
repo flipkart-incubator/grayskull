@@ -32,9 +32,7 @@ public interface SecretProviderMapper {
         return mapToEntity(secretProvider);
     }
 
-    @Mapping(source = "authAttributesProcessed", target = "authAttributes")
     SecretProvider requestToSecretProvider(CreateSecretProviderRequest request);
 
-    @Mapping(source = "authAttributesProcessed", target = "secretProvider.authAttributes")
     void updateSecretProviderFromRequest(SecretProviderRequest request, @MappingTarget SecretProvider secretProvider);
 }

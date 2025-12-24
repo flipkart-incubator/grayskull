@@ -15,7 +15,7 @@ import java.time.Instant;
 public class SecretProvider {
     private String name;
     private AuthMechanism authMechanism;
-    private AuthAttributes authAttributes;
+    private Object authAttributes;
     private String principal;
     private Instant creationTime;
     private Instant updatedTime;
