@@ -4,8 +4,6 @@ import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
-import com.flipkart.grayskull.spi.models.Secret;
-import com.flipkart.grayskull.spi.models.SecretProvider;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
 import com.flipkart.grayskull.spi.repositories.SecretProviderRepository;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
@@ -46,22 +44,18 @@ public class GrayskullSecurity {
      * (including transient project creation for non-existent projects) is
      * delegated to the repository layer, keeping authorization logic clean
      * and focused on permission evaluation.
-     * <p>
-     * <b>Note:</b> This method does not check for empty actor. Use
-     * {@link #ensureEmptyActor()} to check for empty actor. or use {@link #checkProviderAuthorization(String)}
-     * to check for provider authorization.
      *
      * @param projectId The ID of the project.
      * @param action    The action to authorize (e.g., "LIST_SECRETS",
      *                  "CREATE_SECRET").
+     * @return {@code true} if authorized, {@code false} otherwise.
      */
     public boolean hasPermission(String projectId, String action) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Project project = projectRepository.findByIdOrTransient(projectId);
 
         AuthorizationContext context = AuthorizationContext.forProject(authentication, project);
-        authorizationProvider.isAuthorized(context, action);
-        return true;
+        return authorizationProvider.isAuthorized(context, action);
     }
 
     /**
@@ -82,21 +76,28 @@ public class GrayskullSecurity {
      * the appropriate
      * response (e.g., 404 Not Found).</li>
      * </ul>
-     * <p>
-     * <b>Note:</b> This method checks that the actor is empty.
+     *
      * @param projectId  The ID of the project.
      * @param secretName The name of the secret.
      * @param action     The action to authorize (e.g., "READ_SECRET_VALUE").
+     * @return {@code true} if authorized, {@code false} otherwise.
      */
     public boolean hasPermission(String projectId, String secretName, String action) {
-        ensureEmptyActor();
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new AccessDeniedException("Project not found"));
-        Secret secret = secretRepository.findByProjectIdAndName(project.getId(), secretName).orElse(null);
-        AuthorizationContext context = AuthorizationContext.forSecret(authentication, project, secret);
-        authorizationProvider.isAuthorized(context, action);
-        return true;
+        return projectRepository.findById(projectId)
+                .map(project -> secretRepository.findByProjectIdAndName(project.getId(), secretName)
+                        .map(secret -> {
+                            // Secret exists, check with secret context
+                            AuthorizationContext context = AuthorizationContext.forSecret(authentication, project,
+                                    secret);
+                            return authorizationProvider.isAuthorized(context, action);
+                        })
+                        .orElseGet(() -> {
+                            // Secret does not exist, fall back to a project-level check.
+                            AuthorizationContext context = AuthorizationContext.forProject(authentication, project);
+                            return authorizationProvider.isAuthorized(context, action);
+                        }))
+                .orElse(false);
     }
 
     /**
@@ -104,30 +105,14 @@ public class GrayskullSecurity {
      * <br/>
      * This method is designed for actions that are not project or secret-specific,
      * such as creating other resources like secret providers.
-     * <p>
-     * <b>Note:</b> This method checks that the actor is empty.
+     *
      * @param action     The action to authorize (e.g., "CREATE_PROVIDER").
+     * @return {@code true} if authorized, {@code false} otherwise.
      */
     public boolean hasPermission(String action) {
-        ensureEmptyActor();
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         AuthorizationContext context = AuthorizationContext.forGlobal(authentication);
-        authorizationProvider.isAuthorized(context, action);
-        return true;
-    }
-
-    private Optional<String> actorName() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        GrayskullUser user = (GrayskullUser) authentication.getPrincipal();
-        return user.getActorName();
-    }
-
-    public boolean ensureEmptyActor() {
-        Optional<String> actorName = actorName();
-        if (actorName.isPresent()) {
-            throw new AccessDeniedException("User delegation is not expected for this action");
-        }
-        return true;
+        return authorizationProvider.isAuthorized(context, action);
     }
 
     /**
@@ -136,23 +121,14 @@ public class GrayskullSecurity {
      * @param providerName the secret provider name
      */
     public boolean checkProviderAuthorization(String providerName) {
-        checkProviderAuthorizationInternal(providerName);
-        return true;
-    }
-
-    public void checkProviderAuthorizationInternal(String providerName) {
-        Optional<String> actorName = actorName();
+        GrayskullUser user = (GrayskullUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Optional<String> actorName = user.getActorName();
         if ("SELF".equals(providerName)) {
-            actorName.ifPresent(actor -> {
-                throw new AccessDeniedException("User delegation is not supported for 'SELF' managed secrets");
-            });
-            return;
+            return true;
         }
-
         String actor = actorName.orElseThrow(() -> new AccessDeniedException("Expected an actor name for the " + providerName + " managed secrets"));
-        SecretProvider provider = secretProviderRepository.findByName(providerName).orElseThrow(() -> new AccessDeniedException("Secret provider not found"));
-        if (!provider.getPrincipal().equals(actor)) {
-            throw new AccessDeniedException("Actor is not authorized to access the secrets of this provider");
-        }
+        return secretProviderRepository.findByName(providerName)
+                .map(secretProvider -> secretProvider.getPrincipal().equals(actor))
+                .orElse(false);
     }
 }

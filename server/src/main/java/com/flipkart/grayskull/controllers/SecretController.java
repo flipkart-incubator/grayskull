@@ -41,7 +41,7 @@ public class SecretController {
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
-    @PreAuthorize("@grayskullSecurity.ensureEmptyActor() and @grayskullSecurity.hasPermission(#projectId, 'secrets.list')")
+    @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, 'secrets.list')")
     public ResponseTemplate<ListSecretsResponse> listSecrets(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @RequestParam(name = "offset", defaultValue = "0") @Min(0) int offset,

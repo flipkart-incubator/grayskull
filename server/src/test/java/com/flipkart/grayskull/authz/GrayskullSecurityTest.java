@@ -51,20 +51,27 @@ class GrayskullSecurityTest {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
         when(projectRepository.findByIdOrTransient("test-project")).thenReturn(project);
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.list"))).thenReturn(true);
 
         // When
-        assertDoesNotThrow(() -> grayskullSecurity.hasPermission("test-project", "secrets.list"));
-}
+        boolean result = grayskullSecurity.hasPermission("test-project", "secrets.list");
+
+        // Then
+        assertTrue(result);
+    }
 
     @Test
     void hasPermission_ProjectLevel_WhenNotAuthorized_ReturnsFalse() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
         when(projectRepository.findByIdOrTransient("test-project")).thenReturn(project);
-        doThrow(new AccessDeniedException("User is not authorized")).when(authorizationProvider).isAuthorized(any(AuthorizationContext.class), eq("secrets.list"));
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.list"))).thenReturn(false);
 
         // When
-        assertThrows(AccessDeniedException.class, () -> grayskullSecurity.hasPermission("test-project", "secrets.list"));
+        boolean result = grayskullSecurity.hasPermission("test-project", "secrets.list");
+
+        // Then
+        assertFalse(result);
     }
 
     @Test
@@ -73,10 +80,13 @@ class GrayskullSecurityTest {
         SecurityContextHolder.getContext().setAuthentication(authentication);
         when(projectRepository.findById("test-project")).thenReturn(Optional.of(project));
         when(secretRepository.findByProjectIdAndName("test-project", "test-secret")).thenReturn(Optional.of(secret));
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secret.read.value"))).thenReturn(true);
 
         // When
-        assertDoesNotThrow(() -> grayskullSecurity.hasPermission("test-project", "test-secret", "secret.read.value"));
+        boolean result = grayskullSecurity.hasPermission("test-project", "test-secret", "secret.read.value");
 
+        // Then
+        assertTrue(result);
     }
 
     @Test
@@ -85,10 +95,13 @@ class GrayskullSecurityTest {
         SecurityContextHolder.getContext().setAuthentication(authentication);
         when(projectRepository.findById("test-project")).thenReturn(Optional.of(project));
         when(secretRepository.findByProjectIdAndName("test-project", "test-secret")).thenReturn(Optional.of(secret));
-        doThrow(new AccessDeniedException("User is not authorized")).when(authorizationProvider).isAuthorized(any(AuthorizationContext.class), eq("secret.read.value"));
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secret.read.value"))).thenReturn(false);
 
         // When
-        assertThrows(AccessDeniedException.class, () -> grayskullSecurity.hasPermission("test-project", "test-secret", "secret.read.value"));
+        boolean result = grayskullSecurity.hasPermission("test-project", "test-secret", "secret.read.value");
+
+        // Then
+        assertFalse(result);
     }
 
     @Test
@@ -97,9 +110,13 @@ class GrayskullSecurityTest {
         SecurityContextHolder.getContext().setAuthentication(authentication);
         when(projectRepository.findById("test-project")).thenReturn(Optional.of(project));
         when(secretRepository.findByProjectIdAndName("test-project", "non-existent-secret")).thenReturn(Optional.empty());
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secret.create"))).thenReturn(true);
 
         // When
-        assertDoesNotThrow(() -> grayskullSecurity.hasPermission("test-project", "non-existent-secret", "secret.create"));
+        boolean result = grayskullSecurity.hasPermission("test-project", "non-existent-secret", "secret.create");
+
+        // Then
+        assertTrue(result);
     }
 
     @Test
@@ -109,48 +126,48 @@ class GrayskullSecurityTest {
         when(projectRepository.findById("non-existent-project")).thenReturn(Optional.empty());
 
         // When
-        assertThrows(AccessDeniedException.class, () -> grayskullSecurity.hasPermission("non-existent-project", "test-secret", "secret.read.value"));
+        boolean result = grayskullSecurity.hasPermission("non-existent-project", "test-secret", "secret.read.value");
+
+        // Then
+        assertFalse(result);
     }
 
     @Test
     void hasPermission_GlobalLevel_WhenAuthorized_ReturnsTrue() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("providers.create"))).thenReturn(true);
 
         // When
-        assertDoesNotThrow(() -> grayskullSecurity.hasPermission("providers.create"));
+        boolean result = grayskullSecurity.hasPermission("providers.create");
+
+        // Then
+        assertTrue(result);
     }
 
     @Test
     void hasPermission_GlobalLevel_WhenNotAuthorized_ReturnsFalse() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        doThrow(new AccessDeniedException("User is not authorized")).when(authorizationProvider).isAuthorized(any(AuthorizationContext.class), eq("providers.create"));
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("providers.create"))).thenReturn(false);
 
         // When
-        assertThrows(AccessDeniedException.class, () -> grayskullSecurity.hasPermission("providers.create"));
-    }
+        boolean result = grayskullSecurity.hasPermission("providers.create");
 
-    // Tests for ensureEmptyActor method
-    @Test
-    void ensureEmptyActor_WhenUserHasNoActorName_ReturnsTrue() {
-        // Given - User with no actor name
-        Authentication authWithoutActor = new TestingAuthenticationToken(new SimpleGrayskullUser("test-user", null), "password");
-        SecurityContextHolder.getContext().setAuthentication(authWithoutActor);
-
-        // When & Then
-        assertTrue(() -> grayskullSecurity.ensureEmptyActor());
+        // Then
+        assertFalse(result);
     }
 
     @Test
-    void ensureEmptyActor_WhenUserHasActorName_ThrowsAccessDeniedException() {
-        // Given - User with actor name
-        Authentication authWithActor = new TestingAuthenticationToken(new SimpleGrayskullUser("test-user", "actor-name"), "password");
-        SecurityContextHolder.getContext().setAuthentication(authWithActor);
+    void hasPermission_WhenNoAuthentication_StillCallsAuthorizationProvider() {
+        // Given - No authentication set in SecurityContext
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("providers.list"))).thenReturn(false);
 
-        // When & Then
-        AccessDeniedException exception = assertThrows(AccessDeniedException.class, () -> grayskullSecurity.ensureEmptyActor());
-        assertEquals("User delegation is not expected for this action", exception.getMessage());
+        // When
+        boolean result = grayskullSecurity.hasPermission("providers.list");
+
+        // Then
+        assertFalse(result);
     }
 
     // Tests for checkProviderAuthorization method
@@ -165,15 +182,13 @@ class GrayskullSecurityTest {
     }
 
     @Test
-    void checkProviderAuthorization_WhenProviderIsSelfAndUserHasActor_ThrowsAccessDeniedException() {
+    void checkProviderAuthorization_WhenProviderIsSelfAndUserHasActor_ReturnsTrue() {
         // Given - User with actor name
         Authentication authWithActor = new TestingAuthenticationToken(new SimpleGrayskullUser("test-user", "actor-name"), "password");
         SecurityContextHolder.getContext().setAuthentication(authWithActor);
 
         // When & Then
-        AccessDeniedException exception = assertThrows(AccessDeniedException.class, 
-            () -> grayskullSecurity.checkProviderAuthorization("SELF"));
-        assertEquals("User delegation is not supported for 'SELF' managed secrets", exception.getMessage());
+        assertTrue(grayskullSecurity.checkProviderAuthorization("SELF"));
     }
 
     @Test
@@ -196,9 +211,7 @@ class GrayskullSecurityTest {
         when(secretProviderRepository.findByName("non-existent-provider")).thenReturn(Optional.empty());
 
         // When & Then
-        AccessDeniedException exception = assertThrows(AccessDeniedException.class, 
-            () -> grayskullSecurity.checkProviderAuthorization("non-existent-provider"));
-        assertEquals("Secret provider not found", exception.getMessage());
+        assertFalse(grayskullSecurity.checkProviderAuthorization("non-existent-provider"));
     }
 
     @Test
@@ -231,8 +244,6 @@ class GrayskullSecurityTest {
         when(secretProviderRepository.findByName("test-provider")).thenReturn(Optional.of(provider));
 
         // When & Then
-        AccessDeniedException exception = assertThrows(AccessDeniedException.class, 
-            () -> grayskullSecurity.checkProviderAuthorization("test-provider"));
-        assertEquals("Actor is not authorized to access the secrets of this provider", exception.getMessage());
+        assertFalse(grayskullSecurity.checkProviderAuthorization("test-provider"));
     }
 }

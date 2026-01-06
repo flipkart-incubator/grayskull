@@ -29,8 +29,8 @@ class ExternalProviderMetadataValidatorTest {
     void validateMetadata_ExternalProviderWithValidMetadata_Passes() {
         // Given
         Map<String, Object> metadata = Map.of(
-                "revocationUrl", "https://example.com/revoke",
-                "rotationUrl", "https://example.com/rotate"
+                "revokeUrl", "https://example.com/revoke",
+                "rotateUrl", "https://example.com/rotate"
         );
 
         // When & Then - Should not throw exception
@@ -45,20 +45,20 @@ class ExternalProviderMetadataValidatorTest {
                 () -> validator.validateMetadata("external-provider", metadata));
         
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        assertEquals("expected mandatory keys 'revocationUrl' and 'rotationUrl' in the providerMeta", exception.getReason());
+        assertEquals("expected mandatory keys 'revokeUrl' and 'rotateUrl' in the providerMeta", exception.getReason());
     }
 
     static Stream<Arguments> invalidMetadataScenarios() {
         return Stream.of(
-                Arguments.of("Missing revocationUrl", Map.of("rotationUrl", "https://example.com/rotate")),
-                Arguments.of("Missing rotationUrl", Map.of("revocationUrl", "https://example.com/revoke")),
-                Arguments.of("Non-string revocationUrl", Map.of(
-                        "revocationUrl", 123,
-                        "rotationUrl", "https://example.com/rotate"
+                Arguments.of("Missing revokeUrl", Map.of("rotateUrl", "https://example.com/rotate")),
+                Arguments.of("Missing rotateUrl", Map.of("revokeUrl", "https://example.com/revoke")),
+                Arguments.of("Non-string revokeUrl", Map.of(
+                        "revokeUrl", 123,
+                        "rotateUrl", "https://example.com/rotate"
                 )),
-                Arguments.of("Non-string rotationUrl", Map.of(
-                        "revocationUrl", "https://example.com/revoke",
-                        "rotationUrl", true
+                Arguments.of("Non-string rotateUrl", Map.of(
+                        "revokeUrl", "https://example.com/revoke",
+                        "rotateUrl", true
                 )),
                 Arguments.of("Empty metadata", Map.of())
         );

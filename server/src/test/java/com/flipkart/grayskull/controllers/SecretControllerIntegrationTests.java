@@ -240,7 +240,7 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
     class FailurePathTests {
 
         @Test
-        void shouldReturnForbiddenWithoutCredentials() throws Exception {
+        void shouldReturnUnauthorizedWithoutCredentials() throws Exception {
             mockMvc.perform(get("/v1/projects/some-project/secrets"))
                     .andExpect(status().isUnauthorized());
         }

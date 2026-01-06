@@ -15,8 +15,8 @@ public final class ExternalProviderMetadataValidator implements MetadataValidato
         if (provider.equals("SELF")) {
             return;
         }
-        if (!(metadata.get("revocationUrl") instanceof String) || !(metadata.get("rotationUrl") instanceof String)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expected mandatory keys 'revocationUrl' and 'rotationUrl' in the providerMeta");
+        if (!(metadata.get("revokeUrl") instanceof String) || !(metadata.get("rotateUrl") instanceof String)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expected mandatory keys 'revokeUrl' and 'rotateUrl' in the providerMeta");
         }
     }
 }
