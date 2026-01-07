@@ -116,7 +116,7 @@ public class GrayskullSecurity {
     }
 
     /**
-     * Checks for authorizaion with respect to user delegation. for 'SELF' provider, it checks if the actor is empty.
+     * Checks for authorization with respect to user delegation. for 'SELF' provider, it does not check for actor name.
      * for other providers, it checks if the actor is the one registered with the provider.
      * @param providerName the secret provider name
      */

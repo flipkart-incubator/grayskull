@@ -204,7 +204,7 @@ class GrayskullSecurityTest {
     }
 
     @Test
-    void checkProviderAuthorization_WhenProviderNotFound_ThrowsAccessDeniedException() {
+    void checkProviderAuthorization_WhenProviderNotFound_ReturnsFalse() {
         // Given - User with actor name but provider doesn't exist
         Authentication authWithActor = new TestingAuthenticationToken(new SimpleGrayskullUser("test-user", "actor-name"), "password");
         SecurityContextHolder.getContext().setAuthentication(authWithActor);
@@ -232,7 +232,7 @@ class GrayskullSecurityTest {
     }
 
     @Test
-    void checkProviderAuthorization_WhenActorNameDoesNotMatchProviderPrincipal_ThrowsAccessDeniedException() {
+    void checkProviderAuthorization_WhenActorNameDoesNotMatchProviderPrincipal_ReturnsFalse() {
         // Given - User with actor name that doesn't match provider principal
         Authentication authWithActor = new TestingAuthenticationToken(new SimpleGrayskullUser("test-user", "wrong-actor"), "password");
         SecurityContextHolder.getContext().setAuthentication(authWithActor);

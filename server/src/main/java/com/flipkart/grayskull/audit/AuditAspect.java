@@ -116,6 +116,7 @@ public class AuditAspect {
      */
     private String getActorId() {
         return Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication())
+                .map(Authentication::getPrincipal)
                 .filter(GrayskullUser.class::isInstance)
                 .map(GrayskullUser.class::cast)
                 .flatMap(GrayskullUser::getActorName)

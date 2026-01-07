@@ -12,7 +12,7 @@ import java.util.Map;
 @AllArgsConstructor
 public final class ExternalProviderMetadataValidator implements MetadataValidator {
     public void validateMetadata(String provider, Map<String, Object> metadata) {
-        if (provider.equals("SELF")) {
+        if ("SELF".equals(provider)) {
             return;
         }
         if (!(metadata.get("revokeUrl") instanceof String) || !(metadata.get("rotateUrl") instanceof String)) {
