@@ -5,6 +5,7 @@ spring:
     mongodb:
       database: grayskull
       uri: mongodb://admin:password@host.docker.internal:37017/admin?maxLifeTimeMs=3600000&maxIdleTimeMs=600000&maxConnecting=100&readPreference=secondaryPreferred&w=majority
+      auto-index-creation: true
 
 server:
   read-only:

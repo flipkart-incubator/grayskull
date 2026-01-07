@@ -3,6 +3,7 @@ spring:
     mongodb:
       database: grayskull-test
       uri: mongodb://admin:password@host.docker.internal:37017/admin?maxLifeTimeMs=3600000&maxIdleTimeMs=600000&maxConnecting=100&readPreference=secondaryPreferred&w=majority
+      auto-index-creation: true
 
 grayskull:
   kms:

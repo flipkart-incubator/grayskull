@@ -1,11 +1,10 @@
 package com.flipkart.grayskull.service.utils;
 
+import com.flipkart.grayskull.spi.models.EncryptableValue;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.spi.EncryptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-
-import java.util.Base64;
 
 @Component
 @RequiredArgsConstructor
@@ -15,17 +14,22 @@ public class SecretEncryptionUtil {
 
     public void encryptSecretData(SecretData secretData, String keyId) {
         if (secretData.getPrivatePart() != null && !secretData.getPrivatePart().isEmpty()) {
-            byte[] encrypted = encryptionService.encrypt(secretData.getPrivatePart().getBytes(), keyId);
-            secretData.setPrivatePart(Base64.getEncoder().encodeToString(encrypted));
+            secretData.setPrivatePart(encryptionService.encrypt(secretData.getPrivatePart(), keyId));
             secretData.setKmsKeyId(keyId);
         }
     }
 
     public void decryptSecretData(SecretData secretData) {
         if (secretData.getPrivatePart() != null && !secretData.getPrivatePart().isEmpty()) {
-            byte[] decrypted = encryptionService.decrypt(Base64.getDecoder().decode(secretData.getPrivatePart()),
-                    secretData.getKmsKeyId());
-            secretData.setPrivatePart(new String(decrypted));
+            String decrypted = encryptionService.decrypt(secretData.getPrivatePart(), secretData.getKmsKeyId());
+            secretData.setPrivatePart(decrypted);
+        }
+    }
+
+    public void encrypt(Object o, String key) {
+        if (o instanceof EncryptableValue value) {
+            value.setKmsKeyId(key);
+            value.encrypt(encryptionService);
         }
     }
 }

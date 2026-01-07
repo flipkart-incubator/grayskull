@@ -14,7 +14,7 @@ public interface EncryptionService {
      * @param keyId key id to use for encryption
      * @return encrypted data
      */
-    byte[] encrypt(byte[] data, String keyId);
+    String encrypt(String data, String keyId);
 
     /**
      * Decrypt the data. It accepts byte array and returns byte array so that
@@ -24,5 +24,5 @@ public interface EncryptionService {
      * @param keyId key id to use for decryption, this should be the same as the key id that was used for encryption
      * @return decrypted data
      */
-    byte[] decrypt(byte[] data, String keyId);
+    String decrypt(String data, String keyId);
 }
