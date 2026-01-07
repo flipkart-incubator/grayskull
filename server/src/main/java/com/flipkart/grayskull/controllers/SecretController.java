@@ -7,6 +7,7 @@ import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
 import com.flipkart.grayskull.spi.MetadataValidator;
+import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
@@ -19,6 +20,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -80,7 +82,9 @@ public class SecretController {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
-        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String actorName = ((GrayskullUser) authentication.getPrincipal()).getActorName().orElse(null);
+        String userId = authentication.getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)
                 .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
@@ -88,6 +92,7 @@ public class SecretController {
                 .resourceVersion(response.getDataVersion())
                 .action(AuditAction.READ_SECRET.name())
                 .userId(userId)
+                .actorId(actorName)
                 .ips(requestUtils.getRemoteIPs())
                 .metadata(auditMetadata).build();
         asyncAuditLogger.log(auditEntry);
@@ -125,7 +130,9 @@ public class SecretController {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
-        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String actorName = ((GrayskullUser) authentication.getPrincipal()).getActorName().orElse(null);
+        String userId = authentication.getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)
                 .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
@@ -133,6 +140,7 @@ public class SecretController {
                 .resourceVersion(response.getDataVersion())
                 .action(AuditAction.READ_SECRET_VERSION.name())
                 .userId(userId)
+                .actorId(actorName)
                 .ips(requestUtils.getRemoteIPs())
                 .metadata(auditMetadata).build();
         asyncAuditLogger.log(auditEntry);

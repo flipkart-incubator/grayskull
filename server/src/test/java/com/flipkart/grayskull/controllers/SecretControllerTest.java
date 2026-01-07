@@ -11,6 +11,7 @@ import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.MetadataValidator;
 import com.flipkart.grayskull.spi.models.AuditEntry;
+import com.flipkart.grayskull.spimpl.authn.SimpleGrayskullUser;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -42,7 +43,7 @@ class SecretControllerTest {
     @BeforeEach
     void setUp() {
         secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins);
-        SecurityContextHolder.setContext(new SecurityContextImpl(new TestingAuthenticationToken("user", null)));
+        SecurityContextHolder.setContext(new SecurityContextImpl(new TestingAuthenticationToken(new SimpleGrayskullUser("user", "actor-name"), null)));
     }
 
     @AfterEach
@@ -75,7 +76,7 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", null, expectedIps, null, expectedAuditMetadata));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", "actor-name", expectedIps, null, expectedAuditMetadata));
     }
 
     @ParameterizedTest
@@ -103,7 +104,7 @@ class SecretControllerTest {
         assertThat(auditEntryArgumentCaptor.getValue())
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
-                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", null, expectedIps, null, expectedMetadata));
+                .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET_VERSION.name(), "user", "actor-name", expectedIps, null, expectedMetadata));
     }
 
 
