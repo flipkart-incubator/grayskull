@@ -32,7 +32,7 @@ func (s *SecretService) GetSecrets(ctx context.Context, projectID string, opts *
 	// Add query parameters if provided
 	if opts != nil {
 		q := req.URL.Query()
-		if opts.Offset > 0 {
+		if opts.Offset >= 0 {
 			q.Add("offset", strconv.Itoa(opts.Offset))
 		}
 		if opts.Limit > 0 {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Client is the main client for interacting with the Grayskull API
@@ -28,14 +29,16 @@ func NewClient(baseURL, version, authToken string) *Client {
 	}
 
 	client := &Client{
-		baseURL:    baseURL,
-		version:    version,
-		httpClient: &http.Client{},
-		authToken:  authToken,
+		baseURL: baseURL,
+		version: version,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		authToken: authToken,
 	}
 
 	// Initialize services
-	client.Secrets = &SecretService{client: client}
+	client.Secrets = NewSecretService(client)
 
 	return client
 }
@@ -70,14 +73,6 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body inter
 }
 
 // do executes an HTTP request and handles the response
-type apiResponse struct {
-	Success    bool            `json:"success"`
-	Data       json.RawMessage `json:"data,omitempty"`
-	Message    string          `json:"message,omitempty"`
-	Code       string          `json:"code,omitempty"`
-	Violations []Violation     `json:"violations,omitempty"`
-}
-
 func (c *Client) do(req *http.Request, v interface{}) error {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -95,15 +90,14 @@ func (c *Client) do(req *http.Request, v interface{}) error {
 		return nil
 	}
 
-	var apiResp apiResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
+	// If no target is provided, just return
+	if v == nil {
+		return nil
 	}
 
-	if v != nil && len(apiResp.Data) > 0 {
-		if err := json.Unmarshal(apiResp.Data, v); err != nil {
-			return fmt.Errorf("unmarshal response data: %w", err)
-		}
+	// Unmarshal directly into the target struct
+	if err := json.Unmarshal(body, v); err != nil {
+		return fmt.Errorf("unmarshal response: %w", err)
 	}
 
 	return nil
