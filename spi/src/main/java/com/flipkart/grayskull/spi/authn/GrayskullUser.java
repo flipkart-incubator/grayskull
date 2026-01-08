@@ -2,12 +2,13 @@ package com.flipkart.grayskull.spi.authn;
 
 import org.springframework.security.core.AuthenticatedPrincipal;
 
+import java.io.Serializable;
 import java.util.Optional;
 
 /**
  * User object which supports Identity Delegation required so that Secret Providers can call APIs on behalf of the user
  */
-public interface GrayskullUser extends AuthenticatedPrincipal {
+public interface GrayskullUser extends AuthenticatedPrincipal, Serializable {
     /**
      * Returns the name of the user. If this is a delegated identity, this will be the name of the user on whose behalf the API is being called
      *
