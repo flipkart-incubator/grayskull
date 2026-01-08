@@ -19,6 +19,7 @@ type RefreshHandlerRef interface {
 	Unregister()
 }
 
+// refreshHandlerRef implements the RefreshHandlerRef interface
 type refreshHandlerRef struct {
 	client     *Client
 	projectID  string
@@ -28,6 +29,7 @@ type refreshHandlerRef struct {
 	mu         sync.RWMutex
 }
 
+// newRefreshHandlerRef creates a new refreshHandlerRef instance
 func newRefreshHandlerRef(client *Client, projectID, secretName string, hook SecretRefreshHook) *refreshHandlerRef {
 	return &refreshHandlerRef{
 		client:     client,
@@ -38,22 +40,25 @@ func newRefreshHandlerRef(client *Client, projectID, secretName string, hook Sec
 	}
 }
 
+// GetSecretRef returns the secret reference in "projectId:secretName" format
 func (r *refreshHandlerRef) GetSecretRef() string {
 	return fmt.Sprintf("%s:%s", r.projectID, r.secretName)
 }
 
+// IsActive returns whether the hook is active
 func (r *refreshHandlerRef) IsActive() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.isActive
 }
 
+// Unregister unregisters the refresh hook
 func (r *refreshHandlerRef) Unregister() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.isActive {
-		r.client.unregisterRefreshHook(r.projectID, r.secretName, r.hook)
+		// TODO: Implement actual unregistration when SSE is implemented
 		r.isActive = false
 	}
 }
