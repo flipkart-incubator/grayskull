@@ -29,7 +29,7 @@ func (s *SecretService) GetSecretURL(projectID, secretName string) (string, erro
 }
 
 // GetSecret retrieves the latest version of a specific secret
-func (s *SecretService) GetSecret(ctx context.Context, projectID, secretName string) (*ListSecretsResponse, error) {
+func (s *SecretService) GetSecret(ctx context.Context, projectID, secretName string) (*GetSecretResponse, error) {
 	path, err := s.GetSecretURL(projectID, secretName)
 	if err != nil {
 		return nil, fmt.Errorf("invalid secret reference: %w", err)
@@ -40,10 +40,10 @@ func (s *SecretService) GetSecret(ctx context.Context, projectID, secretName str
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	var secret ListSecretsResponse
-	if err := s.client.do(req, &secret); err != nil {
+	var response GetSecretResponse
+	if err := s.client.do(req, &response); err != nil {
 		return nil, fmt.Errorf("get secret: %w", err)
 	}
 
-	return &secret, nil
+	return &response, nil
 }

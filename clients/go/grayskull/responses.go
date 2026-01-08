@@ -25,12 +25,9 @@ type Secret struct {
 	MetadataVersion    int               `json:"metadataVersion"`
 }
 
-// ListSecretsResponse represents the API response for listing secrets
-type ListSecretsResponse struct {
-	Data struct {
-		Secrets []Secret `json:"secrets"`
-		Total   int      `json:"total"`
-	} `json:"data"`
+// GetSecretResponse represents the API response for getting a single secret
+type GetSecretResponse struct {
+	Data       Secret      `json:"data"`
 	Message    string      `json:"message,omitempty"`
 	Code       string      `json:"code,omitempty"`
 	Violations []Violation `json:"violations,omitempty"`
