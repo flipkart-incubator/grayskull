@@ -48,7 +48,9 @@ func (r *RetryUtil) Retry(ctx context.Context, fn func() (interface{}, error)) (
 		requestID := ""
 		if ctx != nil {
 			if v := ctx.Value(constants.GrayskullRequestID); v != nil {
-				requestID = v.(string)
+				if id, ok := v.(string); ok {
+					requestID = id
+				}
 			}
 		}
 

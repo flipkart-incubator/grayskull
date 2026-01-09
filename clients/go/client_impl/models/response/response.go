@@ -9,18 +9,28 @@ import "encoding/json"
 //
 // T is the type of the data field
 type Response[T any] struct {
-	// Data contains the actual response data.
-	Data T `json:"data"`
+	// data contains the actual response data.
+	data T `json:"data"`
 
-	// Message is a human-readable message describing the response.
-	Message string `json:"message"`
+	// message is a human-readable message describing the response.
+	message string `json:"message"`
+}
+
+// Data returns the response data.
+func (r *Response[T]) Data() T {
+	return r.data
+}
+
+// Message returns the response message.
+func (r *Response[T]) Message() string {
+	return r.message
 }
 
 // NewResponse creates a new Response with the given data and message
 func NewResponse[T any](data T, message string) *Response[T] {
 	return &Response[T]{
-		Data:    data,
-		Message: message,
+		data:    data,
+		message: message,
 	}
 }
 

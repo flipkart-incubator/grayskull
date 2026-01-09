@@ -6,6 +6,7 @@ import (
 	"github.com/grayskull/client_impl/auth"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -45,6 +46,9 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 		MaxIdleConns:        config.MaxConnections,
 		MaxIdleConnsPerHost: config.MaxConnections,
 		IdleConnTimeout:     5 * time.Minute,
+		DialContext: (&net.Dialer{
+			Timeout: config.ConnectionTimeout,
+		}).DialContext,
 	}
 
 	client := &http.Client{
@@ -82,7 +86,13 @@ func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*
 		)
 	}
 
-	return result.(*response.HttpResponse), nil
+	// Safe type assertion for the result
+	httpResp, ok := result.(*response.HttpResponse)
+	if !ok {
+		return nil, exceptions.NewGrayskullError(500, fmt.Sprintf("unexpected response type from retry: %T", result))
+	}
+
+	return httpResp, nil
 }
 
 // doGet performs a single HTTP GET request
@@ -92,7 +102,10 @@ func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.
 		return nil, exceptions.NewGrayskullErrorWithCause(0, "failed to create request", err)
 	}
 
-	c.setRequestHeaders(req, ctx)
+	// Set request headers
+	if err := c.setRequestHeaders(req, ctx); err != nil {
+		return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "failed to set request headers", err)
+	}
 
 	c.logger.DebugContext(ctx, "executing GET request",
 		"url", url,
@@ -143,8 +156,8 @@ func (c *GrayskullHTTPClient) setRequestHeaders(req *http.Request, ctx context.C
 	req.Header.Set("Authorization", authHeader)
 
 	// Add request ID from context if available
-	if requestID := ctx.Value(constants.GrayskullRequestID); requestID != nil {
-		req.Header.Set("X-Request-Id", requestID.(string))
+	if requestID, ok := ctx.Value(constants.GrayskullRequestID).(string); ok && requestID != "" {
+		req.Header.Set("X-Request-Id", requestID)
 	}
 	return nil
 }
@@ -169,13 +182,14 @@ func (c *GrayskullHTTPClient) Close() error {
 		return nil
 	}
 
-	// Close idle connections
-	if transport, ok := c.client.Transport.(interface {
-		CloseIdleConnections()
-		Close() error
-	}); ok {
+	// Close idle connections for any transport that supports it
+	if transport, ok := c.client.Transport.(interface{ CloseIdleConnections() }); ok {
 		transport.CloseIdleConnections()
-		return transport.Close()
+	}
+
+	// If the transport also implements io.Closer, call Close()
+	if closer, ok := c.client.Transport.(interface{ Close() error }); ok {
+		return closer.Close()
 	}
 
 	return nil

@@ -126,10 +126,10 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	// URL encode the path parameters
 	encodedProjectID := url.PathEscape(projectID)
 	encodedSecretName := url.PathEscape(secretName)
-	url := fmt.Sprintf("%sv1/projects/%s/secrets/%s/data", c.baseURL, encodedProjectID, encodedSecretName)
+	requestURL := fmt.Sprintf("%sv1/projects/%s/secrets/%s/data", c.baseURL, encodedProjectID, encodedSecretName)
 
 	// Fetch the secret with automatic retry logic
-	httpResponse, err := c.httpClient.DoGetWithRetry(ctx, url)
+	httpResponse, err := c.httpClient.DoGetWithRetry(ctx, requestURL)
 	if err != nil {
 		logger.Error("failed to fetch secret", "error", err)
 		return nil, fmt.Errorf("failed to fetch secret: %w", err)
@@ -145,12 +145,14 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 		return nil, errors.New("empty response from server")
 	}
 
+	secretData := secretResponse.Data()
+
 	// Check if the SecretValue is the zero value
-	if secretResponse.Data == (CLientModels.SecretValue{}) {
+	if secretData == (CLientModels.SecretValue{}) {
 		return nil, errors.New("empty secret data in response")
 	}
 
-	return &secretResponse.Data, nil
+	return &secretData, nil
 }
 
 // Close releases resources used by the Grayskull client.
