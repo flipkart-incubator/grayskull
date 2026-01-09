@@ -7,6 +7,7 @@ import (
 	"github.com/grayskull/go-client/client-impl/hooks"
 	"log/slog"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -120,11 +121,6 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	}
 	statusCode = httpResp.StatusCode()
 
-	// Check for non-2xx status codes
-	if statusCode < 200 || statusCode >= 300 {
-		return ClientModel.SecretValue{}, exceptions.NewGrayskullError(statusCode, "failed to fetch secret")
-	}
-
 	// Parse response
 	var resp response.Response[ClientModel.SecretValue]
 	if err := json.Unmarshal([]byte(httpResp.Body()), &resp); err != nil {
@@ -132,7 +128,8 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	}
 
 	// Check if data is empty by checking if all fields are zero values
-	if resp.Data == (ClientModel.SecretValue{}) {
+	var zeroValue ClientModel.SecretValue
+	if reflect.DeepEqual(resp.Data, zeroValue) {
 		return ClientModel.SecretValue{}, exceptions.NewGrayskullError(404, "secret not found or empty")
 	}
 

@@ -45,6 +45,10 @@ func NewGrayskullHttpClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 		metricsRecorder = &rec
 	}
 
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12, // Enforce minimum TLS 1.2
+		InsecureSkipVerify: config.InsecureSkipVerify(),
+	}
 	// Configure base HTTP transport
 	baseTransport := &http.Transport{
 		MaxIdleConns:          int(config.MaxConnections()),
@@ -52,9 +56,7 @@ func NewGrayskullHttpClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: time.Duration(config.ReadTimeout()) * time.Millisecond,
 		ForceAttemptHTTP2:     true,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: config.InsecureSkipVerify(),
-		},
+		TLSClientConfig:       tlsConfig,
 	}
 
 	// Enable HTTP/2
@@ -63,8 +65,14 @@ func NewGrayskullHttpClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 		// Continue without HTTP/2 rather than failing completely
 	}
 
+	// Create transport with the appropriate metrics recorder
+	transportRecorder := metrics.DefaultRecorder
+	if metricsRecorder != nil {
+		transportRecorder = *metricsRecorder
+	}
+
 	// Wrap with metrics transport
-	metricsTransport := metrics.NewTransport(baseTransport, metrics.DefaultRecorder)
+	metricsTransport := metrics.NewTransport(baseTransport, transportRecorder)
 
 	client := &http.Client{
 		Transport: metricsTransport,
@@ -115,8 +123,14 @@ func (c *GrayskullHttpClient) DoGetWithRetry(ctx context.Context, url string) (*
 			return nil, retryable
 		}
 
-		// Convert non-retryable error to retryable error
-		lastError = exceptions.NewRetryableErrorWithStatusAndCause(500, err.Error(), err)
+		// Handle GrayskullError as non-retryable
+		if grayskullErr, ok := err.(*exceptions.GrayskullError); ok {
+			lastError = grayskullErr
+			return nil, grayskullErr
+		}
+
+		// For all other errors, wrap as retryable
+		lastError = exceptions.NewRetryableErrorWithStatusAndCause(500, "request failed", err)
 		return nil, lastError
 	})
 
@@ -190,7 +204,7 @@ func (c *GrayskullHttpClient) addHeaders(ctx context.Context, req *http.Request)
 	// Add auth header
 	authHeader, err := c.authHeaderProvider.GetAuthHeader()
 	if err != nil {
-		return exceptions.NewRetryableErrorWithStatusAndCause(401, "failed to get auth header", err)
+		return exceptions.NewGrayskullErrorWithCause(401, "failed to get auth header", err)
 	}
 	req.Header.Add("Authorization", authHeader)
 

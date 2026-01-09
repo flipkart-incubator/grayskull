@@ -21,10 +21,13 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Calculate duration
 	duration := time.Since(start).Milliseconds()
 
-	// Record metrics if we have a response
+	// Record metrics for both successful and failed requests
+	path := NormalizeURL(req.URL.String())
 	if resp != nil {
-		path := NormalizeURL(req.URL.Path)
 		t.Recorder.RecordRequest(path, resp.StatusCode, duration)
+	} else if err != nil {
+		// Record failed request with status code 0
+		t.Recorder.RecordRequest(path, 0, duration)
 	}
 
 	return resp, err
@@ -38,8 +41,9 @@ func (t *Transport) transport() http.RoundTripper {
 }
 
 // NewTransport creates a new metrics transport
-func NewTransport(transport *http.Transport, recorder Recorder) *Transport {
+func NewTransport(transport http.RoundTripper, recorder Recorder) *Transport {
 	return &Transport{
-		Recorder: recorder,
+		Transport: transport,
+		Recorder:  recorder,
 	}
 }

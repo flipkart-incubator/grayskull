@@ -6,7 +6,6 @@ import "encoding/json"
 // It is a generic type that can hold any type of data in its Data field.
 //
 // This struct is used for deserializing the server's ResponseTemplate.
-// It is immutable and thread-safe.
 type Response[T any] struct {
 	// Data contains the actual response data.
 	Data T `json:"data"`

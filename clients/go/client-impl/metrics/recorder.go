@@ -1,9 +1,11 @@
 package metrics
 
 import (
+	"strconv"
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"strconv"
 )
 
 // Recorder defines the interface for recording metrics
@@ -33,63 +35,72 @@ type PrometheusRecorderConfig struct {
 	Labels    map[string]string
 }
 
+var (
+	recorderOnce   sync.Once
+	sharedRecorder *PrometheusRecorder
+)
+
 // NewPrometheusRecorder creates a new PrometheusRecorder with metrics matching Java SDK
 func NewPrometheusRecorder(cfg PrometheusRecorderConfig) *PrometheusRecorder {
-	if cfg.Namespace == "" {
-		cfg.Namespace = "grayskull"
-	}
-	if cfg.Subsystem == "" {
-		cfg.Subsystem = "client"
-	}
+	recorderOnce.Do(func() {
+		if cfg.Namespace == "" {
+			cfg.Namespace = "grayskull"
+		}
+		if cfg.Subsystem == "" {
+			cfg.Subsystem = "client"
+		}
 
-	constLabels := prometheus.Labels{}
-	for k, v := range cfg.Labels {
-		constLabels[k] = v
-	}
+		constLabels := prometheus.Labels{}
+		for k, v := range cfg.Labels {
+			constLabels[k] = v
+		}
 
-	return &PrometheusRecorder{
-		requestDuration: promauto.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Namespace:   cfg.Namespace,
-				Subsystem:   cfg.Subsystem,
-				Name:        "request_duration_milliseconds",
-				Help:        "Duration of HTTP requests in milliseconds",
-				Buckets:     prometheus.ExponentialBuckets(10, 2, 12), // 10ms to ~40s
-				ConstLabels: constLabels,
-			},
-			[]string{"path", "status"}, // Match Java SDK labels
-		),
-		requestCount: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace:   cfg.Namespace,
-				Subsystem:   cfg.Subsystem,
-				Name:        "requests_total",
-				Help:        "Total number of HTTP requests",
-				ConstLabels: constLabels,
-			},
-			[]string{"path", "status"}, // Match Java SDK labels
-		),
-		retryCount: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace:   cfg.Namespace,
-				Subsystem:   cfg.Subsystem,
-				Name:        "retries_total",
-				Help:        "Total number of HTTP retries",
-				ConstLabels: constLabels,
-			},
-			[]string{"path", "attempt", "success"}, // Match Java SDK labels
-		),
-		errorCount: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace:   cfg.Namespace,
-				Subsystem:   cfg.Subsystem,
-				Name:        "errors_total",
-				Help:        "Total number of HTTP errors",
-				ConstLabels: constLabels,
-			},
-			[]string{"path", "status", "error_type"}, // Match Java SDK labels
-		),
-	}
+		sharedRecorder = &PrometheusRecorder{
+			requestDuration: promauto.NewHistogramVec(
+				prometheus.HistogramOpts{
+					Namespace:   cfg.Namespace,
+					Subsystem:   cfg.Subsystem,
+					Name:        "request_duration_milliseconds",
+					Help:        "Duration of HTTP requests in milliseconds",
+					Buckets:     prometheus.ExponentialBuckets(10, 2, 12), // 10ms to ~40s
+					ConstLabels: constLabels,
+				},
+				[]string{"path", "status"}, // Match Java SDK labels
+			),
+			requestCount: promauto.NewCounterVec(
+				prometheus.CounterOpts{
+					Namespace:   cfg.Namespace,
+					Subsystem:   cfg.Subsystem,
+					Name:        "requests_total",
+					Help:        "Total number of HTTP requests",
+					ConstLabels: constLabels,
+				},
+				[]string{"path", "status"}, // Match Java SDK labels
+			),
+			retryCount: promauto.NewCounterVec(
+				prometheus.CounterOpts{
+					Namespace:   cfg.Namespace,
+					Subsystem:   cfg.Subsystem,
+					Name:        "retries_total",
+					Help:        "Total number of HTTP retries",
+					ConstLabels: constLabels,
+				},
+				[]string{"path", "attempt", "success"}, // Match Java SDK labels
+			),
+			errorCount: promauto.NewCounterVec(
+				prometheus.CounterOpts{
+					Namespace:   cfg.Namespace,
+					Subsystem:   cfg.Subsystem,
+					Name:        "errors_total",
+					Help:        "Total number of HTTP errors",
+					ConstLabels: constLabels,
+				},
+				[]string{"path", "status", "error_type"}, // Match Java SDK labels
+			),
+		}
+	})
+
+	return sharedRecorder
 }
 
 func (p *PrometheusRecorder) RecordRequest(path string, statusCode int, durationMs int64) {

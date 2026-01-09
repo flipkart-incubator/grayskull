@@ -7,7 +7,7 @@ import (
 
 // GrayskullClientConfiguration holds all the necessary configuration parameters
 // required to connect to and interact with the Grayskull service.
-// It is immutable and thread-safe once created.
+// It is thread-safe when using the provided setter methods.
 type GrayskullClientConfiguration struct {
 	host               string
 	connectionTimeout  int

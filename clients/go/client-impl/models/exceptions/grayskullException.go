@@ -45,11 +45,11 @@ func NewGrayskullErrorWithCause(statusCode int, message string, cause error) *Gr
 }
 
 // NewGrayskullErrorFromException creates a new GrayskullError from a status code and an existing error.
+// The error message will be the error's message without duplicating it in the cause.
 func NewGrayskullErrorFromException(statusCode int, err error) *GrayskullError {
 	return &GrayskullError{
 		StatusCode: statusCode,
 		Message:    err.Error(),
-		Cause:      err,
 	}
 }
 
