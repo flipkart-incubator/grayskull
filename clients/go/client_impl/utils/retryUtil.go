@@ -104,11 +104,15 @@ func (r *RetryUtil) Retry(ctx context.Context, fn func() (interface{}, error)) (
 		)
 
 		// Wait with exponential backoff
-		select {
-		case <-time.After(currentWait):
-			// Continue with next attempt
-		case <-ctx.Done():
-			return nil, exceptions.NewGrayskullErrorWithCause(0, "retry operation canceled", ctx.Err())
+		if ctx != nil {
+			select {
+			case <-time.After(currentWait):
+				// Continue with next attempt
+			case <-ctx.Done():
+				return nil, exceptions.NewGrayskullErrorWithCause(0, "retry operation canceled", ctx.Err())
+			}
+		} else {
+			time.Sleep(currentWait)
 		}
 
 		// Calculate next wait time with exponential backoff, capped at maxWaitTime
