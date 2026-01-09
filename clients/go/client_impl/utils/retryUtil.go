@@ -26,9 +26,17 @@ type RetryUtil struct {
 }
 
 // NewRetryUtil creates a new RetryUtil with the specified parameters.
+// maxAttempts will be set to at least 1 if a non-positive value is provided.
+// initialWait will be set to 100ms if a non-positive value is provided.
 func NewRetryUtil(maxAttempts int, initialWait time.Duration, logger *slog.Logger) *RetryUtil {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if maxAttempts <= 0 {
+		maxAttempts = 1
+	}
+	if initialWait <= 0 {
+		initialWait = 100 * time.Millisecond
 	}
 	return &RetryUtil{
 		maxAttempts: maxAttempts,
