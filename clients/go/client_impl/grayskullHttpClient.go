@@ -104,7 +104,7 @@ func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.
 
 	// Set request headers
 	if err := c.setRequestHeaders(req, ctx); err != nil {
-		return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "failed to set request headers", err)
+		return nil, exceptions.NewGrayskullErrorWithCause(500, "failed to set request headers", err)
 	}
 
 	c.logger.DebugContext(ctx, "executing GET request",
