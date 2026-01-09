@@ -10,6 +10,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static com.flipkart.grayskull.service.utils.SecretProviderConstants.*;
+import static com.flipkart.grayskull.service.utils.SecretProviderConstants.ROTATE_URL_KEY;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExternalProviderMetadataValidatorTest {
@@ -22,15 +24,15 @@ class ExternalProviderMetadataValidatorTest {
         Map<String, Object> metadata = Map.of("someKey", "someValue");
 
         // When & Then - Should not throw exception
-        assertDoesNotThrow(() -> validator.validateMetadata("SELF", metadata));
+        assertDoesNotThrow(() -> validator.validateMetadata(PROVIDER_SELF, metadata));
     }
 
     @Test
     void validateMetadata_ExternalProviderWithValidMetadata_Passes() {
         // Given
         Map<String, Object> metadata = Map.of(
-                "revokeUrl", "https://example.com/revoke",
-                "rotateUrl", "https://example.com/rotate"
+                REVOKE_URL_KEY, "https://example.com/revoke",
+                ROTATE_URL_KEY, "https://example.com/rotate"
         );
 
         // When & Then - Should not throw exception
@@ -39,28 +41,36 @@ class ExternalProviderMetadataValidatorTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidMetadataScenarios")
-    void validateMetadata_ExternalProviderWithInvalidMetadata_ThrowsException(String scenarioName, Map<String, Object> metadata) {
+    void validateMetadata_ExternalProviderWithInvalidMetadata_ThrowsException(String scenarioName, Map<String, Object> metadata, String expectedError) {
         // When & Then
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> validator.validateMetadata("external-provider", metadata));
         
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        assertEquals("expected mandatory keys 'revokeUrl' and 'rotateUrl' in the providerMeta", exception.getReason());
+        assertEquals(expectedError, exception.getReason());
     }
 
     static Stream<Arguments> invalidMetadataScenarios() {
         return Stream.of(
-                Arguments.of("Missing revokeUrl", Map.of("rotateUrl", "https://example.com/rotate")),
-                Arguments.of("Missing rotateUrl", Map.of("revokeUrl", "https://example.com/revoke")),
+                Arguments.of("Missing revokeUrl", Map.of(ROTATE_URL_KEY, "https://example.com/rotate"), "expected mandatory key 'revokeUrl' in the providerMeta"),
+                Arguments.of("Missing rotateUrl", Map.of(REVOKE_URL_KEY, "https://example.com/revoke"), "expected mandatory key 'rotateUrl' in the providerMeta"),
                 Arguments.of("Non-string revokeUrl", Map.of(
-                        "revokeUrl", 123,
-                        "rotateUrl", "https://example.com/rotate"
-                )),
+                        REVOKE_URL_KEY, 123,
+                        ROTATE_URL_KEY, "https://example.com/rotate"
+                ), "expected mandatory key 'revokeUrl' in the providerMeta"),
                 Arguments.of("Non-string rotateUrl", Map.of(
-                        "revokeUrl", "https://example.com/revoke",
-                        "rotateUrl", true
-                )),
-                Arguments.of("Empty metadata", Map.of())
+                        REVOKE_URL_KEY, "https://example.com/revoke",
+                        ROTATE_URL_KEY, true
+                ), "expected mandatory key 'rotateUrl' in the providerMeta"),
+                Arguments.of("Empty metadata", Map.of(), "expected mandatory key 'revokeUrl' in the providerMeta"),
+                Arguments.of("Invalid url", Map.of(
+                        REVOKE_URL_KEY, "invalid-url",
+                        ROTATE_URL_KEY, "https://example.com/rotate"
+                ), "invalid url: invalid-url for the providerMeta key: revokeUrl"),
+                Arguments.of("Invalid url", Map.of(
+                        REVOKE_URL_KEY, "https://example.com/revoke",
+                        ROTATE_URL_KEY, "invalid-url"
+                ), "invalid url: invalid-url for the providerMeta key: rotateUrl")
         );
     }
 

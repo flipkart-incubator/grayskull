@@ -29,4 +29,8 @@ public class GrayskullAuthentication extends AbstractAuthenticationToken {
     public GrayskullUser getPrincipal() {
         return principal;
     }
+
+    public String getUserId() {
+        return principal.getName();
+    }
 }

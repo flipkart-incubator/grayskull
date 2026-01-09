@@ -10,8 +10,8 @@ import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.MetadataValidator;
+import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import com.flipkart.grayskull.spi.models.AuditEntry;
-import com.flipkart.grayskull.spimpl.authn.SimpleGrayskullUser;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -43,7 +43,7 @@ class SecretControllerTest {
     @BeforeEach
     void setUp() {
         secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins);
-        SecurityContextHolder.setContext(new SecurityContextImpl(new TestingAuthenticationToken(new SimpleGrayskullUser("user", "actor-name"), null)));
+        SecurityContextHolder.setContext(new SecurityContextImpl(new TestingAuthenticationToken(new GrayskullUser("user", "actor-name"), null)));
     }
 
     @AfterEach

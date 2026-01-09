@@ -41,7 +41,7 @@ class SimpleAuthenticationProviderTest {
         // Then
         assertNotNull(result);
         assertEquals("testuser", result.getName());
-        assertTrue(result.getActorName().isEmpty());
+        assertNull(result.actorName());
         verify(authenticationManager).authenticate(any(Authentication.class));
     }
 
@@ -62,8 +62,8 @@ class SimpleAuthenticationProviderTest {
         // Then
         assertNotNull(result);
         assertEquals("actualuser", result.getName());
-        assertTrue(result.getActorName().isPresent());
-        assertEquals("serviceaccount", result.getActorName().get());
+        assertNotNull(result.actorName());
+        assertEquals("serviceaccount", result.actorName());
         verify(authenticationManager).authenticate(any(Authentication.class));
     }
 

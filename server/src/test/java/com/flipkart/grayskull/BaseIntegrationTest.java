@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static com.flipkart.grayskull.controllers.GrayskullUserRequestPostProcessor.user;
+import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
 /**
@@ -92,7 +93,7 @@ public abstract class BaseIntegrationTest {
         SecretDataPayload payload = new SecretDataPayload(publicPart, value);
         CreateSecretRequest createRequest = new CreateSecretRequest();
         createRequest.setName(name);
-        createRequest.setProvider("SELF");
+        createRequest.setProvider(PROVIDER_SELF);
         createRequest.setData(payload);
         return createRequest;
     }

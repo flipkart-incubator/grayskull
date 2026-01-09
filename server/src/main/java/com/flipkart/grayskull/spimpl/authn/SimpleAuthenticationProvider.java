@@ -37,6 +37,6 @@ public class SimpleAuthenticationProvider implements GrayskullAuthenticationProv
             actor = name;
             name = request.getHeader(PROXY_HEADER);
         }
-        return new SimpleGrayskullUser(name, actor);
+        return new GrayskullUser(name, actor);
     }
 }

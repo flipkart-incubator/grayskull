@@ -2,10 +2,10 @@ package com.flipkart.grayskull.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
+import com.flipkart.grayskull.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.RequiredArgsConstructor;
@@ -116,10 +116,8 @@ public class AuditAspect {
      */
     private String getActorId() {
         return Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication())
-                .map(Authentication::getPrincipal)
-                .filter(GrayskullUser.class::isInstance)
-                .map(GrayskullUser.class::cast)
-                .flatMap(GrayskullUser::getActorName)
+                .map(GrayskullAuthentication.class::cast)
+                .map(GrayskullAuthentication::getUserId)
                 .orElse(null);
     }
 

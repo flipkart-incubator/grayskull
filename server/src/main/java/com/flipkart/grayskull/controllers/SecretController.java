@@ -83,7 +83,7 @@ public class SecretController {
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String actorName = ((GrayskullUser) authentication.getPrincipal()).getActorName().orElse(null);
+        String actorName = ((GrayskullUser) authentication.getPrincipal()).actorName();
         String userId = authentication.getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)
@@ -131,7 +131,7 @@ public class SecretController {
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String actorName = ((GrayskullUser) authentication.getPrincipal()).getActorName().orElse(null);
+        String actorName = ((GrayskullUser) authentication.getPrincipal()).actorName();
         String userId = authentication.getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)

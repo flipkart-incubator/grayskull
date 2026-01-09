@@ -13,7 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
+import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 
 /**
  * A security facade bean that centralizes authorization logic for use in Spring
@@ -121,14 +121,16 @@ public class GrayskullSecurity {
      * @param providerName the secret provider name
      */
     public boolean checkProviderAuthorization(String providerName) {
-        GrayskullUser user = (GrayskullUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        Optional<String> actorName = user.getActorName();
-        if ("SELF".equals(providerName)) {
+        if (PROVIDER_SELF.equals(providerName)) {
             return true;
         }
-        String actor = actorName.orElseThrow(() -> new AccessDeniedException("Expected an actor name for the " + providerName + " managed secrets"));
+        GrayskullUser user = (GrayskullUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String actorName = user.actorName();
+        if (actorName == null) {
+            throw new AccessDeniedException("Expected an actor name for the " + providerName + " managed secrets");
+        }
         return secretProviderRepository.findByName(providerName)
-                .map(secretProvider -> secretProvider.getPrincipal().equals(actor))
-                .orElse(false);
+                .filter(secretProvider -> secretProvider.getPrincipal().equals(actorName))
+                .isPresent();
     }
 }
