@@ -39,7 +39,12 @@ func NewRetryUtil(maxAttempts int, initialWait time.Duration, logger *slog.Logge
 
 // Retry executes the provided function with retry logic.
 // It will retry on RetryableError up to the maximum number of attempts.
+// The context parameter must not be nil as it's used for cancellation and request tracing.
 func (r *RetryUtil) Retry(ctx context.Context, fn func() (interface{}, error)) (interface{}, error) {
+	if ctx == nil {
+		return nil, exceptions.NewGrayskullError(0, "context must not be nil")
+	}
+
 	currentWait := r.initialWait
 
 	for attempt := 1; attempt <= r.maxAttempts; attempt++ {

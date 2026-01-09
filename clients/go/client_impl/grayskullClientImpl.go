@@ -145,7 +145,8 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 		return nil, errors.New("empty response from server")
 	}
 
-	secretData := secretResponse.Data()
+	// Get the actual secret data from the response
+	secretData := secretResponse.GetData()
 
 	// Check if the SecretValue is the zero value
 	if secretData == (CLientModels.SecretValue{}) {
