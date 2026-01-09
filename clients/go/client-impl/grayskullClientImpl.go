@@ -76,11 +76,8 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 			(*c.httpClient.metricsRecorder).RecordRequest("get_secret", statusCode, durationMs)
 
 			// Record error if any
-			if err != nil {
-				// For errors, we can use RecordRetry with success=false to track failures
-				// Note: The Java SDK might have different error tracking, but this matches our Go interface
-				(*c.httpClient.metricsRecorder).RecordRetry("get_secret", 1, false)
-			}
+			// Errors are already captured via the status code in RecordRequest
+			// and will be properly tracked by the metrics system
 		}
 
 		c.logger.DebugContext(ctx, "Request completed",

@@ -43,8 +43,9 @@ type TaskFunc func() (interface{}, error)
 func (r *RetryUtil) Retry(ctx context.Context, task TaskFunc) (interface{}, error) {
 	currentWait := r.initialWait
 	requestID := getRequestID(ctx)
+	var lastErr error
 
-	for attempt := 1; attempt <= r.maxAttempts; attempt++ {
+	for attempt := 1; ; attempt++ {
 		slog.DebugContext(ctx, "Executing task",
 			slog.String("requestID", requestID),
 			slog.Int("attempt", attempt),
@@ -72,6 +73,7 @@ func (r *RetryUtil) Retry(ctx context.Context, task TaskFunc) (interface{}, erro
 			return nil, err
 		}
 
+		lastErr = err
 		slog.WarnContext(ctx, "Retryable error occurred",
 			slog.String("requestID", requestID),
 			slog.Int("attempt", attempt),
@@ -80,11 +82,7 @@ func (r *RetryUtil) Retry(ctx context.Context, task TaskFunc) (interface{}, erro
 		)
 
 		if attempt >= r.maxAttempts {
-			errMsg := fmt.Sprintf("failed after %d retry attempts: %v", r.maxAttempts, err)
-			slog.ErrorContext(ctx, "Max retry attempts reached",
-				slog.String("requestID", requestID),
-			)
-			return nil, exceptions.NewGrayskullErrorWithCause(retryableErr.StatusCode(), errMsg, err)
+			break
 		}
 
 		// Wait before next retry with exponential backoff
@@ -106,7 +104,13 @@ func (r *RetryUtil) Retry(ctx context.Context, task TaskFunc) (interface{}, erro
 			currentWait = MaxWaitTime
 		}
 	}
-	return nil, exceptions.NewGrayskullError(500, "max retry attempts reached")
+
+	// If we reach here, we've exhausted all retry attempts
+	errMsg := fmt.Sprintf("failed after %d retry attempts: %v", r.maxAttempts, lastErr)
+	slog.ErrorContext(ctx, "Max retry attempts reached",
+		slog.String("requestID", requestID),
+	)
+	return nil, exceptions.NewGrayskullErrorWithCause(500, errMsg, lastErr)
 }
 
 // getRequestID extracts the request ID from the context or generates a new one.

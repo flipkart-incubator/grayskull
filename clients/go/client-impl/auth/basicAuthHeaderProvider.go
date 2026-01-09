@@ -19,7 +19,6 @@ type BasicAuthHeaderProvider struct {
 // Returns an error if username or password is empty.
 func NewBasicAuthHeaderProvider(username, password string) (*BasicAuthHeaderProvider, error) {
 	username = strings.TrimSpace(username)
-	password = strings.TrimSpace(password)
 	if username == "" || password == "" {
 		return nil, fmt.Errorf("username and password cannot be empty")
 	}

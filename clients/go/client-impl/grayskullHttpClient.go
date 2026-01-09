@@ -3,10 +3,12 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
-	"strings"
+	"os"
 	"time"
 
 	"github.com/grayskull/go-client/client-impl/auth"
@@ -135,7 +137,7 @@ func (c *GrayskullHttpClient) DoGetWithRetry(ctx context.Context, url string) (*
 	})
 
 	if err != nil {
-		return nil, lastError
+		return nil, err // Return the error from RetryUtil.Retry() to preserve retry context
 	}
 
 	return lastResponse, nil
@@ -160,8 +162,13 @@ func (c *GrayskullHttpClient) doGet(ctx context.Context, url string) (*response.
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		// Check for timeout errors
-		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline exceeded") {
+		// Check for timeout/deadline errors
+		if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
+			return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "timeout while communicating with Grayskull server", err)
+		}
+		// Check for temporary network errors (often retryable)
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
 			return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "timeout while communicating with Grayskull server", err)
 		}
 		return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "error communicating with Grayskull server", err)

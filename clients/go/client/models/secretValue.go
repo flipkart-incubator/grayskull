@@ -76,6 +76,9 @@ func (s *SecretValue) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements json.Unmarshaler
 func (s *SecretValue) UnmarshalJSON(data []byte) error {
+	// Clear any existing sensitive data first
+	s.Clear()
+
 	type Alias SecretValue
 	aux := &struct {
 		*Alias

@@ -40,67 +40,64 @@ var (
 	sharedRecorder *PrometheusRecorder
 )
 
-// NewPrometheusRecorder creates a new PrometheusRecorder with metrics matching Java SDK
+// NewPrometheusRecorder creates a new PrometheusRecorder with the given configuration.
+// Note: Each call creates a new instance. For singleton access, use GetDefaultRecorder().
 func NewPrometheusRecorder(cfg PrometheusRecorderConfig) *PrometheusRecorder {
-	recorderOnce.Do(func() {
-		if cfg.Namespace == "" {
-			cfg.Namespace = "grayskull"
-		}
-		if cfg.Subsystem == "" {
-			cfg.Subsystem = "client"
-		}
+	if cfg.Namespace == "" {
+		cfg.Namespace = "grayskull"
+	}
+	if cfg.Subsystem == "" {
+		cfg.Subsystem = "client"
+	}
 
-		constLabels := prometheus.Labels{}
-		for k, v := range cfg.Labels {
-			constLabels[k] = v
-		}
+	constLabels := prometheus.Labels{}
+	for k, v := range cfg.Labels {
+		constLabels[k] = v
+	}
 
-		sharedRecorder = &PrometheusRecorder{
-			requestDuration: promauto.NewHistogramVec(
-				prometheus.HistogramOpts{
-					Namespace:   cfg.Namespace,
-					Subsystem:   cfg.Subsystem,
-					Name:        "request_duration_milliseconds",
-					Help:        "Duration of HTTP requests in milliseconds",
-					Buckets:     prometheus.ExponentialBuckets(10, 2, 12), // 10ms to ~40s
-					ConstLabels: constLabels,
-				},
-				[]string{"path", "status"}, // Match Java SDK labels
-			),
-			requestCount: promauto.NewCounterVec(
-				prometheus.CounterOpts{
-					Namespace:   cfg.Namespace,
-					Subsystem:   cfg.Subsystem,
-					Name:        "requests_total",
-					Help:        "Total number of HTTP requests",
-					ConstLabels: constLabels,
-				},
-				[]string{"path", "status"}, // Match Java SDK labels
-			),
-			retryCount: promauto.NewCounterVec(
-				prometheus.CounterOpts{
-					Namespace:   cfg.Namespace,
-					Subsystem:   cfg.Subsystem,
-					Name:        "retries_total",
-					Help:        "Total number of HTTP retries",
-					ConstLabels: constLabels,
-				},
-				[]string{"path", "attempt", "success"}, // Match Java SDK labels
-			),
-			errorCount: promauto.NewCounterVec(
-				prometheus.CounterOpts{
-					Namespace:   cfg.Namespace,
-					Subsystem:   cfg.Subsystem,
-					Name:        "errors_total",
-					Help:        "Total number of HTTP errors",
-					ConstLabels: constLabels,
-				},
-				[]string{"path", "status", "error_type"}, // Match Java SDK labels
-			),
-		}
-	})
-
-	return sharedRecorder
+	return &PrometheusRecorder{
+		requestDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace:   cfg.Namespace,
+				Subsystem:   cfg.Subsystem,
+				Name:        "request_duration_milliseconds",
+				Help:        "Duration of HTTP requests in milliseconds",
+				Buckets:     prometheus.ExponentialBuckets(10, 2, 12), // 10ms to ~40s
+				ConstLabels: constLabels,
+			},
+			[]string{"path", "status"}, // Match Java SDK labels
+		),
+		requestCount: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace:   cfg.Namespace,
+				Subsystem:   cfg.Subsystem,
+				Name:        "requests_total",
+				Help:        "Total number of HTTP requests",
+				ConstLabels: constLabels,
+			},
+			[]string{"path", "status"}, // Match Java SDK labels
+		),
+		retryCount: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace:   cfg.Namespace,
+				Subsystem:   cfg.Subsystem,
+				Name:        "retries_total",
+				Help:        "Total number of HTTP retries",
+				ConstLabels: constLabels,
+			},
+			[]string{"path", "attempt", "success"}, // Match Java SDK labels
+		),
+		errorCount: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace:   cfg.Namespace,
+				Subsystem:   cfg.Subsystem,
+				Name:        "errors_total",
+				Help:        "Total number of HTTP errors",
+				ConstLabels: constLabels,
+			},
+			[]string{"path", "status", "error_type"}, // Match Java SDK labels
+		),
+	}
 }
 
 func (p *PrometheusRecorder) RecordRequest(path string, statusCode int, durationMs int64) {
@@ -127,16 +124,24 @@ func (p *PrometheusRecorder) RecordRetry(path string, attemptNumber int, success
 
 	// If retry failed, also record an error
 	if !success {
-		p.errorCount.WithLabelValues(path, "retry_failed", "retry_error").Inc()
+		p.errorCount.WithLabelValues(path, "0", "retry_error").Inc()
 	}
 }
 
+// GetDefaultRecorder returns the shared singleton recorder instance.
+func GetDefaultRecorder() *PrometheusRecorder {
+	recorderOnce.Do(func() {
+		sharedRecorder = NewPrometheusRecorder(PrometheusRecorderConfig{
+			Namespace: "grayskull",
+			Subsystem: "client",
+			Labels: map[string]string{
+				"client_type": "go",
+				"version":     "1.0.0", // TODO: Replace with actual version
+			},
+		})
+	})
+	return sharedRecorder
+}
+
 // DefaultRecorder is the default metrics recorder with standard configuration
-var DefaultRecorder Recorder = NewPrometheusRecorder(PrometheusRecorderConfig{
-	Namespace: "grayskull",
-	Subsystem: "client",
-	Labels: map[string]string{
-		"client_type": "go",
-		"version":     "1.0.0", // TODO: Replace with actual version
-	},
-})
+var DefaultRecorder Recorder = GetDefaultRecorder()
