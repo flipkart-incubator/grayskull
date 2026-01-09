@@ -74,7 +74,11 @@ class ExternalProviderMetadataValidatorTest {
                 Arguments.of("Invalid url", Map.of(
                         REVOKE_URL_KEY, "https://example.com/revoke?test=123",
                         ROTATE_URL_KEY, "https://example.com/rotate?token=123"
-                ), "sensitive key: token in the providerMeta key: rotateUrl")
+                ), "sensitive key: token in the providerMeta key: rotateUrl"),
+                Arguments.of("Invalid url", Map.of(
+                        REVOKE_URL_KEY, "https://example.com/revoke?test=123",
+                        ROTATE_URL_KEY, "https://example.com/rotate?Token=123"
+                ), "sensitive key: Token in the providerMeta key: rotateUrl")
         );
     }
 

@@ -43,7 +43,7 @@ public final class ExternalProviderMetadataValidator implements MetadataValidato
 
         MultiValueMap<String, String> queryParams = UriComponentsBuilder.fromUriString(url).build().getQueryParams();
         queryParams.keySet().forEach(k -> {
-            if (SENSITIVE_KEYS.contains(k)) {
+            if (SENSITIVE_KEYS.contains(k.toLowerCase())) {
                 throw new BadRequestException("sensitive key: " + k + " in the providerMeta key: " + key);
             }
         });
