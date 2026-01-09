@@ -40,7 +40,6 @@ func NewRetryUtil(maxAttempts int, initialWait time.Duration, logger *slog.Logge
 // Retry executes the provided function with retry logic.
 // It will retry on RetryableError up to the maximum number of attempts.
 func (r *RetryUtil) Retry(ctx context.Context, fn func() (interface{}, error)) (interface{}, error) {
-	var lastErr error
 	currentWait := r.initialWait
 
 	for attempt := 1; attempt <= r.maxAttempts; attempt++ {
@@ -78,7 +77,6 @@ func (r *RetryUtil) Retry(ctx context.Context, fn func() (interface{}, error)) (
 			return nil, err // Return non-retryable errors immediately
 		}
 
-		lastErr = err
 		if attempt == r.maxAttempts {
 			r.logger.ErrorContext(ctx, "max retry attempts reached",
 				"maxAttempts", r.maxAttempts,
@@ -111,7 +109,6 @@ func (r *RetryUtil) Retry(ctx context.Context, fn func() (interface{}, error)) (
 		// Calculate next wait time with exponential backoff, capped at maxWaitTime
 		currentWait = time.Duration(math.Min(float64(currentWait*2), float64(maxWaitTime)))
 	}
-
-	return nil, exceptions.NewGrayskullErrorWithCause(0,
-		fmt.Sprintf("reached maximum attempts: %d", r.maxAttempts), lastErr)
+	// Return an error when max attempts are reached without success
+	return nil, fmt.Errorf("maximum number of retry attempts (%d) reached", r.maxAttempts)
 }
