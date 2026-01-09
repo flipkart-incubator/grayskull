@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.authz;
 
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
@@ -124,8 +124,8 @@ public class GrayskullSecurity {
         if (PROVIDER_SELF.equals(providerName)) {
             return true;
         }
-        GrayskullUser user = (GrayskullUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        String actorName = user.actorName();
+        GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
+        String actorName = authentication.getActor();
         if (actorName == null) {
             throw new AccessDeniedException("Expected an actor name for the " + providerName + " managed secrets");
         }

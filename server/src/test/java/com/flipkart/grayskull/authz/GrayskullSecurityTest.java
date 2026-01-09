@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.authz;
 
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.models.Secret;
@@ -12,7 +12,6 @@ import com.flipkart.grayskull.spi.repositories.SecretRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -32,7 +31,7 @@ class GrayskullSecurityTest {
     private final GrayskullAuthorizationProvider authorizationProvider = mock();
     private final GrayskullSecurity grayskullSecurity = new GrayskullSecurity(projectRepository, secretRepository, secretProviderRepository, authorizationProvider);
 
-    private final Authentication authentication = new TestingAuthenticationToken(new GrayskullUser("test-user", null), "password");
+    private final Authentication authentication = new GrayskullAuthentication("test-user", null);
     private final Project project = Project.builder()
             .id("test-project")
             .kmsKeyId("test-key")
@@ -175,7 +174,7 @@ class GrayskullSecurityTest {
     @Test
     void checkProviderAuthorization_WhenProviderIsSelfAndUserHasNoActor_ReturnsTrue() {
         // Given - User with no actor name
-        Authentication authWithoutActor = new TestingAuthenticationToken(new GrayskullUser("test-user", null), "password");
+        Authentication authWithoutActor = new GrayskullAuthentication("test-user", null);
         SecurityContextHolder.getContext().setAuthentication(authWithoutActor);
 
         // When & Then
@@ -185,7 +184,7 @@ class GrayskullSecurityTest {
     @Test
     void checkProviderAuthorization_WhenProviderIsSelfAndUserHasActor_ReturnsTrue() {
         // Given - User with actor name
-        Authentication authWithActor = new TestingAuthenticationToken(new GrayskullUser("test-user", "actor-name"), "password");
+        Authentication authWithActor = new GrayskullAuthentication("test-user", "actor-name");
         SecurityContextHolder.getContext().setAuthentication(authWithActor);
 
         // When & Then
@@ -195,7 +194,7 @@ class GrayskullSecurityTest {
     @Test
     void checkProviderAuthorization_WhenProviderIsNotSelfAndUserHasNoActor_ThrowsAccessDeniedException() {
         // Given - User with no actor name
-        Authentication authWithoutActor = new TestingAuthenticationToken(new GrayskullUser("test-user", null), "password");
+        Authentication authWithoutActor = new GrayskullAuthentication("test-user", null);
         SecurityContextHolder.getContext().setAuthentication(authWithoutActor);
 
         // When & Then
@@ -207,7 +206,7 @@ class GrayskullSecurityTest {
     @Test
     void checkProviderAuthorization_WhenProviderNotFound_ReturnsFalse() {
         // Given - User with actor name but provider doesn't exist
-        Authentication authWithActor = new TestingAuthenticationToken(new GrayskullUser("test-user", "actor-name"), "password");
+        Authentication authWithActor = new GrayskullAuthentication("test-user", "actor-name");
         SecurityContextHolder.getContext().setAuthentication(authWithActor);
         when(secretProviderRepository.findByName("non-existent-provider")).thenReturn(Optional.empty());
 
@@ -219,7 +218,7 @@ class GrayskullSecurityTest {
     void checkProviderAuthorization_WhenActorNameMatchesProviderPrincipal_ReturnsTrue() {
         // Given - User with actor name that matches provider principal
         String actorName = "matching-actor";
-        Authentication authWithActor = new TestingAuthenticationToken(new GrayskullUser("test-user", actorName), "password");
+        Authentication authWithActor = new GrayskullAuthentication("test-user", actorName);
         SecurityContextHolder.getContext().setAuthentication(authWithActor);
         
         SecretProvider provider = SecretProvider.builder()
@@ -235,7 +234,7 @@ class GrayskullSecurityTest {
     @Test
     void checkProviderAuthorization_WhenActorNameDoesNotMatchProviderPrincipal_ReturnsFalse() {
         // Given - User with actor name that doesn't match provider principal
-        Authentication authWithActor = new TestingAuthenticationToken(new GrayskullUser("test-user", "wrong-actor"), "password");
+        Authentication authWithActor = new GrayskullAuthentication("test-user", "wrong-actor");
         SecurityContextHolder.getContext().setAuthentication(authWithActor);
         
         SecretProvider provider = SecretProvider.builder()

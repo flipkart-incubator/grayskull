@@ -1,7 +1,6 @@
 package com.flipkart.grayskull.controllers;
 
-import com.flipkart.grayskull.authn.GrayskullAuthentication;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
@@ -27,8 +26,7 @@ public class GrayskullUserRequestPostProcessor implements RequestPostProcessor {
 
     @Override
     public MockHttpServletRequest postProcessRequest(MockHttpServletRequest request) {
-        GrayskullUser user = new GrayskullUser(this.userName, actorName);
-        RequestPostProcessor authenticationPostProcessor = authentication(new GrayskullAuthentication(user));
+        RequestPostProcessor authenticationPostProcessor = authentication(new GrayskullAuthentication(userName, actorName));
         return authenticationPostProcessor.postProcessRequest(request);
     }
 }

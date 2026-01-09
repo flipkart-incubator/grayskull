@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.authn;
 
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,15 +37,15 @@ class AuthenticationFilterTest {
     @Test
     void doFilterInternal_WhenAuthenticationSuccessful_ShouldSetSecurityContext() throws ServletException, IOException {
         // Arrange
-        GrayskullUser user = new GrayskullUser("user", null);
-        when(authenticationProvider.authenticate(request)).thenReturn(user);
+        GrayskullAuthentication authentication = new GrayskullAuthentication("user", null);
+        when(authenticationProvider.authenticate(request)).thenReturn(authentication);
 
         // Act
         authenticationFilter.doFilterInternal(request, response, filterChain);
 
         // Assert
         verify(filterChain).doFilter(request, response);
-        assertEquals(user, SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+        assertEquals(authentication, SecurityContextHolder.getContext().getAuthentication());
     }
 
     @Test

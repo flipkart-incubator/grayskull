@@ -1,14 +1,13 @@
 package com.flipkart.grayskull.authn;
 
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,10 +24,9 @@ public class AuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         try {
-            GrayskullUser user = authenticationProvider.authenticate(request);
-            if (user != null) {
+            GrayskullAuthentication authentication = authenticationProvider.authenticate(request);
+            if (authentication != null) {
                 SecurityContext context = SecurityContextHolder.getContextHolderStrategy().createEmptyContext();
-                Authentication authentication = new GrayskullAuthentication(user);
                 context.setAuthentication(authentication);
                 SecurityContextHolder.setContext(context);
             }

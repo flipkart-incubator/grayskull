@@ -7,7 +7,7 @@ import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
 import com.flipkart.grayskull.spi.MetadataValidator;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
@@ -20,7 +20,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -82,8 +81,8 @@ public class SecretController {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String actorName = ((GrayskullUser) authentication.getPrincipal()).actorName();
+        GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
+        String actorName = authentication.getActor();
         String userId = authentication.getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)
@@ -130,8 +129,8 @@ public class SecretController {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String actorName = ((GrayskullUser) authentication.getPrincipal()).actorName();
+        GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
+        String actorName = authentication.getActor();
         String userId = authentication.getName();
         AuditEntry auditEntry = AuditEntry.builder()
                 .projectId(projectId)

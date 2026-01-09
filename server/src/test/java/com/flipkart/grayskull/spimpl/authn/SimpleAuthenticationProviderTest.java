@@ -1,6 +1,6 @@
 package com.flipkart.grayskull.spimpl.authn;
 
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -36,12 +36,12 @@ class SimpleAuthenticationProviderTest {
         when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(mockAuth);
 
         // When
-        GrayskullUser result = authenticationProvider.authenticate(request);
+        GrayskullAuthentication result = authenticationProvider.authenticate(request);
 
         // Then
         assertNotNull(result);
         assertEquals("testuser", result.getName());
-        assertNull(result.actorName());
+        assertNull(result.getActor());
         verify(authenticationManager).authenticate(any(Authentication.class));
     }
 
@@ -57,13 +57,13 @@ class SimpleAuthenticationProviderTest {
         when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(mockAuth);
 
         // When
-        GrayskullUser result = authenticationProvider.authenticate(request);
+        GrayskullAuthentication result = authenticationProvider.authenticate(request);
 
         // Then
         assertNotNull(result);
         assertEquals("actualuser", result.getName());
-        assertNotNull(result.actorName());
-        assertEquals("serviceaccount", result.actorName());
+        assertNotNull(result.getActor());
+        assertEquals("serviceaccount", result.getActor());
         verify(authenticationManager).authenticate(any(Authentication.class));
     }
 
@@ -74,7 +74,7 @@ class SimpleAuthenticationProviderTest {
         // No Authorization header
 
         // When
-        GrayskullUser result = authenticationProvider.authenticate(request);
+        GrayskullAuthentication result = authenticationProvider.authenticate(request);
 
         // Then
         assertNull(result);
@@ -88,7 +88,7 @@ class SimpleAuthenticationProviderTest {
         request.addHeader("Authorization", "Bearer token123"); // Not Basic auth
 
         // When
-        GrayskullUser result = authenticationProvider.authenticate(request);
+        GrayskullAuthentication result = authenticationProvider.authenticate(request);
 
         // Then
         assertNull(result);

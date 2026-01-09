@@ -1,7 +1,7 @@
 package com.flipkart.grayskull.spimpl.authn;
 
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.web.authentication.AuthenticationConverter;
@@ -25,7 +25,7 @@ public class SimpleAuthenticationProvider implements GrayskullAuthenticationProv
     }
 
     @Override
-    public GrayskullUser authenticate(HttpServletRequest request) {
+    public GrayskullAuthentication authenticate(HttpServletRequest request) {
         Authentication authRequest = authenticationConverter.convert(request);
         if (authRequest == null) {
             return null;
@@ -37,6 +37,6 @@ public class SimpleAuthenticationProvider implements GrayskullAuthenticationProv
             actor = name;
             name = request.getHeader(PROXY_HEADER);
         }
-        return new GrayskullUser(name, actor);
+        return new GrayskullAuthentication(name, actor);
     }
 }

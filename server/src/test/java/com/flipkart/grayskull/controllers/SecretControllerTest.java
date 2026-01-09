@@ -10,13 +10,12 @@ import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.MetadataValidator;
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
-import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 
@@ -43,7 +42,7 @@ class SecretControllerTest {
     @BeforeEach
     void setUp() {
         secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins);
-        SecurityContextHolder.setContext(new SecurityContextImpl(new TestingAuthenticationToken(new GrayskullUser("user", "actor-name"), null)));
+        SecurityContextHolder.setContext(new SecurityContextImpl(new GrayskullAuthentication("user", "actor-name")));
     }
 
     @AfterEach

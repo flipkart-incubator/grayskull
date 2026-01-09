@@ -1,6 +1,5 @@
-package com.flipkart.grayskull.authn;
+package com.flipkart.grayskull.spi.authn;
 
-import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import lombok.EqualsAndHashCode;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -12,11 +11,13 @@ import java.util.List;
 public class GrayskullAuthentication extends AbstractAuthenticationToken {
     private static final List<GrantedAuthority> AUTHORITIES = AuthorityUtils.createAuthorityList("ROLE_USER");
 
-    private final GrayskullUser principal;
+    private final String principal;
+    private final String actor;
 
-    public GrayskullAuthentication(GrayskullUser principal) {
+    public GrayskullAuthentication(String principal, String actor) {
         super(AUTHORITIES);
         this.principal = principal;
+        this.actor = actor;
         setAuthenticated(true);
     }
 
@@ -26,11 +27,11 @@ public class GrayskullAuthentication extends AbstractAuthenticationToken {
     }
 
     @Override
-    public GrayskullUser getPrincipal() {
+    public String getPrincipal() {
         return principal;
     }
 
-    public String getUserId() {
-        return principal.getName();
+    public String getActor() {
+        return actor;
     }
 }
