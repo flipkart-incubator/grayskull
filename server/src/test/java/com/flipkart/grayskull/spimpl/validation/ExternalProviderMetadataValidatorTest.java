@@ -31,7 +31,7 @@ class ExternalProviderMetadataValidatorTest {
     void validateMetadata_ExternalProviderWithValidMetadata_Passes() {
         // Given
         Map<String, Object> metadata = Map.of(
-                REVOKE_URL_KEY, "https://example.com/revoke",
+                REVOKE_URL_KEY, "https://example.com/revoke?test=123",
                 ROTATE_URL_KEY, "https://example.com/rotate"
         );
 
@@ -70,7 +70,11 @@ class ExternalProviderMetadataValidatorTest {
                 Arguments.of("Invalid url", Map.of(
                         REVOKE_URL_KEY, "https://example.com/revoke",
                         ROTATE_URL_KEY, "invalid-url"
-                ), "invalid url: invalid-url for the providerMeta key: rotateUrl")
+                ), "invalid url: invalid-url for the providerMeta key: rotateUrl"),
+                Arguments.of("Invalid url", Map.of(
+                        REVOKE_URL_KEY, "https://example.com/revoke?test=123",
+                        ROTATE_URL_KEY, "https://example.com/rotate?token=123"
+                ), "sensitive key: token in the providerMeta key: rotateUrl")
         );
     }
 
