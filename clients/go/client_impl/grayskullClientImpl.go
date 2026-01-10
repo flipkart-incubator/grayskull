@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/grayskull/client"
+	"github.com/grayskull/client/hooks"
 	"github.com/grayskull/client_impl/auth"
 	"log/slog"
 	"net/url"
@@ -16,9 +17,17 @@ import (
 
 	CLientModels "github.com/grayskull/client/models"
 	"github.com/grayskull/client_impl/constants"
+	ClientHooks "github.com/grayskull/client_impl/hooks"
 	"github.com/grayskull/client_impl/models"
 	"github.com/grayskull/client_impl/models/response"
 )
+
+// noOpRefreshHandlerRef is a minimal implementation of RefreshHandlerRef for error cases
+type noOpRefreshHandlerRef struct{}
+
+func (n *noOpRefreshHandlerRef) GetSecretRef() string { return "" }
+func (n *noOpRefreshHandlerRef) IsActive() bool       { return false }
+func (n *noOpRefreshHandlerRef) Unregister()          {}
 
 // GrayskullClientImpl implements the Grayskull client interface
 type GrayskullClientImpl struct {
@@ -154,6 +163,28 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	}
 
 	return &secretData, nil
+}
+
+// RegisterRefreshHook registers a refresh hook for a secret.
+// Note: This is a placeholder implementation. The hook will be registered but
+// will not be invoked until server-side long-polling support is implemented.
+func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef string, hook hooks.SecretRefreshHook) (hooks.RefreshHandlerRef, error) {
+	if secretRef == "" {
+		return &noOpRefreshHandlerRef{}, errors.New("secretRef cannot be empty")
+	}
+	if hook == nil {
+		return &noOpRefreshHandlerRef{}, errors.New("hook cannot be nil")
+	}
+
+	requestID := uuid.New().String()
+	c.logger.DebugContext(ctx, "registering refresh hook",
+		"requestId", requestID,
+		"secretRef", secretRef,
+		"note", "placeholder implementation",
+	)
+
+	// TODO: Implement actual hook registration when server-side events support is added
+	return ClientHooks.Instance, nil
 }
 
 // Close releases resources used by the Grayskull client.

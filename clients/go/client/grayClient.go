@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"github.com/grayskull/client/hooks"
 	"github.com/grayskull/client/models"
 )
 
@@ -9,6 +10,11 @@ import (
 type Client interface {
 	// GetSecret retrieves a secret by its reference
 	GetSecret(ctx context.Context, secretRef string) (*models.SecretValue, error)
+
+	// RegisterRefreshHook registers a refresh hook for a secret.
+	// Note: This is a placeholder implementation. The hook will be registered but
+	// will not be invoked until server-side long-polling support is implemented.
+	RegisterRefreshHook(ctx context.Context, secretRef string, hook hooks.SecretRefreshHook) (hooks.RefreshHandlerRef, error)
 
 	// Close releases any resources used by the client
 	Close() error
