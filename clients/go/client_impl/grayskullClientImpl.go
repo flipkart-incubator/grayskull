@@ -22,13 +22,6 @@ import (
 	"github.com/grayskull/client_impl/models/response"
 )
 
-// noOpRefreshHandlerRef is a minimal implementation of RefreshHandlerRef for error cases
-type noOpRefreshHandlerRef struct{}
-
-func (n *noOpRefreshHandlerRef) GetSecretRef() string { return "" }
-func (n *noOpRefreshHandlerRef) IsActive() bool       { return false }
-func (n *noOpRefreshHandlerRef) Unregister()          {}
-
 // GrayskullClientImpl implements the Grayskull client interface
 type GrayskullClientImpl struct {
 	baseURL             string
@@ -170,10 +163,10 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 // will not be invoked until server-side long-polling support is implemented.
 func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef string, hook hooks.SecretRefreshHook) (hooks.RefreshHandlerRef, error) {
 	if secretRef == "" {
-		return &noOpRefreshHandlerRef{}, errors.New("secretRef cannot be empty")
+		return ClientHooks.Instance, errors.New("secretRef cannot be empty")
 	}
 	if hook == nil {
-		return &noOpRefreshHandlerRef{}, errors.New("hook cannot be nil")
+		return ClientHooks.Instance, errors.New("hook cannot be nil")
 	}
 
 	requestID := uuid.New().String()
