@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -36,20 +37,35 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 
+	// Try to listen on the address first to catch any binding errors
+	listener, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+	}
+
 	s.server = &http.Server{
-		Addr:              s.addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// Start the server in a goroutine
+	errChan := make(chan error, 1)
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			// TODO: Log error
-			fmt.Printf("Error starting metrics server: %v\n", err)
+		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			errChan <- fmt.Errorf("error running metrics server: %w", err)
 		}
+		close(errChan)
 	}()
 
-	return nil
+	// Check if the server started successfully
+	select {
+	case err := <-errChan:
+		s.server = nil
+		return fmt.Errorf("failed to start metrics server: %w", err)
+	default:
+		// Server started successfully
+		return nil
+	}
 }
 
 // Stop gracefully shuts down the metrics server
