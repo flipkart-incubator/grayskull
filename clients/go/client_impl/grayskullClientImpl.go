@@ -7,6 +7,7 @@ import (
 	"github.com/grayskull/client"
 	"github.com/grayskull/client/hooks"
 	"github.com/grayskull/client_impl/auth"
+	"github.com/grayskull/client_impl/metrics"
 	"log/slog"
 	"net/url"
 	"os"
@@ -29,6 +30,8 @@ type GrayskullClientImpl struct {
 	clientConfiguration *models.GrayskullClientConfiguration
 	httpClient          *GrayskullHTTPClient
 	logger              *slog.Logger
+	metrics             *metrics.Metrics
+	metricsServer       *metrics.Server
 }
 
 // NewGrayskullClient creates a new instance of a Grayskull client
@@ -46,17 +49,24 @@ func NewGrayskullClient(authHeaderProvider auth.GrayskullAuthHeaderProvider, cli
 		Level: slog.LevelInfo,
 	}))
 
+	// Initialize metrics
+	metricsInstance := metrics.NewMetrics("grayskull_client")
+
+	// Start metrics server if enabled
+	var metricsServer *metrics.Server
+	if clientConfig.Metrics.Enabled && clientConfig.Metrics.Server != nil {
+		metricsServer = metrics.NewServer(clientConfig.Metrics.Server.Address)
+		if err := metricsServer.Start(); err != nil {
+			logger.Error("Failed to start metrics server", "error", err)
+		} else {
+			logger.Info("Metrics server started", "address", metricsServer.Addr())
+		}
+	}
+
 	// Ensure base URL ends with a slash
 	baseURL := clientConfig.Host
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
-	}
-
-	client := &GrayskullClientImpl{
-		baseURL:             baseURL,
-		authHeaderProvider:  authHeaderProvider,
-		clientConfiguration: clientConfig,
-		logger:              logger,
 	}
 
 	// Initialize HTTP client
@@ -65,11 +75,14 @@ func NewGrayskullClient(authHeaderProvider auth.GrayskullAuthHeaderProvider, cli
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
-	client.httpClient = httpClient
-
-	// Configure metrics
-	if clientConfig.MetricsEnabled {
-		logger.Info("metrics collection is enabled")
+	client := &GrayskullClientImpl{
+		baseURL:             baseURL,
+		authHeaderProvider:  authHeaderProvider,
+		clientConfiguration: clientConfig,
+		httpClient:          httpClient,
+		logger:              logger,
+		metrics:             metricsInstance,
+		metricsServer:       metricsServer,
 	}
 
 	return client, nil
@@ -78,15 +91,24 @@ func NewGrayskullClient(authHeaderProvider auth.GrayskullAuthHeaderProvider, cli
 // GetSecret retrieves a secret from the Grayskull server.
 // The secretRef should be in the format: "projectId:secretName"
 // For example: "my-project:database-password"
-// GetSecret retrieves a secret from the Grayskull server.
-// The secretRef should be in the format: "projectId:secretName"
-// For example: "my-project:database-password"
 // ctx must be non-nil. Use context.Background() or context.
 func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (*CLientModels.SecretValue, error) {
+	startTime := time.Now()
 	requestID := uuid.New().String()
 	// Add our request ID to the context
+
+	// Defer function to record metrics
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		status := "success"
+		if ctx.Err() != nil {
+			status = "canceled"
+		}
+		c.metrics.ObserveSecretOperationDuration("get_secret", status, duration)
+		c.metrics.IncSecretOperationTotal("get_secret", status)
+	}()
 	ctx = context.WithValue(ctx, constants.GrayskullRequestID, requestID)
-	startTime := time.Now()
+	startTime = time.Now()
 
 	// Set up logger with context
 	logger := c.logger.With(
@@ -163,38 +185,82 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 // Note: This is a placeholder implementation. The hook will be registered but
 // will not be invoked until server-side long-polling support is implemented.
 func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef string, hook hooks.SecretRefreshHook) (hooks.RefreshHandlerRef, error) {
+	startTime := time.Now()
+	status := "success"
+
+	// Defer function to record metrics
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		c.metrics.ObserveSecretOperationDuration("register_refresh_hook", status, duration)
+		c.metrics.IncSecretOperationTotal("register_refresh_hook", status)
+	}()
+
+	// Validate inputs
 	if secretRef == "" {
-		return nil, errors.New("secretRef cannot be empty")
+		status = "error"
+		return nil, fmt.Errorf("secretRef cannot be empty")
 	}
 	if hook == nil {
-		return nil, errors.New("hook cannot be nil")
+		status = "error"
+		return nil, fmt.Errorf("hook cannot be nil")
 	}
 
-	requestID := uuid.New().String()
-	c.logger.DebugContext(ctx, "registering refresh hook",
-		"requestId", requestID,
+	// Create a new no-op refresh handler ref
+	handlerRef := &ClientHooks.NoOpRefreshHandlerRef{}
+
+	// Log that a refresh hook was registered (for debugging)
+	c.logger.DebugContext(ctx, "refresh hook registered",
 		"secretRef", secretRef,
-		"note", "placeholder implementation",
 	)
 
-	// TODO: Implement actual hook registration when server-side events support is added
-	return ClientHooks.Instance, nil
+	return handlerRef, nil
 }
 
 // Close releases resources used by the Grayskull client.
 // This method should be called when the client is no longer needed to properly
 // clean up HTTP connections and other resources.
 func (c *GrayskullClientImpl) Close() error {
-	c.logger.Info("closing Grayskull client")
+	var errs []error
 
-	if c.httpClient != nil {
-		if err := c.httpClient.Close(); err != nil {
-			c.logger.Error("error closing HTTP client", "error", err)
-			return fmt.Errorf("error closing HTTP client: %w", err)
+	// Close the metrics server if it was started
+	if c.metricsServer != nil {
+		c.logger.Info("shutting down metrics server")
+		if err := c.metricsServer.Stop(context.Background()); err != nil {
+			errMsg := fmt.Sprintf("error stopping metrics server: %v", err)
+			errs = append(errs, errors.New(errMsg))
+			c.logger.Error("error stopping metrics server", "error", err)
+		} else {
+			c.logger.Info("metrics server stopped successfully")
 		}
 	}
 
-	// No need to sync with slog as it handles its own buffering
+	// Close the HTTP client
+	if c.httpClient != nil {
+		c.logger.Debug("closing HTTP client")
+		if err := c.httpClient.Close(); err != nil {
+			errMsg := fmt.Sprintf("error closing HTTP client: %v", err)
+			errs = append(errs, errors.New(errMsg))
+			c.logger.Error("error closing HTTP client", "error", err)
+		} else {
+			c.logger.Debug("HTTP client closed successfully")
+		}
+	}
+
+	// Log final metrics summary if metrics were enabled
+	if c.metrics != nil && c.clientConfiguration.Metrics.Enabled && c.clientConfiguration.Metrics.Server != nil {
+		c.logger.Info("metrics collection completed",
+			"metrics_endpoint", fmt.Sprintf("http://%s/metrics", c.clientConfiguration.Metrics.Server.Address),
+		)
+	}
+
+	// Return combined errors if any occurred
+	if len(errs) > 0 {
+		var errMsg string
+		for _, e := range errs {
+			errMsg += e.Error() + "; "
+		}
+		return fmt.Errorf("errors during client shutdown: %s", errMsg)
+	}
 
 	return nil
 }

@@ -2,8 +2,10 @@ package client_impl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/grayskull/client_impl/auth"
+	"github.com/grayskull/client_impl/metrics"
 	"io"
 	"log/slog"
 	"net"
@@ -23,6 +25,7 @@ type GrayskullHTTPClient struct {
 	authProvider auth.GrayskullAuthHeaderProvider
 	retryUtil    *utils.RetryUtil
 	logger       *slog.Logger
+	metrics      *metrics.Metrics
 }
 
 // Do makes an HTTP request
@@ -61,38 +64,78 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 		authProvider: authProvider,
 		retryUtil:    utils.NewRetryUtil(config.MaxRetries, config.MinRetryDelay, logger),
 		logger:       logger,
+		metrics:      metrics.GetMetrics(),
 	}, nil
 }
 
 // DoGetWithRetry performs an HTTP GET request with retry logic
 func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse, error) {
+	startTime := time.Now()
 	var attemptCount int
+
+	var lastResp *response.HttpResponse
 
 	result, err := c.retryUtil.Retry(ctx, func() (interface{}, error) {
 		attemptCount++
-		return c.doGet(ctx, url)
+		resp, err := c.doGet(ctx, url)
+		if err == nil {
+			lastResp = resp
+		} else {
+			return nil, err
+		}
+		return resp, err
 	})
+
+	// Record metrics for the request
+	duration := time.Since(startTime).Seconds()
+	statusCode := 0
+	if lastResp != nil {
+		statusCode = lastResp.StatusCode
+	}
+
+	// Record request metrics
+	c.recordHTTPMetrics(ctx, "GET", url, statusCode, duration, attemptCount, err)
 
 	if err != nil {
 		return nil, err
 	}
 
-	// Publish metrics if we retried
-	if attemptCount > 1 {
-		// TODO: Implement metrics publishing
-		c.logger.DebugContext(ctx, "request succeeded after retries",
-			"attempts", attemptCount,
-			"url", url,
-		)
-	}
-
 	// Safe type assertion for the result
 	httpResp, ok := result.(*response.HttpResponse)
 	if !ok {
-		return nil, exceptions.NewGrayskullError(500, fmt.Sprintf("unexpected response type from retry: %T", result))
+		errMsg := fmt.Sprintf("unexpected response type from retry: %T", result)
+		c.recordHTTPMetrics(ctx, "GET", url, 500, duration, attemptCount, errors.New(errMsg))
+		return nil, exceptions.NewGrayskullError(500, errMsg)
 	}
 
 	return httpResp, nil
+}
+
+// recordHTTPMetrics records metrics for HTTP requests
+func (c *GrayskullHTTPClient) recordHTTPMetrics(ctx context.Context, method, path string, statusCode int, duration float64, attempts int, err error) {
+	// Record request duration
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+
+	// Record HTTP request metrics
+	c.metrics.ObserveHTTPRequestDuration(method, path, fmt.Sprintf("%d", statusCode), duration)
+	c.metrics.IncHTTPRequestTotal(method, path, fmt.Sprintf("%d", statusCode))
+
+	// Record retry metrics if there were retries
+	if attempts > 1 {
+		c.metrics.IncHTTPRequestTotal("retry", fmt.Sprintf("attempts_%d", attempts), status)
+	}
+
+	// Log the request
+	c.logger.DebugContext(ctx, "HTTP request completed",
+		"method", method,
+		"path", path,
+		"status", statusCode,
+		"duration_seconds", duration,
+		"attempts", attempts,
+	)
 }
 
 // doGet performs a single HTTP GET request
