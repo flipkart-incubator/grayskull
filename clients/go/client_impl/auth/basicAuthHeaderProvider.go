@@ -7,7 +7,6 @@ import (
 )
 
 // BasicAuthHeaderProvider implements GrayskullAuthHeaderProvider for HTTP Basic Authentication
-// as defined in RFC 7617.
 type BasicAuthHeaderProvider struct {
 	username string
 	password string

@@ -87,8 +87,8 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 
 	// Set up logger with context
 	logger := c.logger.With(
-		"request_id", requestID,
-		"secret_ref", secretRef,
+		constants.GrayskullRequestID, requestID,
+		constants.SecretName, secretRef,
 	)
 
 	defer func() {
@@ -117,8 +117,8 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 
 	// Add project and secret to logger context
 	logger = logger.With(
-		"project_id", projectID,
-		"secret_name", secretName,
+		constants.ProjectID, projectID,
+		constants.SecretName, secretName,
 	)
 
 	logger.Debug("fetching secret")
@@ -146,7 +146,7 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	}
 
 	// Get the actual secret data from the response
-	secretData := secretResponse.GetData()
+	secretData := secretResponse.Data
 
 	// Check if the SecretValue is the zero value
 	if secretData == (CLientModels.SecretValue{}) {

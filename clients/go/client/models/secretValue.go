@@ -1,6 +1,6 @@
 package models
 
-// SecretValue represents a secret value with versioning and access control
+// SecretValue represents a secret value with versioning
 type SecretValue struct {
 	// DataVersion represents the version number of the secret data
 	DataVersion int `json:"dataVersion"`
