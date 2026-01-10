@@ -104,7 +104,7 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 		status := "success"
 		if operationErr != nil {
 			status = "error"
-		} else if ctx.Err() != nil {
+		} else if ctx.Err() == context.Canceled || ctx.Err() == context.DeadlineExceeded {
 			status = "canceled"
 		}
 		c.metrics.ObserveSecretOperationDuration("get_secret", status, duration)
@@ -199,11 +199,11 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 	// Validate inputs
 	if secretRef == "" {
 		status = "error"
-		return nil, fmt.Errorf("secretRef cannot be empty")
+		return &ClientHooks.NoOpRefreshHandlerRef{}, fmt.Errorf("secretRef cannot be empty")
 	}
 	if hook == nil {
 		status = "error"
-		return nil, fmt.Errorf("hook cannot be nil")
+		return &ClientHooks.NoOpRefreshHandlerRef{}, fmt.Errorf("hook cannot be nil")
 	}
 
 	// Create a new no-op refresh handler ref
