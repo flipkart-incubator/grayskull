@@ -91,24 +91,25 @@ func NewGrayskullClient(authHeaderProvider auth.GrayskullAuthHeaderProvider, cli
 // GetSecret retrieves a secret from the Grayskull server.
 // The secretRef should be in the format: "projectId:secretName"
 // For example: "my-project:database-password"
-// ctx must be non-nil. Use context.Background() or context.
-func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (*CLientModels.SecretValue, error) {
+func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (secretValue *CLientModels.SecretValue, operationErr error) {
 	startTime := time.Now()
-	requestID := uuid.New().String()
-	// Add our request ID to the context
+	requestID := uuid.NewString()
+
+	// Add request ID to context before starting the operation
+	ctx = context.WithValue(ctx, constants.GrayskullRequestID, requestID)
 
 	// Defer function to record metrics
 	defer func() {
 		duration := time.Since(startTime).Seconds()
 		status := "success"
-		if ctx.Err() != nil {
+		if operationErr != nil {
+			status = "error"
+		} else if ctx.Err() != nil {
 			status = "canceled"
 		}
 		c.metrics.ObserveSecretOperationDuration("get_secret", status, duration)
 		c.metrics.IncSecretOperationTotal("get_secret", status)
 	}()
-	ctx = context.WithValue(ctx, constants.GrayskullRequestID, requestID)
-	startTime = time.Now()
 
 	// Set up logger with context
 	logger := c.logger.With(

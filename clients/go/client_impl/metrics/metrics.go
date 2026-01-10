@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -18,61 +20,62 @@ type Metrics struct {
 
 var (
 	singleton *Metrics
+	once      sync.Once
 )
 
-// NewMetrics creates a new instance of Metrics with all the required metrics
+// NewMetrics creates a new instance of Metrics with all the required metrics.
+// Only the first call with a non-empty namespace will be used to create the metrics.
+// Subsequent calls will return the existing singleton instance.
 func NewMetrics(namespace string) *Metrics {
-	if singleton != nil {
-		return singleton
-	}
+	once.Do(func() {
+		if namespace == "" {
+			namespace = "grayskull"
+		}
 
-	m := &Metrics{
-		HTTPRequestDuration: promauto.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Namespace: namespace,
-				Name:      "http_request_duration_seconds",
-				Help:      "Duration of HTTP requests in seconds",
-				Buckets:   []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
-			},
-			[]string{"method", "path", "status_code"},
-		),
-		HTTPRequestTotal: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Name:      "http_requests_total",
-				Help:      "Total number of HTTP requests",
-			},
-			[]string{"method", "path", "status_code"},
-		),
-		SecretOperationDuration: promauto.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Namespace: namespace,
-				Name:      "secret_operation_duration_seconds",
-				Help:      "Duration of secret operations in seconds",
-				Buckets:   []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
-			},
-			[]string{"operation", "status"},
-		),
-		SecretOperationTotal: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Name:      "secret_operations_total",
-				Help:      "Total number of secret operations",
-			},
-			[]string{"operation", "status"},
-		),
-	}
+		singleton = &Metrics{
+			HTTPRequestDuration: promauto.NewHistogramVec(
+				prometheus.HistogramOpts{
+					Namespace: namespace,
+					Name:      "http_request_duration_seconds",
+					Help:      "Duration of HTTP requests in seconds",
+					Buckets:   []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+				},
+				[]string{"method", "path", "status_code"},
+			),
+			HTTPRequestTotal: promauto.NewCounterVec(
+				prometheus.CounterOpts{
+					Namespace: namespace,
+					Name:      "http_requests_total",
+					Help:      "Total number of HTTP requests",
+				},
+				[]string{"method", "path", "status_code"},
+			),
+			SecretOperationDuration: promauto.NewHistogramVec(
+				prometheus.HistogramOpts{
+					Namespace: namespace,
+					Name:      "secret_operation_duration_seconds",
+					Help:      "Duration of secret operations in seconds",
+					Buckets:   []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
+				},
+				[]string{"operation", "status"},
+			),
+			SecretOperationTotal: promauto.NewCounterVec(
+				prometheus.CounterOpts{
+					Namespace: namespace,
+					Name:      "secret_operations_total",
+					Help:      "Total number of secret operations",
+				},
+				[]string{"operation", "status"},
+			),
+		}
+	})
 
-	singleton = m
-	return m
+	return singleton
 }
 
-// GetMetrics returns the singleton instance of Metrics
+// GetMetrics returns the singleton instance of Metrics.
+// Returns nil if NewMetrics has not been called yet.
 func GetMetrics() *Metrics {
-	if singleton == nil {
-		// Default namespace if not initialized
-		return NewMetrics("grayskull_client")
-	}
 	return singleton
 }
 
