@@ -163,10 +163,10 @@ func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 // will not be invoked until server-side long-polling support is implemented.
 func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef string, hook hooks.SecretRefreshHook) (hooks.RefreshHandlerRef, error) {
 	if secretRef == "" {
-		return ClientHooks.Instance, errors.New("secretRef cannot be empty")
+		return nil, errors.New("secretRef cannot be empty")
 	}
 	if hook == nil {
-		return ClientHooks.Instance, errors.New("hook cannot be nil")
+		return nil, errors.New("hook cannot be nil")
 	}
 
 	requestID := uuid.New().String()
