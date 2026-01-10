@@ -78,12 +78,13 @@ func NewGrayskullClient(authHeaderProvider auth.GrayskullAuthHeaderProvider, cli
 // GetSecret retrieves a secret from the Grayskull server.
 // The secretRef should be in the format: "projectId:secretName"
 // For example: "my-project:database-password"
+// GetSecret retrieves a secret from the Grayskull server.
+// The secretRef should be in the format: "projectId:secretName"
+// For example: "my-project:database-password"
+// ctx must be non-nil. Use context.Background() or context.
 func (c *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (*CLientModels.SecretValue, error) {
 	requestID := uuid.New().String()
-	// Use the provided context but add our request ID
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	// Add our request ID to the context
 	ctx = context.WithValue(ctx, constants.GrayskullRequestID, requestID)
 	startTime := time.Now()
 
