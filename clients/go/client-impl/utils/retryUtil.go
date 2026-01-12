@@ -8,8 +8,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/grayskull/client_impl/constants"
-	"github.com/grayskull/client_impl/models/exceptions"
+	"github.com/grayskull/client-impl/constants"
+	"github.com/grayskull/client-impl/models/exceptions"
 )
 
 const (

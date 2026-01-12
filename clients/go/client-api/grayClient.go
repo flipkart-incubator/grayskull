@@ -1,9 +1,9 @@
-package client
+package client_api
 
 import (
 	"context"
-	"github.com/grayskull/client/hooks"
-	"github.com/grayskull/client/models"
+	"github.com/grayskull/client-api/hooks"
+	"github.com/grayskull/client-api/models"
 )
 
 // Client defines the interface for interacting with Grayskull secret management

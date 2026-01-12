@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/grayskull/client_impl/auth"
-	"github.com/grayskull/client_impl/metrics"
+	"github.com/grayskull/client-impl/auth"
+	"github.com/grayskull/client-impl/metrics"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"time"
 
-	"github.com/grayskull/client_impl/constants"
-	"github.com/grayskull/client_impl/models"
-	"github.com/grayskull/client_impl/models/exceptions"
-	"github.com/grayskull/client_impl/models/response"
-	"github.com/grayskull/client_impl/utils"
+	"github.com/grayskull/client-impl/constants"
+	"github.com/grayskull/client-impl/models"
+	"github.com/grayskull/client-impl/models/exceptions"
+	"github.com/grayskull/client-impl/models/response"
+	"github.com/grayskull/client-impl/utils"
 )
 
 // GrayskullHTTPClient is the HTTP client for making requests to the Grayskull service

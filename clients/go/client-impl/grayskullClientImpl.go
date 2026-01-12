@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/grayskull/client"
-	"github.com/grayskull/client/hooks"
-	"github.com/grayskull/client_impl/auth"
-	"github.com/grayskull/client_impl/metrics"
+	"github.com/grayskull/client-api"
+	"github.com/grayskull/client-api/hooks"
+	"github.com/grayskull/client-impl/auth"
+	"github.com/grayskull/client-impl/metrics"
 	"log/slog"
 	"net/url"
 	"os"
@@ -16,11 +16,11 @@ import (
 
 	"github.com/google/uuid"
 
-	CLientModels "github.com/grayskull/client/models"
-	"github.com/grayskull/client_impl/constants"
-	ClientHooks "github.com/grayskull/client_impl/hooks"
-	"github.com/grayskull/client_impl/models"
-	"github.com/grayskull/client_impl/models/response"
+	CLientModels "github.com/grayskull/client-api/models"
+	"github.com/grayskull/client-impl/constants"
+	ClientHooks "github.com/grayskull/client-impl/hooks"
+	"github.com/grayskull/client-impl/models"
+	"github.com/grayskull/client-impl/models/response"
 )
 
 // GrayskullClientImpl implements the Grayskull client interface
@@ -35,7 +35,7 @@ type GrayskullClientImpl struct {
 }
 
 // NewGrayskullClient creates a new instance of a Grayskull client
-func NewGrayskullClient(authHeaderProvider auth.GrayskullAuthHeaderProvider, clientConfig *models.GrayskullClientConfiguration) (client.Client, error) {
+func NewGrayskullClient(authHeaderProvider auth.GrayskullAuthHeaderProvider, clientConfig *models.GrayskullClientConfiguration) (client_api.Client, error) {
 	if authHeaderProvider == nil {
 		return nil, errors.New("authHeaderProvider cannot be nil")
 	}
