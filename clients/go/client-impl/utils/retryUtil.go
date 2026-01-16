@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/grayskull/client-impl/models/exceptions"
+	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
 )
 
 // RetryConfig holds configuration for retry behavior

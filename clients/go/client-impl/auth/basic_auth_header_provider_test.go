@@ -2,7 +2,7 @@ package auth_test
 
 import (
 	"encoding/base64"
-	"github.com/grayskull/client-impl/auth"
+	"github.com/flipkart-incubator/grayskull/client-impl/auth"
 	"testing"
 )
 

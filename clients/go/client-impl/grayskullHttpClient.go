@@ -10,13 +10,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/grayskull/client-impl/auth"
-	"github.com/grayskull/client-impl/constants"
-	"github.com/grayskull/client-impl/metrics"
-	"github.com/grayskull/client-impl/models"
-	"github.com/grayskull/client-impl/models/exceptions"
-	"github.com/grayskull/client-impl/models/response"
-	"github.com/grayskull/client-impl/utils"
+	"github.com/flipkart-incubator/grayskull/client-impl/auth"
+	"github.com/flipkart-incubator/grayskull/client-impl/constants"
+	"github.com/flipkart-incubator/grayskull/client-impl/metrics"
+	"github.com/flipkart-incubator/grayskull/client-impl/models"
+	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
+	"github.com/flipkart-incubator/grayskull/client-impl/models/response"
+	"github.com/flipkart-incubator/grayskull/client-impl/utils"
 )
 
 // GrayskullHTTPClientInterface defines the interface for the HTTP client
@@ -152,6 +152,10 @@ func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.
 	// Handle error status codes
 	if resp.StatusCode >= 400 {
 		errMsg := fmt.Sprintf("request failed with status %d: %s", resp.StatusCode, string(body))
+		// Record metrics before returning error
+		if c.metricsRecorder != nil {
+			c.metricsRecorder.RecordRequest(url, resp.StatusCode, time.Since(startTime))
+		}
 		if isRetryableStatusCode(resp.StatusCode) {
 			return nil, exceptions.NewRetryableErrorWithStatus(resp.StatusCode, errMsg)
 		}

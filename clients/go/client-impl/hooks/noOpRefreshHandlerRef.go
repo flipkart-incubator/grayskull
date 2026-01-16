@@ -1,7 +1,7 @@
 package hooks
 
 import (
-	"github.com/grayskull/client-api/hooks"
+	"github.com/flipkart-incubator/grayskull/client-api/hooks"
 	"log/slog"
 )
 

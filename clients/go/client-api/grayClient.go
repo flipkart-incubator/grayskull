@@ -2,8 +2,8 @@ package client_api
 
 import (
 	"context"
-	"github.com/grayskull/client-api/hooks"
-	"github.com/grayskull/client-api/models"
+	"github.com/flipkart-incubator/grayskull/client-api/hooks"
+	"github.com/flipkart-incubator/grayskull/client-api/models"
 )
 
 // Client defines the interface for interacting with Grayskull secret management

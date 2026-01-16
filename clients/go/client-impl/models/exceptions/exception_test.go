@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/grayskull/client-impl/models/exceptions"
+	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
 	"github.com/stretchr/testify/assert"
 )
 

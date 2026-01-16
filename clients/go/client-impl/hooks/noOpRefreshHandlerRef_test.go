@@ -3,7 +3,7 @@ package hooks
 import (
 	"testing"
 
-	"github.com/grayskull/client-api/hooks"
+	"github.com/flipkart-incubator/grayskull/client-api/hooks"
 	"github.com/stretchr/testify/assert"
 )
 

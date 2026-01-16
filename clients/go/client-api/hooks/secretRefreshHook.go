@@ -1,6 +1,6 @@
 package hooks
 
-import "github.com/grayskull/client-api/models"
+import "github.com/flipkart-incubator/grayskull/client-api/models"
 
 // SecretRefreshHook defines an interface for callbacks that are invoked when a secret is updated.
 //

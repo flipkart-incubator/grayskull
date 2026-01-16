@@ -1,4 +1,4 @@
-module github.com/grayskull
+module github.com/flipkart-incubator/grayskull
 
 go 1.24.0
 
