@@ -3,129 +3,92 @@ package utils
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
 	"math"
+	"math/rand"
 	"time"
 
-	"github.com/grayskull/client-impl/constants"
 	"github.com/grayskull/client-impl/models/exceptions"
 )
 
-const (
-	maxWaitTime = 1 * time.Minute // 1 minute
-)
+// RetryConfig holds configuration for retry behavior
+type RetryConfig struct {
+	MaxAttempts   int
+	InitialDelay  time.Duration
+	MaxRetryDelay time.Duration
+}
 
-// RetryUtil implements a retry mechanism with exponential backoff.
-// It retries operations that return RetryableError up to a maximum number of attempts,
-// with increasing delays between attempts. The wait time is capped at 1 minute.
+// RetryUtil provides retry functionality with exponential backoff
 type RetryUtil struct {
-	maxAttempts int
-	initialWait time.Duration
-	logger      *slog.Logger
+	config RetryConfig
 }
 
-// NewRetryUtil creates a new RetryUtil with the specified parameters.
-// maxAttempts will be set to at least 1 if a non-positive value is provided.
-// initialWait will be set to 100ms if a non-positive value is provided.
-func NewRetryUtil(maxAttempts int, initialWait time.Duration, logger *slog.Logger) *RetryUtil {
-	if logger == nil {
-		logger = slog.Default()
+// NewRetryUtil creates a new RetryUtil with the given configuration
+func NewRetryUtil(config RetryConfig) *RetryUtil {
+	if config.MaxAttempts <= 0 {
+		config.MaxAttempts = 3
 	}
-	if maxAttempts <= 0 {
-		maxAttempts = 1
+	if config.InitialDelay <= 0 {
+		config.InitialDelay = 100 * time.Millisecond
 	}
-	if initialWait <= 0 {
-		initialWait = 100 * time.Millisecond
+	if config.MaxRetryDelay <= 0 {
+		config.MaxRetryDelay = time.Minute
 	}
+
 	return &RetryUtil{
-		maxAttempts: maxAttempts,
-		initialWait: initialWait,
-		logger:      logger,
+		config: config,
 	}
 }
 
-// Retry executes the provided function with retry logic.
-// It will retry on RetryableError up to the maximum number of attempts.
-// The context parameter must not be nil as it's used for cancellation and request tracing.
-func (r *RetryUtil) Retry(ctx context.Context, fn func() (interface{}, error)) (interface{}, error) {
-	if ctx == nil {
-		return nil, exceptions.NewGrayskullError(0, "context must not be nil")
-	}
+// Retry executes the task with retry logic
+func (r *RetryUtil) Retry(ctx context.Context, task func() (interface{}, error)) (interface{}, error) {
+	var lastErr error
+	delay := r.config.InitialDelay
 
-	currentWait := r.initialWait
-
-	for attempt := 1; attempt <= r.maxAttempts; attempt++ {
-		// Get request ID from context
-		requestID := ""
-		if ctx != nil {
-			if v := ctx.Value(constants.GrayskullRequestID); v != nil {
-				if id, ok := v.(string); ok {
-					requestID = id
-				}
-			}
+	for attempt := 1; attempt <= r.config.MaxAttempts; attempt++ {
+		// Check if context is done before each attempt
+		if err := ctx.Err(); err != nil {
+			return nil, exceptions.NewRetryableErrorWithCause("operation canceled", err)
 		}
 
-		// Log attempt
-		r.logger.DebugContext(ctx, "executing task",
-			"attempt", fmt.Sprintf("%d/%d", attempt, r.maxAttempts),
-			"requestID", requestID,
-		)
-
-		// Execute the function
-		result, err := fn()
+		// Execute the task
+		result, err := task()
 		if err == nil {
-			if attempt > 1 {
-				r.logger.InfoContext(ctx, "task succeeded on retry",
-					"attempt", attempt,
-					"requestID", requestID,
-				)
-			}
 			return result, nil
 		}
 
 		// Check if error is retryable
 		var retryableErr *exceptions.RetryableError
 		if !errors.As(err, &retryableErr) {
-			return nil, err // Return non-retryable errors immediately
+			return nil, err // Non-retryable error
 		}
 
-		if attempt == r.maxAttempts {
-			r.logger.ErrorContext(ctx, "max retry attempts reached",
-				"maxAttempts", r.maxAttempts,
-				"requestID", requestID,
-				"error", err,
-			)
-			return nil, exceptions.NewGrayskullErrorWithCause(
-				retryableErr.StatusCode,
-				fmt.Sprintf("failed after %d retry attempts", r.maxAttempts),
-				err,
-			)
+		lastErr = retryableErr
+		if attempt == r.config.MaxAttempts {
+			break
 		}
 
-		// Log warning and wait before retry
-		r.logger.WarnContext(ctx, "retryable error, will retry",
-			"attempt", fmt.Sprintf("%d/%d", attempt, r.maxAttempts),
-			"waitTime", currentWait,
-			"requestID", requestID,
-			"error", err,
+		// Calculate backoff with jitter
+		delay = time.Duration(
+			math.Min(
+				float64(r.config.InitialDelay)*math.Pow(2, float64(attempt-1)),
+				float64(r.config.MaxRetryDelay),
+			),
 		)
+		// Add jitter (up to 25% of the delay)
+		jitter := time.Duration(rand.Float64() * 0.25 * float64(delay))
+		delay += jitter
 
-		// Wait with exponential backoff
-		if ctx != nil {
-			select {
-			case <-time.After(currentWait):
-				// Continue with next attempt
-			case <-ctx.Done():
-				return nil, exceptions.NewGrayskullErrorWithCause(0, "retry operation canceled", ctx.Err())
-			}
-		} else {
-			time.Sleep(currentWait)
+		// Wait before next retry
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return nil, exceptions.NewRetryableErrorWithCause("operation canceled during retry", ctx.Err())
 		}
-
-		// Calculate next wait time with exponential backoff, capped at maxWaitTime
-		currentWait = time.Duration(math.Min(float64(currentWait*2), float64(maxWaitTime)))
 	}
-	// Return an error when max attempts are reached without success
-	return nil, fmt.Errorf("maximum number of retry attempts (%d) reached", r.maxAttempts)
+
+	// If we've exhausted all retry attempts, return a GrayskullError
+	return nil, exceptions.NewGrayskullErrorWithMessageAndCause(
+		"max retry attempts reached",
+		lastErr,
+	)
 }

@@ -4,236 +4,182 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/grayskull/client-impl/auth"
-	"github.com/grayskull/client-impl/metrics"
+	"github.com/grayskull/client-impl/constants"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
-	"github.com/grayskull/client-impl/constants"
+	"github.com/grayskull/client-impl/auth"
+	"github.com/grayskull/client-impl/metrics"
 	"github.com/grayskull/client-impl/models"
 	"github.com/grayskull/client-impl/models/exceptions"
 	"github.com/grayskull/client-impl/models/response"
 	"github.com/grayskull/client-impl/utils"
 )
 
-// GrayskullHTTPClient is the HTTP client for making requests to the Grayskull service
+// GrayskullHTTPClient is a client for making HTTP requests to the Grayskull service
+// with built-in retry and error handling.
 type GrayskullHTTPClient struct {
-	client       *http.Client
-	authProvider auth.GrayskullAuthHeaderProvider
-	retryUtil    *utils.RetryUtil
-	logger       *slog.Logger
-	metrics      *metrics.Metrics
-}
-
-// Do makes an HTTP request
-func (c *GrayskullHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	return c.client.Do(req)
+	httpClient         *http.Client
+	authHeaderProvider auth.GrayskullAuthHeaderProvider
+	retryUtil          *utils.RetryUtil
+	logger             *slog.Logger
+	metricsRecorder    metrics.MetricsRecorder
 }
 
 // NewGrayskullHTTPClient creates a new instance of GrayskullHTTPClient
-func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, logger *slog.Logger) (*GrayskullHTTPClient, error) {
-	if authProvider == nil {
-		return nil, fmt.Errorf("authProvider cannot be nil")
-	}
-	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
-	}
+func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, logger *slog.Logger, metricsRecorder metrics.MetricsRecorder) *GrayskullHTTPClient {
 	if logger == nil {
 		logger = slog.Default()
 	}
-
 	transport := &http.Transport{
 		MaxIdleConns:        config.MaxConnections,
 		MaxIdleConnsPerHost: config.MaxConnections,
 		IdleConnTimeout:     5 * time.Minute,
-		DialContext: (&net.Dialer{
-			Timeout: config.ConnectionTimeout,
-		}).DialContext,
 	}
 
 	client := &http.Client{
+		Timeout:   time.Duration(config.ReadTimeout) * time.Millisecond,
 		Transport: transport,
-		Timeout:   config.ReadTimeout,
+	}
+
+	retryConfig := utils.RetryConfig{
+		MaxAttempts:   config.MaxRetries,
+		InitialDelay:  time.Duration(config.MinRetryDelay) * time.Millisecond,
+		MaxRetryDelay: 1 * time.Minute, // Default max retry delay
+	}
+
+	if metricsRecorder == nil {
+		metricsRecorder = metrics.NewPrometheusRecorder()
 	}
 
 	return &GrayskullHTTPClient{
-		client:       client,
-		authProvider: authProvider,
-		retryUtil:    utils.NewRetryUtil(config.MaxRetries, config.MinRetryDelay, logger),
-		logger:       logger,
-		metrics:      metrics.GetMetrics(),
-	}, nil
+		httpClient:         client,
+		authHeaderProvider: authProvider,
+		retryUtil:          utils.NewRetryUtil(retryConfig),
+		logger:             logger,
+		metricsRecorder:    metricsRecorder,
+	}
 }
 
-// DoGetWithRetry performs an HTTP GET request with retry logic
+// DoGetWithRetry performs a GET request with retry logic
 func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse, error) {
-	startTime := time.Now()
-	var attemptCount int
-
-	var lastResp *response.HttpResponse
+	var attemptCount int32 // Use atomic for concurrent safety
 
 	result, err := c.retryUtil.Retry(ctx, func() (interface{}, error) {
-		attemptCount++
-		resp, err := c.doGet(ctx, url)
-		if err == nil {
-			lastResp = resp
-		} else {
-			return nil, err
-		}
-		return resp, err
+		atomic.AddInt32(&attemptCount, 1)
+		return c.doGet(ctx, url)
 	})
 
-	// Record metrics for the request
-	duration := time.Since(startTime).Seconds()
-	statusCode := 0
-	if lastResp != nil {
-		statusCode = lastResp.StatusCode
-	}
-
-	// Record request metrics
-	c.recordHTTPMetrics(ctx, "GET", url, statusCode, duration, attemptCount, err)
-
 	if err != nil {
-		return nil, err
+		// Check if it's a retryable error that exhausted all attempts
+		var retryableErr *exceptions.RetryableError
+		if errors.As(err, &retryableErr) && atomic.LoadInt32(&attemptCount) > 1 {
+			c.metricsRecorder.RecordRetry(url, int(atomic.LoadInt32(&attemptCount)), false)
+		}
+		return nil, fmt.Errorf("failed after %d attempts: %w", attemptCount, err)
 	}
 
-	// Safe type assertion for the result
 	httpResp, ok := result.(*response.HttpResponse)
 	if !ok {
-		errMsg := fmt.Sprintf("unexpected response type from retry: %T", result)
-		c.recordHTTPMetrics(ctx, "GET", url, 500, duration, attemptCount, errors.New(errMsg))
-		return nil, exceptions.NewGrayskullError(500, errMsg)
+		return nil, fmt.Errorf("unexpected response type: %T", result)
+	}
+
+	if attemptCount > 1 {
+		c.metricsRecorder.RecordRetry(url, int(attemptCount), true)
 	}
 
 	return httpResp, nil
 }
 
-// recordHTTPMetrics records metrics for HTTP requests
-func (c *GrayskullHTTPClient) recordHTTPMetrics(ctx context.Context, method, path string, statusCode int, duration float64, attempts int, err error) {
-	// Record request duration
-	status := "success"
-	if err != nil {
-		status = "error"
-	}
-
-	// Record HTTP request metrics
-	c.metrics.ObserveHTTPRequestDuration(method, path, fmt.Sprintf("%d", statusCode), duration)
-	c.metrics.IncHTTPRequestTotal(method, path, fmt.Sprintf("%d", statusCode))
-
-	// Record retry metrics if there were retries
-	if attempts > 1 {
-		c.metrics.IncHTTPRequestTotal("retry", fmt.Sprintf("attempts_%d", attempts), status)
-	}
-
-	// Log the request
-	c.logger.DebugContext(ctx, "HTTP request completed",
-		"method", method,
-		"path", path,
-		"status", statusCode,
-		"duration_seconds", duration,
-		"attempts", attempts,
-	)
-}
-
-// doGet performs a single HTTP GET request
+// doGet performs a single GET request without retries
 func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.HttpResponse, error) {
+	startTime := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, exceptions.NewGrayskullErrorWithCause(0, "failed to create request", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set request headers
-	if err := c.setRequestHeaders(req, ctx); err != nil {
-		return nil, exceptions.NewGrayskullErrorWithCause(500, "failed to set request headers", err)
+	// Add auth header
+	authHeader, err := c.authHeaderProvider.GetAuthHeader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get auth header: %w", err)
+	}
+	if authHeader == "" {
+		return nil, errors.New("auth header cannot be empty")
+	}
+	req.Header.Set("Authorization", authHeader)
+
+	// Add request ID from context if available
+	if requestID := ctx.Value(constants.GrayskullRequestID); requestID != nil {
+		req.Header.Set("X-Request-Id", fmt.Sprintf("%v", requestID))
 	}
 
-	c.logger.DebugContext(ctx, "executing GET request",
+	c.logger.DebugContext(ctx, "Executing HTTP request",
 		"url", url,
+		"method", http.MethodGet,
 	)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		if isTimeoutError(err) {
-			return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "request timeout", err)
-		}
-		return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "failed to execute request", err)
+		// Convert network errors to retryable errors
+		return nil, exceptions.NewRetryableErrorWithCause("HTTP request failed", err)
 	}
 	defer resp.Body.Close()
 
+	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, exceptions.NewRetryableErrorWithStatusAndCause(500, "failed to read response body", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	c.logger.DebugContext(ctx, "received response",
-		"status", resp.Status,
+	// Log response details
+	c.logger.DebugContext(ctx, "Received HTTP response",
 		"url", url,
-		"content_length", len(body),
+		"status_code", resp.StatusCode,
+		"status", resp.Status,
+		"body_length", len(body),
 	)
 
+	// Handle error status codes
 	if resp.StatusCode >= 400 {
 		errMsg := fmt.Sprintf("request failed with status %d: %s", resp.StatusCode, string(body))
 		if isRetryableStatusCode(resp.StatusCode) {
 			return nil, exceptions.NewRetryableErrorWithStatus(resp.StatusCode, errMsg)
 		}
-		return nil, exceptions.NewGrayskullErrorWithCause(resp.StatusCode, errMsg, nil)
+		return nil, exceptions.NewGrayskullError(resp.StatusCode, errMsg)
 	}
+
+	// Record the request metrics
+	c.metricsRecorder.RecordRequest(url, resp.StatusCode, time.Since(startTime))
+
+	headers := make(map[string]string)
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "unknown"
+	}
+	headers["Content-Type"] = contentType
 
 	return &response.HttpResponse{
 		StatusCode:  resp.StatusCode,
 		Body:        string(body),
-		ContentType: resp.Header.Get("Content-Type"),
+		ContentType: contentType,
 		Protocol:    resp.Proto,
 	}, nil
 }
 
-// setRequestHeaders sets the required headers for Grayskull API requests
-func (c *GrayskullHTTPClient) setRequestHeaders(req *http.Request, ctx context.Context) error {
-	authHeader, err := c.authProvider.GetAuthHeader()
-	if err != nil {
-		return fmt.Errorf("failed to get auth header: %w", err)
-	}
-	req.Header.Set("Authorization", authHeader)
-
-	// Add request ID from context if available
-	if requestID, ok := ctx.Value(constants.GrayskullRequestID).(string); ok && requestID != "" {
-		req.Header.Set("X-Request-Id", requestID)
-	}
-	return nil
-}
-
-// isRetryableStatusCode checks if the HTTP status code indicates a retryable error
+// isRetryableStatusCode checks if an HTTP status code indicates a retryable error
 func isRetryableStatusCode(statusCode int) bool {
-	return statusCode == http.StatusTooManyRequests ||
-		(statusCode >= http.StatusInternalServerError && statusCode < 600)
+	return statusCode == http.StatusTooManyRequests || (statusCode >= http.StatusInternalServerError && statusCode < 600)
 }
 
-// isTimeoutError checks if the error is a timeout error
-func isTimeoutError(err error) bool {
-	timeoutErr, ok := err.(interface{ Timeout() bool })
-	return ok && timeoutErr.Timeout()
-}
-
-// Close releases all resources used by the HTTP client.
-// It should be called when the client is no longer needed to prevent resource leaks.
-// This is safe to call multiple times.
+// Close releases any resources used by the HTTP client
 func (c *GrayskullHTTPClient) Close() error {
-	if c == nil || c.client == nil {
-		return nil
-	}
-
-	// Close idle connections for any transport that supports it
-	if transport, ok := c.client.Transport.(interface{ CloseIdleConnections() }); ok {
+	// Close idle connections
+	if transport, ok := c.httpClient.Transport.(*http.Transport); ok {
 		transport.CloseIdleConnections()
 	}
-
-	// If the transport also implements io.Closer, call Close()
-	if closer, ok := c.client.Transport.(interface{ Close() error }); ok {
-		return closer.Close()
-	}
-
 	return nil
 }

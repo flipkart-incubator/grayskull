@@ -11,7 +11,7 @@ type RetryableError struct {
 func NewRetryableError(message string) *RetryableError {
 	return &RetryableError{
 		BaseError: BaseError{
-			StatusCode: 0, // Default status code as in Java
+			StatusCode: 0,
 			Message:    message,
 		},
 	}
@@ -21,7 +21,7 @@ func NewRetryableError(message string) *RetryableError {
 func NewRetryableErrorWithCause(message string, cause error) *RetryableError {
 	return &RetryableError{
 		BaseError: BaseError{
-			StatusCode: 0, // Default status code as in Java
+			StatusCode: 0,
 			Message:    message,
 			Cause:      cause,
 		},
