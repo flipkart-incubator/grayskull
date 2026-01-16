@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/grayskull/client-impl/constants"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,12 +11,19 @@ import (
 	"time"
 
 	"github.com/grayskull/client-impl/auth"
+	"github.com/grayskull/client-impl/constants"
 	"github.com/grayskull/client-impl/metrics"
 	"github.com/grayskull/client-impl/models"
 	"github.com/grayskull/client-impl/models/exceptions"
 	"github.com/grayskull/client-impl/models/response"
 	"github.com/grayskull/client-impl/utils"
 )
+
+// GrayskullHTTPClientInterface defines the interface for the HTTP client
+type GrayskullHTTPClientInterface interface {
+	DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse, error)
+	Close() error
+}
 
 // GrayskullHTTPClient is a client for making HTTP requests to the Grayskull service
 // with built-in retry and error handling.
@@ -30,7 +36,7 @@ type GrayskullHTTPClient struct {
 }
 
 // NewGrayskullHTTPClient creates a new instance of GrayskullHTTPClient
-func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, logger *slog.Logger, metricsRecorder metrics.MetricsRecorder) *GrayskullHTTPClient {
+func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, logger *slog.Logger, metricsRecorder metrics.MetricsRecorder) GrayskullHTTPClientInterface {
 	if logger == nil {
 		logger = slog.Default()
 	}

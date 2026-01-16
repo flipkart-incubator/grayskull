@@ -63,7 +63,7 @@ func (r *RetryUtil) Retry(ctx context.Context, task func() (interface{}, error))
 		}
 
 		lastErr = retryableErr
-		if attempt == r.config.MaxAttempts {
+		if attempt >= r.config.MaxAttempts {
 			break
 		}
 

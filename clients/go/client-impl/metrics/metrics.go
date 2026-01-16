@@ -1,10 +1,16 @@
 package metrics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	once sync.Once
+	reg  *prometheus.Registry
 )
 
 const (
@@ -19,26 +25,48 @@ type prometheusRecorder struct {
 
 // NewPrometheusRecorder creates a new Prometheus-based metrics recorder
 func NewPrometheusRecorder() MetricsRecorder {
+	once.Do(func() {
+		reg = prometheus.NewRegistry()
+		prometheus.DefaultRegisterer = reg
+		prometheus.DefaultGatherer = reg
+	})
+
+	// Create a new registry for metrics
+	registry := prometheus.NewRegistry()
+
+	// Register the collector with our registry
+	collector := prometheus.NewGoCollector()
+	err := registry.Register(collector)
+	if err != nil {
+		// If registration fails, we'll still return a recorder but it won't collect Go metrics
+		// This is better than panicking
+	}
+
+	// Create metrics with the registry
+	reqDuration := promauto.With(registry).NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "request_duration_seconds",
+			Help:      "Duration of HTTP requests in seconds",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"name", "status_code"},
+	)
+
+	retryCounter := promauto.With(registry).NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "retry_attempts_total",
+			Help:      "Total number of retry attempts",
+		},
+		[]string{"url", "success"},
+	)
+
 	return &prometheusRecorder{
-		requestDuration: promauto.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Namespace: namespace,
-				Subsystem: subsystem,
-				Name:      "request_duration_seconds",
-				Help:      "Duration of HTTP requests in seconds",
-				Buckets:   prometheus.DefBuckets,
-			},
-			[]string{"name", "status_code"},
-		),
-		retryCounter: promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Subsystem: subsystem,
-				Name:      "retry_attempts_total",
-				Help:      "Total number of retry attempts",
-			},
-			[]string{"url", "success"},
-		),
+		requestDuration: reqDuration,
+		retryCounter:    retryCounter,
 	}
 }
 
@@ -61,8 +89,5 @@ func (p *prometheusRecorder) GetRecorderName() string {
 	return "prometheus"
 }
 
-// init registers the metrics with Prometheus
-func init() {
-	// This ensures the metrics are registered when the package is imported
-	_ = NewPrometheusRecorder()
-}
+// init is intentionally left empty to prevent auto-registration
+func init() {}
