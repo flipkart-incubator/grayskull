@@ -1,14 +1,13 @@
-# This workflow builds the Grayskull Go Client SDK and generates distributable artifacts
+# This workflow verifies the Grayskull Go Client SDK builds correctly
+# Go libraries are distributed as source code, not binaries
 
-name: Build Go Client Artifacts
+name: Build Go Client
 
 on:
   push:
     branches: [ "main" ]
     paths:
       - 'clients/go/**'
-    tags:
-      - 'go-v*'
   pull_request:
     branches: [ "main" ]
     paths:
@@ -18,14 +17,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
 
     steps:
     - uses: actions/checkout@v6
@@ -40,55 +31,16 @@ jobs:
       working-directory: clients/go
       run: go mod download
     
-    - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
+    - name: Verify module
       working-directory: clients/go
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
       run: |
-        mkdir -p ../../dist/go-client-${{ matrix.goos }}-${{ matrix.goarch }}
-        go build -v -o ../../dist/go-client-${{ matrix.goos }}-${{ matrix.goarch }}/ ./...
-    
-    - name: Create archive
-      run: |
-        cd dist
-        if [ "${{ matrix.goos }}" = "windows" ]; then
-          zip -r go-client-${{ matrix.goos }}-${{ matrix.goarch }}.zip go-client-${{ matrix.goos }}-${{ matrix.goarch }}
-        else
-          tar -czf go-client-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz go-client-${{ matrix.goos }}-${{ matrix.goarch }}
+        go mod verify
+        go mod tidy
+        if [ -n "$(git status --porcelain go.mod go.sum)" ]; then
+          echo "Warning: go.mod or go.sum has uncommitted changes after go mod tidy"
+          git diff go.mod go.sum
         fi
     
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v5
-      with:
-        name: go-client-${{ matrix.goos }}-${{ matrix.goarch }}
-        path: |
-          dist/*.tar.gz
-          dist/*.zip
-        retention-days: 30
-
-  create-release-artifacts:
-    name: Create Release Artifacts
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/go-v')
-    needs: build
-    
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v5
-      with:
-        path: artifacts
-    
-    - name: Display structure of downloaded files
-      run: ls -R artifacts
-    
-    - name: Create checksums
-      run: |
-        cd artifacts
-        find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; > checksums.txt
-    
-    - name: Upload checksums
-      uses: actions/upload-artifact@v5
-      with:
-        name: checksums
-        path: artifacts/checksums.txt
+    - name: Build
+      working-directory: clients/go
+      run: go build -v ./...
