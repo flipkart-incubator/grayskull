@@ -36,10 +36,10 @@ public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvid
         }
 
         return authorizationProperties.getRules().stream()
-            .filter(rule -> userMatches(rule, username))
-            .filter(rule -> projectMatches(rule, authorizationContext.getProjectId().orElse(null)))
-            .filter(rule -> secretMatches(rule, authorizationContext.getSecretName().orElse(null)))
-            .anyMatch(rule -> actionMatches(rule, action));
+                .filter(rule -> userMatches(rule, username))
+                .filter(rule -> projectMatches(rule, authorizationContext.getProjectId().orElse(null)))
+                .filter(rule -> secretMatches(rule, authorizationContext.getSecretName().orElse(null)))
+                .anyMatch(rule -> actionMatches(rule, action));
     }
 
     private boolean userMatches(AuthorizationProperties.Rule rule, String username) {

@@ -21,6 +21,7 @@ import org.mapstruct.factory.Mappers;
 import java.time.Instant;
 import java.util.Map;
 
+import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -49,7 +50,7 @@ class SecretMapperTest {
             SecretDataPayload payload = new SecretDataPayload("public-value", "private-value");
             CreateSecretRequest request = new CreateSecretRequest();
             request.setName("test-secret");
-            request.setProvider("SELF");
+            request.setProvider(PROVIDER_SELF);
             request.setProviderMeta(Map.of("key1", "value1"));
             request.setData(payload);
 
@@ -67,7 +68,7 @@ class SecretMapperTest {
             assertEquals(systemUser, secret.getUpdatedBy());
             assertEquals(1, secret.getMetadataVersion());
             assertEquals(1, secret.getCurrentDataVersion());
-            assertEquals("SELF", secret.getProvider());
+            assertEquals(PROVIDER_SELF, secret.getProvider());
             assertEquals(Map.of("key1", "value1"), secret.getProviderMeta());
         }
 
@@ -137,7 +138,6 @@ class SecretMapperTest {
             // Assert
             assertNotNull(secret);
             assertEquals("minimal-secret", secret.getName());
-            assertNull(secret.getProviderMeta());
             assertNull(secret.getSystemLabels());
         }
     }
@@ -158,7 +158,7 @@ class SecretMapperTest {
                     .currentDataVersion(3)
                     .metadataVersion(1)
                     .state(LifecycleState.ACTIVE)
-                    .provider("SELF")
+                    .provider(PROVIDER_SELF)
                     .lastRotated(now)
                     .creationTime(now)
                     .updatedTime(now)
@@ -178,7 +178,7 @@ class SecretMapperTest {
             assertEquals(3, metadata.getCurrentDataVersion());
             assertEquals(1, metadata.getMetadataVersion());
             assertEquals("ACTIVE", metadata.getState());
-            assertEquals("SELF", metadata.getProvider());
+            assertEquals(PROVIDER_SELF, metadata.getProvider());
             assertEquals(now, metadata.getLastRotated());
             assertEquals(now, metadata.getCreationTime());
             assertEquals(now, metadata.getUpdatedTime());

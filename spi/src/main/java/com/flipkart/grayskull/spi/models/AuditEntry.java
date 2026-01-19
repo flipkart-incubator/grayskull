@@ -63,6 +63,11 @@ public class AuditEntry {
     private String userId;
 
     /**
+     * ID of the user who delegated the request if this was a delegated request.
+     */
+    private String actorId;
+
+    /**
      * The ip address and forwarded headers of the client that performed the action.
      */
     private Map<String, String> ips;

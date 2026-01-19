@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -124,7 +125,7 @@ class SecretTest {
             secret.setCurrentDataVersion(3);
             secret.setLastRotated(now);
             secret.setState(LifecycleState.DISABLED);
-            secret.setProvider("SELF");
+            secret.setProvider(PROVIDER_SELF);
             secret.setMetadataVersion(1);
             secret.setVersion(5L);
             secret.setCreationTime(now);
@@ -140,7 +141,7 @@ class SecretTest {
             assertEquals(3, secret.getCurrentDataVersion());
             assertEquals(now, secret.getLastRotated());
             assertEquals(LifecycleState.DISABLED, secret.getState());
-            assertEquals("SELF", secret.getProvider());
+            assertEquals(PROVIDER_SELF, secret.getProvider());
             assertEquals(1, secret.getMetadataVersion());
             assertEquals(5L, secret.getVersion());
             assertEquals(now, secret.getCreationTime());
