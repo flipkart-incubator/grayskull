@@ -1,0 +1,107 @@
+# This workflow publishes the Grayskull Go Client SDK
+# Go modules are published via GitHub releases and can be consumed via go get
+# For private registries or additional distribution, this can be extended
+
+name: Publish Go Client
+
+on: 
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+          cache-dependency-path: clients/go/go.sum
+      
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Version must be in format vX.Y.Z (e.g., v1.0.0)"
+            exit 1
+          fi
+      
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "go-${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "Error: Tag go-${{ inputs.version }} already exists"
+            exit 1
+          fi
+      
+      - name: Download dependencies
+        working-directory: clients/go
+        run: go mod download
+      
+      - name: Run tests
+        working-directory: clients/go
+        run: go test -v ./...
+      
+      - name: Verify module
+        working-directory: clients/go
+        run: |
+          go mod verify
+          go mod tidy
+          if [ -n "$(git status --porcelain go.mod go.sum)" ]; then
+            echo "Error: go.mod or go.sum has uncommitted changes after go mod tidy"
+            exit 1
+          fi
+      
+      - name: Build for multiple platforms
+        working-directory: clients/go
+        run: |
+          GOOS=linux GOARCH=amd64 go build -v ./...
+          GOOS=linux GOARCH=arm64 go build -v ./...
+          GOOS=darwin GOARCH=amd64 go build -v ./...
+          GOOS=darwin GOARCH=arm64 go build -v ./...
+          GOOS=windows GOARCH=amd64 go build -v ./...
+      
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "go-${{ inputs.version }}" -m "Release Go client ${{ inputs.version }}"
+          git push origin "go-${{ inputs.version }}"
+      
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: go-${{ inputs.version }}
+          release_name: Go Client ${{ inputs.version }}
+          body: |
+            ## Grayskull Go Client ${{ inputs.version }}
+            
+            ### Installation
+            
+            ```bash
+            go get github.com/flipkart-incubator/grayskull@go-${{ inputs.version }}
+            ```
+            
+            ### Usage
+            
+            ```go
+            import "github.com/flipkart-incubator/grayskull/clients/go/client-api"
+            ```
+            
+            See the [README](https://github.com/flipkart-incubator/grayskull/tree/main/clients/go) for more details.
+          draft: false
+          prerelease: false
+      
+      - name: Trigger GOPROXY update
+        run: |
+          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/@v/go-${{ inputs.version }}.info" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull@go-${{ inputs.version }}" || true
