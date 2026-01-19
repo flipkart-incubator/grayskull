@@ -39,9 +39,13 @@ jobs:
       working-directory: clients/go
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
     
-    - name: Generate Test Report
+    - name: Install go-junit-report
+      run: go install github.com/jstemmer/go-junit-report/v2@latest
+    
+    - name: Generate JUnit Test Report
       working-directory: clients/go
-      run: go test -v -json ./... > test-report.json
+      run: |
+        go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report.xml
       continue-on-error: true
     
     - name: Upload Test Results
@@ -49,7 +53,7 @@ jobs:
       with:
         name: Go Client Test Results
         path: |
-          clients/go/test-report.json
+          clients/go/test-report.xml
           clients/go/coverage.out
     
     - name: Publish code coverage
