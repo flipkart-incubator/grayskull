@@ -112,13 +112,18 @@ if err != nil {
 }
 
 // Access secret components
-apiUrl := secret.PublicPart      // e.g., "https://api.example.com"
-apiKey := secret.PrivatePart     // e.g., "sk-abc123..."
-version := secret.DataVersion    // e.g., 5
+publicPart := secret.PublicPart    // e.g., "username" or public data
+privatePart := secret.PrivatePart  // e.g., "password" or sensitive data
+version := secret.DataVersion      // e.g., 5
 ```
 
 **With Timeout:**
 ```go
+import (
+    "context"
+    "time"
+)
+
 ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 defer cancel()
 
@@ -312,16 +317,24 @@ This makes it easy to trace a single request through your entire system, from cl
 ### Exception Hierarchy
 
 ```
-error
-└── GrayskullError
+error (Go interface)
+└── BaseError
+    ├── GrayskullError
     └── RetryableError (internal)
 ```
+
+All errors embed `BaseError` which provides common functionality like status codes, messages, and error chaining.
 
 ### GrayskullError
 
 The main error type returned by the client.
 
 ```go
+import (
+    "errors"
+    "github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
+)
+
 secret, err := client.GetSecret(ctx, "project:secret")
 if err != nil {
     var grayskullErr *exceptions.GrayskullError
