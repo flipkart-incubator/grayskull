@@ -28,10 +28,6 @@ public final class AuthorizationContext {
     /** The secret being accessed, which may not be present for project-level checks. */
     private final Secret secret;
 
-    public static AuthorizationContext forGlobal(Authentication authentication) {
-        return new AuthorizationContext(authentication, null, null);
-    }
-
     /**
      * Creates an authorization context for a project-level action.
      * @param authentication The user's authentication object.
@@ -65,8 +61,8 @@ public final class AuthorizationContext {
      * Gets the ID of the project in scope.
      * @return The project ID.
      */
-    public Optional<String> getProjectId() {
-        return Optional.ofNullable(project).map(Project::getId);
+    public String getProjectId() {
+        return project.getId();
     }
 
     /**

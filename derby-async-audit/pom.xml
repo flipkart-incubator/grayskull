@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.flipkart.grayskull</groupId>
         <artifactId>parent</artifactId>
-        <version>0.2.0</version>
+        <version>0.2.1</version>
     </parent>
 
     <artifactId>derby-async-audit</artifactId>

@@ -2,6 +2,7 @@ package com.flipkart.grayskull.spimpl.authz;
 
 import com.flipkart.grayskull.configuration.AuthorizationProperties;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import lombok.RequiredArgsConstructor;
 
@@ -37,8 +38,20 @@ public class SimpleAuthorizationProvider implements GrayskullAuthorizationProvid
 
         return authorizationProperties.getRules().stream()
                 .filter(rule -> userMatches(rule, username))
-                .filter(rule -> projectMatches(rule, authorizationContext.getProjectId().orElse(null)))
+                .filter(rule -> projectMatches(rule, authorizationContext.getProjectId()))
                 .filter(rule -> secretMatches(rule, authorizationContext.getSecretName().orElse(null)))
+                .anyMatch(rule -> actionMatches(rule, action));
+    }
+
+    @Override
+    public boolean isAuthorized(GrayskullAuthentication authentication, String action) {
+        if (authorizationProperties.getRules() == null) {
+            return false;
+        }
+        return authorizationProperties.getRules().stream()
+                .filter(rule -> userMatches(rule, authentication.getName()))
+                .filter(rule -> projectMatches(rule, "*"))
+                .filter(rule -> secretMatches(rule, "*"))
                 .anyMatch(rule -> actionMatches(rule, action));
     }
 
