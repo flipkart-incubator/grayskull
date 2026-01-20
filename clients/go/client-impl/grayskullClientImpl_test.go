@@ -179,7 +179,7 @@ func TestGetSecret(t *testing.T) {
 			}
 
 			// Call the method under test
-			result, err := client.GetSecret(tt.secretRef)
+			result, err := client.GetSecret(context.Background(), tt.secretRef)
 
 			// Assertions
 			if tt.expectedError != nil {
@@ -249,7 +249,7 @@ func TestSplitSecretRef(t *testing.T) {
 				assert.Equal(t, []string{tt.secretRef}, parts) // Split with no colon returns original string in slice
 
 				// Test GetSecret's error handling
-				_, err := client.GetSecret(tt.secretRef)
+				_, err := client.GetSecret(context.Background(), tt.secretRef)
 				assert.Error(t, err)
 				if tt.errorContains != "" {
 					assert.Contains(t, err.Error(), tt.errorContains)
@@ -265,4 +265,321 @@ func TestSplitSecretRef(t *testing.T) {
 	}
 }
 
-// Add more test functions for other methods as needed
+func TestRegisterRefreshHook(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	config := &models.GrayskullClientConfiguration{
+		Host: "http://localhost:8080",
+	}
+
+	client := &client_impl.GrayskullClientImpl{
+		AuthHeaderProvider:    mockAuth,
+		GrayskullClientConfig: config,
+		HttpClient:            mockHTTPClient,
+		MetricsRecorder:       metrics.NewPrometheusRecorder(),
+	}
+
+	t.Run("successful hook registration", func(t *testing.T) {
+		mockHook := &MockSecretRefreshHook{}
+		ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", mockHook)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, ref)
+	})
+
+	t.Run("empty secret ref", func(t *testing.T) {
+		mockHook := &MockSecretRefreshHook{}
+		ref, err := client.RegisterRefreshHook(context.Background(), "", mockHook)
+
+		assert.Error(t, err)
+		assert.Nil(t, ref)
+		assert.Contains(t, err.Error(), "secretRef cannot be empty")
+	})
+
+	t.Run("nil hook", func(t *testing.T) {
+		ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", nil)
+
+		assert.Error(t, err)
+		assert.Nil(t, ref)
+		assert.Contains(t, err.Error(), "hook cannot be nil")
+	})
+}
+
+func TestClose(t *testing.T) {
+	t.Run("successful close", func(t *testing.T) {
+		mockAuth := &MockAuthProvider{}
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("Close").Return(nil)
+
+		config := &models.GrayskullClientConfiguration{
+			Host: "http://localhost:8080",
+		}
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		err := client.Close()
+
+		assert.NoError(t, err)
+		mockHTTPClient.AssertExpectations(t)
+	})
+
+	t.Run("close with error", func(t *testing.T) {
+		mockAuth := &MockAuthProvider{}
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("Close").Return(errors.New("close error"))
+
+		config := &models.GrayskullClientConfiguration{
+			Host: "http://localhost:8080",
+		}
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		err := client.Close()
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "close error")
+		mockHTTPClient.AssertExpectations(t)
+	})
+
+	t.Run("close with nil http client", func(t *testing.T) {
+		mockAuth := &MockAuthProvider{}
+		config := &models.GrayskullClientConfiguration{
+			Host: "http://localhost:8080",
+		}
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            nil,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		err := client.Close()
+
+		assert.NoError(t, err)
+	})
+}
+
+func TestGetSecret_AdditionalScenarios(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host: "http://localhost:8080",
+	}
+
+	t.Run("nil context creates new context with request ID", func(t *testing.T) {
+		secretValue := Client_API.SecretValue{
+			DataVersion: 1,
+			PublicPart:  "test-data",
+		}
+		resp := response.Response[Client_API.SecretValue]{
+			Data:    secretValue,
+			Message: "success",
+		}
+		jsonData, _ := json.Marshal(resp)
+
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
+			Return(&response.HttpResponse{
+				StatusCode: 200,
+				Body:       string(jsonData),
+			}, nil)
+
+		client := &client_impl.GrayskullClientImpl{
+			BaseURL:               "http://localhost:8080",
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(nil, "project:secret")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, secretValue.PublicPart, result.PublicPart)
+	})
+
+	t.Run("HTTP error with nil response", func(t *testing.T) {
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
+			Return(nil, errors.New("network error"))
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(context.Background(), "project:secret")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "failed to fetch secret")
+	})
+
+	t.Run("HTTP error with response", func(t *testing.T) {
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
+			Return(&response.HttpResponse{
+				StatusCode: 500,
+				Body:       "Internal Server Error",
+			}, errors.New("server error"))
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(context.Background(), "project:secret")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid JSON response", func(t *testing.T) {
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
+			Return(&response.HttpResponse{
+				StatusCode: 200,
+				Body:       "invalid json",
+			}, nil)
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(context.Background(), "project:secret")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "failed to parse response")
+	})
+
+	t.Run("empty data in response", func(t *testing.T) {
+		resp := response.Response[Client_API.SecretValue]{
+			Data:    Client_API.SecretValue{},
+			Message: "success",
+		}
+		jsonData, _ := json.Marshal(resp)
+
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
+			Return(&response.HttpResponse{
+				StatusCode: 200,
+				Body:       string(jsonData),
+			}, nil)
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(context.Background(), "project:secret")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "no data in response")
+	})
+
+	t.Run("empty project ID", func(t *testing.T) {
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(context.Background(), ":secret")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "projectId and secretName cannot be empty")
+	})
+
+	t.Run("empty secret name", func(t *testing.T) {
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+
+		client := &client_impl.GrayskullClientImpl{
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(context.Background(), "project:")
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "projectId and secretName cannot be empty")
+	})
+
+	t.Run("URL encoding special characters", func(t *testing.T) {
+		secretValue := Client_API.SecretValue{
+			DataVersion: 1,
+			PublicPart:  "encoded-data",
+		}
+		resp := response.Response[Client_API.SecretValue]{
+			Data: secretValue,
+		}
+		jsonData, _ := json.Marshal(resp)
+
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.MatchedBy(func(url string) bool {
+			// Verify URL encoding
+			return assert.Contains(t, url, "test%2Fproject") && assert.Contains(t, url, "secret%2Fname")
+		})).Return(&response.HttpResponse{
+			StatusCode: 200,
+			Body:       string(jsonData),
+		}, nil)
+
+		client := &client_impl.GrayskullClientImpl{
+			BaseURL:               "http://localhost:8080",
+			AuthHeaderProvider:    mockAuth,
+			GrayskullClientConfig: config,
+			HttpClient:            mockHTTPClient,
+			MetricsRecorder:       metrics.NewPrometheusRecorder(),
+		}
+
+		result, err := client.GetSecret(context.Background(), "test/project:secret/name")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+}
+
+// MockSecretRefreshHook is a mock implementation of SecretRefreshHook
+type MockSecretRefreshHook struct {
+	mock.Mock
+}
+
+func (m *MockSecretRefreshHook) OnRefresh(secretValue *Client_API.SecretValue) {
+	m.Called(secretValue)
+}
+
+func (m *MockSecretRefreshHook) OnUpdate(secretValue Client_API.SecretValue) error {
+	args := m.Called(secretValue)
+	return args.Error(0)
+}

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
@@ -9,8 +10,10 @@ import (
 )
 
 var (
-	once sync.Once
-	reg  *prometheus.Registry
+	once            sync.Once
+	reg             *prometheus.Registry
+	requestDuration *prometheus.HistogramVec
+	retryCounter    *prometheus.CounterVec
 )
 
 const (
@@ -23,27 +26,25 @@ type prometheusRecorder struct {
 	retryCounter    *prometheus.CounterVec
 }
 
-// NewPrometheusRecorder creates a new Prometheus-based metrics recorder
-func NewPrometheusRecorder() MetricsRecorder {
-	once.Do(func() {
+// initFunc is the initialization function that can be overridden for testing
+var initFunc = initializeMetrics
+
+// initializeMetrics initializes the Prometheus registry and metrics
+func initializeMetrics() {
+	// Create registry if not already set (allows testing with pre-configured registry)
+	if reg == nil {
 		reg = prometheus.NewRegistry()
-		prometheus.DefaultRegisterer = reg
-		prometheus.DefaultGatherer = reg
-	})
+	}
+	prometheus.DefaultRegisterer = reg
+	prometheus.DefaultGatherer = reg
 
-	// Create a new registry for metrics
-	registry := prometheus.NewRegistry()
-
-	// Register the collector with our registry
-	collector := prometheus.NewGoCollector()
-	err := registry.Register(collector)
-	if err != nil {
-		// If registration fails, we'll still return a recorder but it won't collect Go metrics
-		// This is better than panicking
+	// Register Go collector once with the package-level registry
+	if err := reg.Register(prometheus.NewGoCollector()); err != nil {
+		slog.Warn("Failed to register Prometheus Go collector", "error", err)
 	}
 
-	// Create metrics with the registry
-	reqDuration := promauto.With(registry).NewHistogramVec(
+	// Create metrics once with the package-level registry
+	requestDuration = promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
@@ -54,7 +55,7 @@ func NewPrometheusRecorder() MetricsRecorder {
 		[]string{"name", "status_code"},
 	)
 
-	retryCounter := promauto.With(registry).NewCounterVec(
+	retryCounter = promauto.With(reg).NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
@@ -63,9 +64,14 @@ func NewPrometheusRecorder() MetricsRecorder {
 		},
 		[]string{"url", "success"},
 	)
+}
+
+// NewPrometheusRecorder creates a new Prometheus-based metrics recorder
+func NewPrometheusRecorder() MetricsRecorder {
+	once.Do(initFunc)
 
 	return &prometheusRecorder{
-		requestDuration: reqDuration,
+		requestDuration: requestDuration,
 		retryCounter:    retryCounter,
 	}
 }

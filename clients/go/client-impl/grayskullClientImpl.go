@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/flipkart-incubator/grayskull/client-impl/hooks"
 	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 
+	GrayskullClient "github.com/flipkart-incubator/grayskull/client-api"
 	Client_API_Hooks "github.com/flipkart-incubator/grayskull/client-api/hooks"
 	Client_API "github.com/flipkart-incubator/grayskull/client-api/models"
 	"github.com/flipkart-incubator/grayskull/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/client-impl/constants"
+	"github.com/flipkart-incubator/grayskull/client-impl/hooks"
 	"github.com/flipkart-incubator/grayskull/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/client-impl/models"
 	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
@@ -61,9 +62,17 @@ func (c *GrayskullClientImpl) SplitSecretRef(secretRef string) []string {
 }
 
 // GetSecret retrieves a secret from the Grayskull server
-func (g *GrayskullClientImpl) GetSecret(secretRef string) (*Client_API.SecretValue, error) {
-	requestID := uuid.New().String()
-	ctx := context.WithValue(context.Background(), constants.GrayskullRequestID, requestID)
+func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (*Client_API.SecretValue, error) {
+	// If no context provided, create a new one with request ID
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Add request ID to context if not already present
+	if ctx.Value(constants.GrayskullRequestID) == nil {
+		requestID := uuid.New().String()
+		ctx = context.WithValue(ctx, constants.GrayskullRequestID, requestID)
+	}
 
 	startTime := time.Now()
 	var statusCode int
@@ -122,7 +131,7 @@ func (g *GrayskullClientImpl) GetSecret(secretRef string) (*Client_API.SecretVal
 }
 
 // RegisterRefreshHook registers a refresh hook for a secret
-func (c *GrayskullClientImpl) RegisterRefreshHook(secretRef string, hook Client_API_Hooks.SecretRefreshHook) (Client_API_Hooks.RefreshHandlerRef, error) {
+func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef string, hook Client_API_Hooks.SecretRefreshHook) (Client_API_Hooks.RefreshHandlerRef, error) {
 	if secretRef == "" {
 		return nil, fmt.Errorf("secretRef cannot be empty")
 	}
@@ -142,3 +151,6 @@ func (c *GrayskullClientImpl) Close() error {
 	}
 	return nil
 }
+
+// Compile-time check to ensure GrayskullClientImpl implements Client interface
+var _ GrayskullClient.Client = (*GrayskullClientImpl)(nil)

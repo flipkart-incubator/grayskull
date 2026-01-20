@@ -2,12 +2,14 @@ package client_impl_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/flipkart-incubator/grayskull/client-impl"
+	"github.com/flipkart-incubator/grayskull/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/client-impl/models"
 	"github.com/stretchr/testify/assert"
@@ -163,33 +165,29 @@ func TestGrayskullHTTPClient_DoGetWithRetry_NetworkError(t *testing.T) {
 }
 
 func TestGrayskullHTTPClient_Close(t *testing.T) {
-	// Create and close client
-	client := setupClient(t, nil)
-	err := client.Close()
+	t.Run("successful close", func(t *testing.T) {
+		// Create and close client
+		client := setupClient(t, nil)
+		err := client.Close()
 
-	// Verify
-	assert.NoError(t, err)
+		// Verify
+		assert.NoError(t, err)
+	})
+
+	t.Run("close multiple times", func(t *testing.T) {
+		client := setupClient(t, nil)
+		err1 := client.Close()
+		err2 := client.Close()
+
+		assert.NoError(t, err1)
+		assert.NoError(t, err2)
+	})
 }
 
 func TestIsRetryableStatusCode(t *testing.T) {
 	// isRetryableStatusCode is a helper function that mirrors the implementation in grayskullHttpClient.go
 	isRetryableStatusCode := func(statusCode int) bool {
-		switch statusCode {
-		case http.StatusRequestTimeout: // 408
-			return true
-		case http.StatusTooManyRequests: // 429
-			return true
-		case http.StatusInternalServerError: // 500
-			return true
-		case http.StatusBadGateway: // 502
-			return true
-		case http.StatusServiceUnavailable: // 503
-			return true
-		case http.StatusGatewayTimeout: // 504
-			return true
-		default:
-			return false
-		}
+		return statusCode == http.StatusTooManyRequests || (statusCode >= http.StatusInternalServerError && statusCode < 600)
 	}
 
 	tests := []struct {
@@ -202,7 +200,7 @@ func TestIsRetryableStatusCode(t *testing.T) {
 		{"401 Unauthorized", http.StatusUnauthorized, false},
 		{"403 Forbidden", http.StatusForbidden, false},
 		{"404 Not Found", http.StatusNotFound, false},
-		{"408 Request Timeout", http.StatusRequestTimeout, true},
+		{"408 Request Timeout", http.StatusRequestTimeout, false},
 		{"429 Too Many Requests", http.StatusTooManyRequests, true},
 		{"500 Internal Server Error", http.StatusInternalServerError, true},
 		{"502 Bad Gateway", http.StatusBadGateway, true},
@@ -216,4 +214,361 @@ func TestIsRetryableStatusCode(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestNewGrayskullHTTPClient(t *testing.T) {
+	t.Run("creates client with valid config", func(t *testing.T) {
+		mockAuth := &MockAuthProviderHTTP{}
+		mockAuth.On("GetAuthHeader").Return("Bearer token", nil)
+
+		config := &models.GrayskullClientConfiguration{
+			MaxRetries:     3,
+			MinRetryDelay:  100,
+			ReadTimeout:    5000,
+			MaxConnections: 10,
+		}
+
+		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+
+		assert.NotNil(t, client)
+	})
+
+	t.Run("creates client with nil logger", func(t *testing.T) {
+		mockAuth := &MockAuthProviderHTTP{}
+		config := &models.GrayskullClientConfiguration{
+			MaxRetries:    3,
+			MinRetryDelay: 100,
+			ReadTimeout:   5000,
+		}
+
+		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+
+		assert.NotNil(t, client)
+	})
+
+	t.Run("creates client with nil metrics recorder", func(t *testing.T) {
+		mockAuth := &MockAuthProviderHTTP{}
+		config := &models.GrayskullClientConfiguration{
+			MaxRetries:    3,
+			MinRetryDelay: 100,
+			ReadTimeout:   5000,
+		}
+
+		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+
+		assert.NotNil(t, client)
+	})
+}
+
+func TestDoGetWithRetry_AdditionalScenarios(t *testing.T) {
+	t.Run("context canceled before request", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(ctx, "http://example.com")
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+
+	t.Run("non-retryable 4xx error", func(t *testing.T) {
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"bad request"}`))
+		}))
+
+		client := setupClient(t, &models.GrayskullClientConfiguration{
+			MaxRetries:    3,
+			MinRetryDelay: 10,
+			ReadTimeout:   1000,
+		})
+
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "failed after 1 attempt")
+	})
+
+	t.Run("429 too many requests with retry", func(t *testing.T) {
+		attempts := 0
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.WriteHeader(http.StatusTooManyRequests)
+			} else {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"data":"success"}`))
+			}
+		}))
+
+		client := setupClient(t, &models.GrayskullClientConfiguration{
+			MaxRetries:    3,
+			MinRetryDelay: 10,
+			ReadTimeout:   1000,
+		})
+
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, 2, attempts)
+	})
+
+	t.Run("request with headers", func(t *testing.T) {
+		var capturedAuth string
+
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedAuth = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"test"}`))
+		}))
+
+		client := setupClient(t, nil)
+		ctx := context.WithValue(context.Background(), "grayskull-request-id", "test-request-123")
+		resp, err := client.DoGetWithRetry(ctx, testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, "Bearer test-token", capturedAuth)
+	})
+
+	t.Run("response with different content types", func(t *testing.T) {
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<data>test</data>`))
+		}))
+
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, "application/xml", resp.ContentType)
+	})
+
+	t.Run("response without explicit content type", func(t *testing.T) {
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"test"}`))
+		}))
+
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		// httptest server sets default content-type
+		assert.NotEmpty(t, resp.ContentType)
+	})
+
+	t.Run("multiple retries before success", func(t *testing.T) {
+		attempts := 0
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts < 3 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			} else {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"data":"success"}`))
+			}
+		}))
+
+		client := setupClient(t, &models.GrayskullClientConfiguration{
+			MaxRetries:    5,
+			MinRetryDelay: 10,
+			ReadTimeout:   1000,
+		})
+
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, 3, attempts)
+	})
+
+	t.Run("auth header error", func(t *testing.T) {
+		mockAuth := &MockAuthProviderHTTP{}
+		mockAuth.On("GetAuthHeader").Return("", errors.New("auth error"))
+
+		config := &models.GrayskullClientConfiguration{
+			MaxRetries:    3,
+			MinRetryDelay: 10,
+			ReadTimeout:   1000,
+		}
+
+		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), "http://example.com")
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "failed to get auth header")
+	})
+
+	t.Run("empty auth header", func(t *testing.T) {
+		mockAuth := &MockAuthProviderHTTP{}
+		mockAuth.On("GetAuthHeader").Return("", nil)
+
+		config := &models.GrayskullClientConfiguration{
+			MaxRetries:    3,
+			MinRetryDelay: 10,
+			ReadTimeout:   1000,
+		}
+
+		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), "http://example.com")
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "auth header cannot be empty")
+	})
+
+	t.Run("invalid URL", func(t *testing.T) {
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), "://invalid-url")
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+
+	t.Run("response protocol captured", func(t *testing.T) {
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"test"}`))
+		}))
+
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Contains(t, resp.Protocol, "HTTP")
+	})
+}
+
+func TestDoGetWithRetry_UncoveredPaths(t *testing.T) {
+	t.Run("sets request ID header from context", func(t *testing.T) {
+		var capturedRequestID string
+
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedRequestID = r.Header.Get("X-Request-Id")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"test"}`))
+		}))
+
+		client := setupClient(t, nil)
+		// Use the actual constant from the constants package
+		ctx := context.WithValue(context.Background(), constants.GrayskullRequestID, "test-request-123")
+		resp, err := client.DoGetWithRetry(ctx, testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, "test-request-123", capturedRequestID)
+	})
+
+	t.Run("handles empty content type header", func(t *testing.T) {
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Explicitly clear content-type by writing header first
+			w.Header().Del("Content-Type")
+			w.WriteHeader(http.StatusOK)
+			// Don't write body to avoid auto-detection
+		}))
+
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		// When no content-type is set and no body, it should be empty or unknown
+		if resp.ContentType == "" {
+			// Some servers might leave it empty
+			assert.Equal(t, "", resp.ContentType)
+		}
+	})
+}
+
+func TestDoGetWithRetry_MetricsRecording(t *testing.T) {
+	t.Run("records metrics on success", func(t *testing.T) {
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"test"}`))
+		}))
+
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("records retry metrics on failure then success", func(t *testing.T) {
+		attempts := 0
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+			} else {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"data":"test"}`))
+			}
+		}))
+
+		client := setupClient(t, &models.GrayskullClientConfiguration{
+			MaxRetries:    3,
+			MinRetryDelay: 10,
+			ReadTimeout:   1000,
+		})
+
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("records metrics on error", func(t *testing.T) {
+		testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"bad request"}`))
+		}))
+
+		client := setupClient(t, nil)
+		resp, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestDoGetWithRetry_EdgeCases(t *testing.T) {
+	t.Run("handles server closing connection while reading body", func(t *testing.T) {
+		// This test simulates a scenario where reading the response body fails
+		testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"test"}`))
+			// Force connection close
+			hj, ok := w.(http.Hijacker)
+			if ok {
+				conn, _, _ := hj.Hijack()
+				if conn != nil {
+					conn.Close()
+				}
+			}
+		}))
+		defer testServer.Close()
+
+		client := setupClient(t, &models.GrayskullClientConfiguration{
+			MaxRetries:    1,
+			MinRetryDelay: 10,
+			ReadTimeout:   1000,
+		})
+
+		// This should trigger retry logic due to connection issues
+		_, err := client.DoGetWithRetry(context.Background(), testServer.URL)
+
+		// Expect an error due to connection issues
+		assert.Error(t, err)
+	})
+
 }

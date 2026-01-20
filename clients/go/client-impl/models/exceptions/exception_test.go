@@ -62,6 +62,14 @@ func TestGrayskullError(t *testing.T) {
 		assert.Equal(t, "custom error", err.Error())
 		assert.Equal(t, 0, err.StatusCode)
 	})
+
+	t.Run("NewGrayskullErrorWithMessageAndCause", func(t *testing.T) {
+		cause := errors.New("underlying issue")
+		err := exceptions.NewGrayskullErrorWithMessageAndCause("something went wrong", cause)
+		assert.Equal(t, "something went wrong: underlying issue", err.Error())
+		assert.Equal(t, 0, err.StatusCode)
+		assert.Equal(t, cause, err.Cause)
+	})
 }
 
 func TestRetryableError(t *testing.T) {

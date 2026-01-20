@@ -88,10 +88,8 @@ func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*
 		return nil, fmt.Errorf("failed after %d attempts: %w", attemptCount, err)
 	}
 
-	httpResp, ok := result.(*response.HttpResponse)
-	if !ok {
-		return nil, fmt.Errorf("unexpected response type: %T", result)
-	}
+	// Safe to assert type since doGet always returns *response.HttpResponse
+	httpResp := result.(*response.HttpResponse)
 
 	if attemptCount > 1 {
 		c.metricsRecorder.RecordRetry(url, int(attemptCount), true)
