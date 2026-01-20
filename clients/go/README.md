@@ -32,7 +32,7 @@ Go client library for interacting with the Grayskull secret management service.
 ## Integration
 
 ```bash
-go get github.com/flipkart-incubator/grayskull/clients/go
+go get github.com/flipkart-incubator/grayskull
 ```
 
 ## Quick Start
@@ -253,7 +253,7 @@ When metrics are enabled, the client exposes metrics to the Prometheus default r
 
 #### Metric Format
 
-```
+```text
 grayskull_client_request_duration_seconds
 grayskull_client_request_total
 grayskull_client_retry_total
@@ -304,7 +304,7 @@ The client automatically adds context to logs for all operations:
 
 The SDK automatically includes the `X-Request-Id` header in all HTTP requests to the Grayskull server. This enables end-to-end request correlation:
 
-```
+```text
 Client Log:  [grayskullRequestId:abc-123] Fetching secret
 HTTP Header: X-Request-Id: abc-123
 Server Log:  [RequestId:abc-123] Processing secret request
@@ -316,7 +316,7 @@ This makes it easy to trace a single request through your entire system, from cl
 
 ### Exception Hierarchy
 
-```
+```text
 error (Go interface)
 └── BaseError
     ├── GrayskullError
@@ -388,8 +388,8 @@ The client automatically retries transient failures using exponential backoff wi
 
 ```bash
 # Clone the repository
-git clone https://github.com/flipkart/grayskull-oss.git
-cd grayskull-oss/clients/go
+git clone https://github.com/flipkart-incubator/grayskull.git
+cd grayskull/clients/go
 
 # Build the module
 go build ./...
@@ -406,7 +406,7 @@ go tool cover -html=coverage.out
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](../../LICENSE) file for details.
 
-```
+```text
 Copyright 2025 Flipkart
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -426,4 +426,4 @@ limitations under the License.
 
 ## Support
 
-For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/flipkart/grayskull-oss).
+For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/flipkart-incubator/grayskull).
