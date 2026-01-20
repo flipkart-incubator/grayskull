@@ -110,9 +110,8 @@ public class GrayskullSecurity {
      * @return {@code true} if authorized, {@code false} otherwise.
      */
     public boolean hasPermission(String action) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        AuthorizationContext context = AuthorizationContext.forGlobal(authentication);
-        return authorizationProvider.isAuthorized(context, action);
+        GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
+        return authorizationProvider.isAuthorized(authentication, action);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.spi;
 
+import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 
 /**
@@ -17,5 +18,14 @@ public interface GrayskullAuthorizationProvider {
      * @return {@code true} if the user is authorized, {@code false} otherwise.
      */
     boolean isAuthorized(AuthorizationContext authorizationContext, String action);
+
+    /**
+     * Checks if the authenticated user is authorized to perform a given action on a global resource.
+     *
+     * @param authentication The user's authentication object
+     * @param action         The action being performed
+     * @return {@code true} if the user is authorized, {@code false} otherwise.
+     */
+    boolean isAuthorized(GrayskullAuthentication authentication, String action);
 
 } 

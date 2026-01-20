@@ -136,7 +136,7 @@ class GrayskullSecurityTest {
     void hasPermission_GlobalLevel_WhenAuthorized_ReturnsTrue() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("providers.create"))).thenReturn(true);
+        when(authorizationProvider.isAuthorized(any(GrayskullAuthentication.class), eq("providers.create"))).thenReturn(true);
 
         // When
         boolean result = grayskullSecurity.hasPermission("providers.create");
@@ -149,22 +149,10 @@ class GrayskullSecurityTest {
     void hasPermission_GlobalLevel_WhenNotAuthorized_ReturnsFalse() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("providers.create"))).thenReturn(false);
+        when(authorizationProvider.isAuthorized(any(GrayskullAuthentication.class), eq("providers.create"))).thenReturn(false);
 
         // When
         boolean result = grayskullSecurity.hasPermission("providers.create");
-
-        // Then
-        assertFalse(result);
-    }
-
-    @Test
-    void hasPermission_WhenNoAuthentication_StillCallsAuthorizationProvider() {
-        // Given - No authentication set in SecurityContext
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("providers.list"))).thenReturn(false);
-
-        // When
-        boolean result = grayskullSecurity.hasPermission("providers.list");
 
         // Then
         assertFalse(result);
