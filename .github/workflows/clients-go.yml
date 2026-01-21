@@ -27,8 +27,12 @@ jobs:
         go-version: '1.24.0'
         cache-dependency-path: clients/go/go.sum
     
-    - name: Download dependencies
-      working-directory: clients/go
+    - name: Download dependencies for client-api
+      working-directory: clients/go/client-api
+      run: go mod download
+    
+    - name: Download dependencies for client-impl
+      working-directory: clients/go/client-impl
       run: go mod download
     
     - name: Build Go Clients
