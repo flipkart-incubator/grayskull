@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"strconv"
 	"time"
 
@@ -21,7 +20,7 @@ type prometheusRecorder struct {
 
 // NewPrometheusRecorder creates a new Prometheus-based metrics recorder with the given registry.
 // If registry is nil, prometheus.DefaultRegisterer will be used.
-func NewPrometheusRecorder(registry prometheus.Registerer) metrics2.MetricsRecorder {
+func NewPrometheusRecorder(registry prometheus.Registerer) MetricsRecorder {
 	if registry == nil {
 		registry = prometheus.DefaultRegisterer
 	}

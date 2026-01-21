@@ -14,7 +14,6 @@ import (
 	Client_API "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
-	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
@@ -386,7 +385,7 @@ func TestGetSecret(t *testing.T) {
 				mockAuth,
 				config,
 				mockHTTPClient,
-				metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+				metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 			)
 
 			// Call the method under test
@@ -423,7 +422,7 @@ func TestRegisterRefreshHook(t *testing.T) {
 		mockAuth,
 		config,
 		mockHTTPClient,
-		metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 	)
 
 	t.Run("successful hook registration", func(t *testing.T) {
@@ -477,7 +476,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(nil, "project:secret")
@@ -497,7 +496,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
@@ -517,7 +516,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
@@ -536,7 +535,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
@@ -559,7 +558,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
@@ -577,7 +576,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(context.Background(), ":secret")
@@ -595,7 +594,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(context.Background(), "project:")
@@ -624,7 +623,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			mockAuth,
 			config,
 			mockHTTPClient,
-			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
 		result, err := client.GetSecret(context.Background(), "test/project:secret/name")

@@ -57,9 +57,12 @@ func main() {
     config.Host = "https://grayskull.example.com"
     
     // 2. Create authentication provider
-    authProvider := auth.NewBasicAuthHeaderProvider("username", "password")
+    authProvider, err := auth.NewBasicAuthHeaderProvider("username", "password")
+    if err != nil {
+        log.Fatalf("Failed to create auth provider: %v", err)
+    }
     
-    // 3. Initialize and use the client
+    // 3. Initialize the client
     client, err := client_impl.NewGrayskullClient(authProvider, config, nil)
     if err != nil {
         log.Fatalf("Failed to create client: %v", err)

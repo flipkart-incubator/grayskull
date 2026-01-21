@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/metrics"
 	"io"
 	"log/slog"
 	"net/http"
@@ -60,7 +59,7 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 	}
 
 	if metricsRecorder == nil {
-		metricsRecorder = metrics2.NewPrometheusRecorder(nil)
+		metricsRecorder = metrics.NewPrometheusRecorder(nil)
 	}
 
 	return &GrayskullHTTPClient{

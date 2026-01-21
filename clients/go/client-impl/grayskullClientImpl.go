@@ -14,7 +14,6 @@ import (
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
-	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
@@ -76,7 +75,7 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 	// Use default logger and Prometheus metrics recorder if not provided
 	logger := slog.Default().With("component", "grayskull-client")
 	if metricsRecorder == nil {
-		metricsRecorder = metrics2.NewPrometheusRecorder(nil)
+		metricsRecorder = metrics.NewPrometheusRecorder(nil)
 	}
 
 	httpClient := internal.NewGrayskullHTTPClient(authProvider, config, logger, metricsRecorder)
