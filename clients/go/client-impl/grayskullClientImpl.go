@@ -50,7 +50,10 @@ func validateConfig(config *models.GrayskullClientConfiguration) error {
 					return errors.NewGrayskullErrorWithMessage(fmt.Sprintf("%s must be greater than 0", fieldErr.Field()))
 				}
 			}
+			return errors.NewGrayskullErrorWithMessage(validationErrors.Error())
 		}
+		return errors.NewGrayskullErrorWithCause(400, "invalid configuration", err)
+
 	}
 	return nil
 }
@@ -110,7 +113,7 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	var statusCode int
 
 	if secretRef == "" {
-		return nil, fmt.Errorf("secretRef cannot be empty")
+		return nil, errors.NewGrayskullError(400, "secretRef cannot be empty")
 	}
 
 	// Parse secretRef format: "projectId:secretName"
