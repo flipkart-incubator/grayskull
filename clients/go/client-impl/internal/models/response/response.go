@@ -9,3 +9,11 @@ type Response[T any] struct {
 	// Message is a human-readable message describing the response.
 	Message string `json:"message"`
 }
+
+// NewResponse creates a new Response with the given data and message
+func NewResponse[T any](data T, message string) *Response[T] {
+	return &Response[T]{
+		Data:    data,
+		Message: message,
+	}
+}

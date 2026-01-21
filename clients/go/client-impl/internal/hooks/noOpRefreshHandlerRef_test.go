@@ -3,7 +3,7 @@ package hooks
 import (
 	"testing"
 
-	"github.com/flipkart-incubator/grayskull/client-api/hooks"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-api/hooks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,7 +25,7 @@ func TestNoOpRefreshHandlerRef(t *testing.T) {
 	})
 
 	t.Run("Instance is not nil", func(t *testing.T) {
-		assert.NotNil(t, Instance, "Instance should not be nil")
+		assert.NotNil(t, GetInstance(), "Instance should not be nil")
 	})
 
 	t.Run("Implements RefreshHandlerRef interface", func(t *testing.T) {
@@ -41,8 +41,8 @@ func TestNoOpRefreshHandlerRef(t *testing.T) {
 	})
 
 	t.Run("Instance is singleton", func(t *testing.T) {
-		ref1 := Instance
-		ref2 := Instance
+		ref1 := GetInstance()
+		ref2 := GetInstance()
 		assert.Same(t, ref1, ref2, "Instance should return the same reference")
 	})
 }

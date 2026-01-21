@@ -8,7 +8,4 @@ type MetricsRecorder interface {
 
 	// RecordRetry records a retry attempt for a request
 	RecordRetry(url string, attemptNumber int, success bool)
-
-	// GetRecorderName returns the name of this metrics recorder implementation
-	GetRecorderName() string
 }

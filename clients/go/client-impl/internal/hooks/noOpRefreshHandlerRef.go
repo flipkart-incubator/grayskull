@@ -1,7 +1,7 @@
 package hooks
 
 import (
-	"github.com/flipkart-incubator/grayskull/client-api/hooks"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-api/hooks"
 	"log/slog"
 )
 
@@ -10,10 +10,18 @@ import (
 // until full server-sent events support is implemented in a future version.
 type NoOpRefreshHandlerRef struct{}
 
+// Compile-time check to ensure NoOpRefreshHandlerRef implements RefreshHandlerRef interface
+var _ hooks.RefreshHandlerRef = (*NoOpRefreshHandlerRef)(nil)
+
 var (
-	// Instance is the singleton instance of the no-op refresh hook handle.
-	Instance = &NoOpRefreshHandlerRef{}
+	// instance is the singleton instance of the no-op refresh hook handle.
+	instance = &NoOpRefreshHandlerRef{}
 )
+
+// GetInstance returns the singleton instance of the no-op refresh hook handle.
+func GetInstance() hooks.RefreshHandlerRef {
+	return instance
+}
 
 // GetSecretRef returns an empty string as this is a no-op implementation.
 func (n *NoOpRefreshHandlerRef) GetSecretRef() string {
@@ -30,6 +38,3 @@ func (n *NoOpRefreshHandlerRef) Unregister() {
 	slog.Debug("Unregister called on no-op refresh hook handle (placeholder implementation)")
 	// No-op
 }
-
-// Ensure NoOpRefreshHandlerRef implements RefreshHandlerRef
-var _ hooks.RefreshHandlerRef = (*NoOpRefreshHandlerRef)(nil)

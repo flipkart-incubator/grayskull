@@ -1,27 +1,28 @@
-package client_impl
+package internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/metrics"
 	"io"
 	"log/slog"
 	"net/http"
-	"sync/atomic"
 	"time"
 
-	"github.com/flipkart-incubator/grayskull/client-impl/auth"
-	"github.com/flipkart-incubator/grayskull/client-impl/constants"
-	"github.com/flipkart-incubator/grayskull/client-impl/metrics"
-	"github.com/flipkart-incubator/grayskull/client-impl/models"
-	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
-	"github.com/flipkart-incubator/grayskull/client-impl/models/response"
-	"github.com/flipkart-incubator/grayskull/client-impl/utils"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/utils"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
+	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 )
 
 // GrayskullHTTPClientInterface defines the interface for the HTTP client
 type GrayskullHTTPClientInterface interface {
-	DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse, error)
+	DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse[string], error)
 	Close() error
 }
 
@@ -38,12 +39,13 @@ type GrayskullHTTPClient struct {
 // NewGrayskullHTTPClient creates a new instance of GrayskullHTTPClient
 func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, logger *slog.Logger, metricsRecorder metrics.MetricsRecorder) GrayskullHTTPClientInterface {
 	if logger == nil {
-		logger = slog.Default()
+		logger = slog.Default().WithGroup("grayskull-http-client")
 	}
+
 	transport := &http.Transport{
-		MaxIdleConns:        config.MaxConnections,
-		MaxIdleConnsPerHost: config.MaxConnections,
-		IdleConnTimeout:     5 * time.Minute,
+		MaxIdleConns:        config.MaxIdleConns,
+		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
+		IdleConnTimeout:     time.Duration(config.IdleConnTimeout) * time.Millisecond,
 	}
 
 	client := &http.Client{
@@ -58,7 +60,7 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 	}
 
 	if metricsRecorder == nil {
-		metricsRecorder = metrics.NewPrometheusRecorder()
+		metricsRecorder = metrics2.NewPrometheusRecorder(nil)
 	}
 
 	return &GrayskullHTTPClient{
@@ -71,35 +73,32 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 }
 
 // DoGetWithRetry performs a GET request with retry logic
-func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse, error) {
-	var attemptCount int32 // Use atomic for concurrent safety
+func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse[string], error) {
+	var attemptCount int
 
-	result, err := c.retryUtil.Retry(ctx, func() (interface{}, error) {
-		atomic.AddInt32(&attemptCount, 1)
+	httpResp, err := utils.Retry(ctx, c.retryUtil, func() (*response.HttpResponse[string], error) {
+		attemptCount++
 		return c.doGet(ctx, url)
 	})
 
 	if err != nil {
 		// Check if it's a retryable error that exhausted all attempts
-		var retryableErr *exceptions.RetryableError
-		if errors.As(err, &retryableErr) && atomic.LoadInt32(&attemptCount) > 1 {
-			c.metricsRecorder.RecordRetry(url, int(atomic.LoadInt32(&attemptCount)), false)
+		var retryableErr *grayskullErrors.RetryableError
+		if errors.As(err, &retryableErr) && attemptCount > 1 {
+			c.metricsRecorder.RecordRetry(url, attemptCount, false)
 		}
 		return nil, fmt.Errorf("failed after %d attempts: %w", attemptCount, err)
 	}
 
-	// Safe to assert type since doGet always returns *response.HttpResponse
-	httpResp := result.(*response.HttpResponse)
-
 	if attemptCount > 1 {
-		c.metricsRecorder.RecordRetry(url, int(attemptCount), true)
+		c.metricsRecorder.RecordRetry(url, attemptCount, true)
 	}
 
 	return httpResp, nil
 }
 
 // doGet performs a single GET request without retries
-func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.HttpResponse, error) {
+func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.HttpResponse[string], error) {
 	startTime := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -129,7 +128,7 @@ func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		// Convert network errors to retryable errors
-		return nil, exceptions.NewRetryableErrorWithCause("HTTP request failed", err)
+		return nil, grayskullErrors.NewRetryableErrorWithCause("HTTP request failed", err)
 	}
 	defer resp.Body.Close()
 
@@ -155,9 +154,9 @@ func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.
 			c.metricsRecorder.RecordRequest(url, resp.StatusCode, time.Since(startTime))
 		}
 		if isRetryableStatusCode(resp.StatusCode) {
-			return nil, exceptions.NewRetryableErrorWithStatus(resp.StatusCode, errMsg)
+			return nil, grayskullErrors.NewRetryableErrorWithStatus(resp.StatusCode, errMsg)
 		}
-		return nil, exceptions.NewGrayskullError(resp.StatusCode, errMsg)
+		return nil, grayskullErrors.NewGrayskullError(resp.StatusCode, errMsg)
 	}
 
 	// Record the request metrics
@@ -170,12 +169,12 @@ func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.
 	}
 	headers["Content-Type"] = contentType
 
-	return &response.HttpResponse{
-		StatusCode:  resp.StatusCode,
-		Body:        string(body),
-		ContentType: contentType,
-		Protocol:    resp.Proto,
-	}, nil
+	return response.NewHttpResponse(
+		resp.StatusCode,
+		string(body),
+		contentType,
+		resp.Proto,
+	), nil
 }
 
 // isRetryableStatusCode checks if an HTTP status code indicates a retryable error
@@ -190,4 +189,13 @@ func (c *GrayskullHTTPClient) Close() error {
 		transport.CloseIdleConnections()
 	}
 	return nil
+}
+
+// UnmarshalResponse is a generic helper function to unmarshal JSON response body into Response[T]
+func UnmarshalResponse[T any](body string) (response.Response[T], error) {
+	var resp response.Response[T]
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		return resp, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	return resp, nil
 }

@@ -3,11 +3,12 @@ package utils
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"math/rand"
 	"time"
 
-	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
+	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 )
 
 // RetryConfig holds configuration for retry behavior
@@ -40,14 +41,15 @@ func NewRetryUtil(config RetryConfig) *RetryUtil {
 }
 
 // Retry executes the task with retry logic
-func (r *RetryUtil) Retry(ctx context.Context, task func() (interface{}, error)) (interface{}, error) {
+func Retry[T any](ctx context.Context, r *RetryUtil, task func() (T, error)) (T, error) {
 	var lastErr error
+	var defaultValue T
 	delay := r.config.InitialDelay
 
 	for attempt := 1; attempt <= r.config.MaxAttempts; attempt++ {
 		// Check if context is done before each attempt
 		if err := ctx.Err(); err != nil {
-			return nil, exceptions.NewRetryableErrorWithCause("operation canceled", err)
+			return defaultValue, grayskullErrors.NewRetryableErrorWithCause("operation canceled", err)
 		}
 
 		// Execute the task
@@ -57,9 +59,9 @@ func (r *RetryUtil) Retry(ctx context.Context, task func() (interface{}, error))
 		}
 
 		// Check if error is retryable
-		var retryableErr *exceptions.RetryableError
+		var retryableErr *grayskullErrors.RetryableError
 		if !errors.As(err, &retryableErr) {
-			return nil, err // Non-retryable error
+			return defaultValue, err // Non-retryable error
 		}
 
 		lastErr = retryableErr
@@ -82,12 +84,14 @@ func (r *RetryUtil) Retry(ctx context.Context, task func() (interface{}, error))
 		select {
 		case <-time.After(delay):
 		case <-ctx.Done():
-			return nil, exceptions.NewRetryableErrorWithCause("operation canceled during retry", ctx.Err())
+			errMsg := fmt.Sprintf("operation canceled during retry%v", lastErr)
+			return defaultValue, grayskullErrors.NewRetryableErrorWithCause(errMsg, ctx.Err())
 		}
 	}
 
 	// If we've exhausted all retry attempts, return a GrayskullError
-	return nil, exceptions.NewGrayskullErrorWithMessageAndCause(
+	return defaultValue, grayskullErrors.NewGrayskullErrorWithCause(
+		0,
 		"max retry attempts reached",
 		lastErr,
 	)

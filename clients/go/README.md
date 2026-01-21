@@ -32,7 +32,8 @@ Go client library for interacting with the Grayskull secret management service.
 ## Integration
 
 ```bash
-go get github.com/flipkart-incubator/grayskull
+go get github.com/flipkart-incubator/grayskull/clients/go/client-impl
+go get github.com/flipkart-incubator/grayskull/clients/go/client-api
 ```
 
 ## Quick Start
@@ -45,25 +46,24 @@ import (
     "fmt"
     "log"
 
-    "github.com/flipkart-incubator/grayskull/client-impl"
-    "github.com/flipkart-incubator/grayskull/client-impl/auth"
-    "github.com/flipkart-incubator/grayskull/client-impl/models"
+    client_impl "github.com/flipkart-incubator/grayskull/clients/go/client-impl"
+    "github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
+    "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
 )
 
 func main() {
     // 1. Configure the client
     config := models.NewDefaultConfig()
-    config.SetHost("https://grayskull.example.com")
+    config.Host = "https://grayskull.example.com"
     
     // 2. Create authentication provider
     authProvider := auth.NewBasicAuthHeaderProvider("username", "password")
     
     // 3. Initialize and use the client
-    client, err := client_impl.NewGrayskullClient(authProvider, config)
+    client, err := client_impl.NewGrayskullClient(authProvider, config, nil)
     if err != nil {
         log.Fatalf("Failed to create client: %v", err)
     }
-    defer client.Close()
     
     // 4. Retrieve a secret
     ctx := context.Background()
@@ -86,7 +86,6 @@ The main interface for interacting with the Grayskull service.
 type Client interface {
     GetSecret(ctx context.Context, secretRef string) (*models.SecretValue, error)
     RegisterRefreshHook(ctx context.Context, secretRef string, hook hooks.SecretRefreshHook) (hooks.RefreshHandlerRef, error)
-    Close() error
 }
 ```
 
@@ -153,13 +152,25 @@ Registers a callback to be invoked when a secret is updated.
 
 **Example:**
 ```go
+import (
+    "github.com/flipkart-incubator/grayskull/clients/go/client-api/hooks"
+    "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
+)
+
+// Implement the SecretRefreshHook interface
+type MyRefreshHook struct{}
+
+func (h *MyRefreshHook) OnUpdate(secret models.SecretValue) error {
+    fmt.Printf("Secret updated! New version: %d\n", secret.DataVersion)
+    return updateCache(secret)
+}
+
+// Register the hook
+hook := &MyRefreshHook{}
 handle, err := client.RegisterRefreshHook(
     context.Background(),
     "my-project:api-key",
-    func(updatedSecret models.SecretValue) error {
-        fmt.Printf("Secret updated! New version: %d\n", updatedSecret.DataVersion)
-        return updateCache(updatedSecret)
-    },
+    hook,
 )
 if err != nil {
     log.Fatalf("Failed to register hook: %v", err)
@@ -167,22 +178,6 @@ if err != nil {
 
 // Later: unregister the hook
 handle.UnRegister()
-```
-
-#### `Close()`
-
-Releases all resources (HTTP connections, goroutines, etc.).
-
-```go
-// Manual close
-client.Close()
-
-// Or use defer
-client, err := client_impl.NewGrayskullClient(auth, config)
-if err != nil {
-    log.Fatal(err)
-}
-defer client.Close()
 ```
 
 ## Configuration
@@ -193,24 +188,30 @@ All configuration properties with their defaults and constraints.
 
 | Property | Type | Default | Range/Format | Description |
 |----------|------|---------|--------------|-------------|
-| `Host` | `string` | *required* | URL | Grayskull server endpoint (e.g., `"https://grayskull.example.com"`) |
-| `ConnectionTimeout` | `int` | `5000` | > 0 ms | Max time to establish connection |
-| `ReadTimeout` | `int` | `10000` | > 0 ms | Max time to wait for response data |
-| `MaxConnections` | `int` | `100` | > 0 | Connection pool size |
-| `MaxRetries` | `int` | `3` | 1-10 | Number of retry attempts for transient failures |
-| `MinRetryDelay` | `int` | `100` | ≥ 50 ms | Base delay between retries (exponential backoff) |
+| `Host` | `string` | `""` (empty) | URL | Grayskull server endpoint (e.g., `"https://grayskull.example.com"`) - **Required** |
+| `ConnectionTimeout` | `int` | `10000` | ≥ 0 ms | Max time to establish connection (10 seconds) |
+| `ReadTimeout` | `int` | `30000` | ≥ 0 ms | Max time to wait for response data (30 seconds) |
+| `MaxConnections` | `int` | `10` | > 0 | Connection pool size |
+| `IdleConnTimeout` | `int` | `300000` | ≥ 0 ms | Max time idle connection remains open (5 minutes) |
+| `MaxIdleConns` | `int` | `10` | ≥ 0 | Max idle connections across all hosts |
+| `MaxIdleConnsPerHost` | `int` | `10` | ≥ 0 | Max idle connections per host |
+| `MaxRetries` | `int` | `3` | ≥ 0 | Number of retry attempts for transient failures |
+| `MinRetryDelay` | `int` | `100` | ≥ 0 ms | Base delay between retries (exponential backoff) |
 | `MetricsEnabled` | `bool` | `true` | true/false | Enable/disable metrics collection |
 
 **Example:**
 ```go
 config := models.NewDefaultConfig()
-config.SetHost("https://grayskull.example.com")
-config.SetConnectionTimeout(5000)
-config.SetReadTimeout(10000)
-config.SetMaxRetries(3)
-config.SetMinRetryDelay(100)
-config.SetMaxConnections(100)
-config.SetMetricsEnabled(true)
+config.Host = "https://grayskull.example.com"
+config.ConnectionTimeout = 10000  // 10 seconds
+config.ReadTimeout = 30000         // 30 seconds
+config.MaxConnections = 10
+config.IdleConnTimeout = 300000    // 5 minutes
+config.MaxIdleConns = 10
+config.MaxIdleConnsPerHost = 10
+config.MaxRetries = 3
+config.MinRetryDelay = 100         // 100ms
+config.MetricsEnabled = true
 ```
 
 ## Authentication
@@ -220,8 +221,13 @@ The client uses pluggable authentication via the `GrayskullAuthHeaderProvider` i
 ### Built-in: Basic Authentication
 
 ```go
-authProvider := auth.NewBasicAuthHeaderProvider("username", "password")
+authProvider, err := auth.NewBasicAuthHeaderProvider("username", "password")
+if err != nil {
+    log.Fatalf("Failed to create auth provider: %v", err)
+}
 ```
+
+**Note:** `NewBasicAuthHeaderProvider` returns an error if username or password is empty.
 
 Generates HTTP Basic Auth headers: `Basic base64(username:password)`
 
@@ -251,19 +257,53 @@ The SDK provides comprehensive observability with Prometheus metrics.
 
 When metrics are enabled, the client exposes metrics to the Prometheus default registry.
 
-#### Metric Format
-
-```text
-grayskull_client_request_duration_seconds
-grayskull_client_request_total
-grayskull_client_retry_total
-```
-
 #### Available Metrics
 
-- **Request Duration** - Histogram of request durations with percentiles (P50, P95, P99)
-- **Request Total** - Counter of total requests by status code
-- **Retry Total** - Counter of retry attempts
+##### 1. `grayskull_http_client_request_duration_seconds`
+
+**Type:** Histogram
+
+**Description:** Duration of HTTP requests in seconds
+
+**Labels:**
+- `name` (string): The operation name (e.g., "get_secret")
+- `status_code` (string): The HTTP status code of the response (e.g., "200", "404", "500")
+
+**Buckets:** Uses Prometheus default buckets (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+
+**Example Queries:**
+```promql
+# Average request duration by operation
+rate(grayskull_http_client_request_duration_seconds_sum[5m]) / rate(grayskull_http_client_request_duration_seconds_count[5m])
+
+# P95 latency for get_secret operations
+histogram_quantile(0.95, rate(grayskull_http_client_request_duration_seconds_bucket{name="get_secret"}[5m]))
+
+# Request count by status code
+sum by (status_code) (rate(grayskull_http_client_request_duration_seconds_count[5m]))
+```
+
+##### 2. `grayskull_http_client_retry_attempts_total`
+
+**Type:** Counter
+
+**Description:** Total number of retry attempts
+
+**Labels:**
+- `url` (string): The URL being retried
+- `success` (string): Whether the retry was successful ("true" or "false")
+
+**Example Queries:**
+```promql
+# Total retry rate
+rate(grayskull_http_client_retry_attempts_total[5m])
+
+# Failed retry rate
+rate(grayskull_http_client_retry_attempts_total{success="false"}[5m])
+
+# Retry success rate
+sum(rate(grayskull_http_client_retry_attempts_total{success="true"}[5m])) / sum(rate(grayskull_http_client_retry_attempts_total[5m]))
+```
 
 #### Integration Example
 
@@ -283,7 +323,7 @@ go http.ListenAndServe(":9090", nil)
 ### Disabling Metrics
 
 ```go
-config.SetMetricsEnabled(false)  // No metrics overhead
+config.MetricsEnabled = false  // No metrics overhead
 ```
 
 ## Logging & Observability
@@ -314,16 +354,41 @@ This makes it easy to trace a single request through your entire system, from cl
 
 ## Error Handling
 
-### Exception Hierarchy
+### Error Types
 
-```text
-error (Go interface)
-└── BaseError
-    ├── GrayskullError
-    └── RetryableError (internal)
+The SDK provides the following error types:
+
+**1. `BaseError`** (struct)
+- Provides common error functionality (status code, message, cause)
+- Implements the standard Go `error` interface
+- Supports error unwrapping via `Unwrap()` method
+
+**2. `GrayskullError`** (embeds `BaseError`)
+- Main error type returned by client operations
+- Includes HTTP status code and error message
+- Publicly exposed for error handling
+
+**3. `RetryableError`** (embeds `BaseError`)
+- Internal error type for transient failures
+- Used internally by retry logic
+- Not directly exposed to users
+
+**Error Structure:**
+```go
+type BaseError struct {
+    statusCode int
+    message    string
+    cause      error
+}
+
+type GrayskullError struct {
+    BaseError  // embedded
+}
+
+type RetryableError struct {
+    BaseError  // embedded
+}
 ```
-
-All errors embed `BaseError` which provides common functionality like status codes, messages, and error chaining.
 
 ### GrayskullError
 
@@ -332,14 +397,14 @@ The main error type returned by the client.
 ```go
 import (
     "errors"
-    "github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
+    grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 )
 
 secret, err := client.GetSecret(ctx, "project:secret")
 if err != nil {
-    var grayskullErr *exceptions.GrayskullError
+    var grayskullErr *grayskullErrors.GrayskullError
     if errors.As(err, &grayskullErr) {
-        fmt.Printf("Grayskull error (status %d): %v\n", grayskullErr.StatusCode, grayskullErr)
+        fmt.Printf("Grayskull error (status %d): %v\n", grayskullErr.StatusCode(), grayskullErr)
         return
     }
     log.Fatalf("Unexpected error: %v", err)
@@ -374,15 +439,16 @@ The client automatically retries transient failures using exponential backoff wi
 
 | Dependency | Version | Required |
 |------------|---------|----------|
-| **Go Runtime** | 1.18+ | ✅ Yes |
-| **Prometheus Client** | Latest | ✅ Yes |
-| **Google UUID** | Latest | ✅ Yes |
+| **Go Runtime** | 1.21+ | ✅ Yes |
+| **Prometheus Client** | v1.23.2+ | ✅ Yes |
+| **Google UUID** | v1.6.0+ | ✅ Yes |
+| **go-playground/validator** | v10.24.0+ | ✅ Yes |
 
 ## Building from Source
 
 ### Prerequisites
 
-- Go 1.18 or higher
+- Go 1.21 or higher
 
 ### Build Steps
 

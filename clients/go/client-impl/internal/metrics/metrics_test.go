@@ -1,25 +1,28 @@
 package metrics
 
 import (
-	"bytes"
 	"fmt"
-	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMetricsRecorder_E2E_BasicWorkflow(t *testing.T) {
-	recorder := NewPrometheusRecorder()
+func TestMetricsRecorder_E2E_NilRegistry(t *testing.T) {
+	recorder := NewPrometheusRecorder(nil)
 	require.NotNil(t, recorder)
 
-	t.Run("recorder has correct name", func(t *testing.T) {
-		assert.Equal(t, "prometheus", recorder.GetRecorderName())
+	t.Run("uses default registerer when nil registry provided", func(t *testing.T) {
+		recorder.RecordRequest("api/test", 200, 100*time.Millisecond)
+		recorder.RecordRetry("http://api.example.com/test", 1, true)
 	})
+}
+
+func TestMetricsRecorder_E2E_BasicWorkflow(t *testing.T) {
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
+	require.NotNil(t, recorder)
 
 	t.Run("can record requests successfully", func(t *testing.T) {
 		recorder.RecordRequest("api/users", 200, 150*time.Millisecond)
@@ -37,7 +40,7 @@ func TestMetricsRecorder_E2E_BasicWorkflow(t *testing.T) {
 }
 
 func TestMetricsRecorder_E2E_ConcurrentUsage(t *testing.T) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	require.NotNil(t, recorder)
 
 	numGoroutines := 100
@@ -66,7 +69,7 @@ func TestMetricsRecorder_E2E_ConcurrentUsage(t *testing.T) {
 }
 
 func TestMetricsRecorder_E2E_HighVolumeRequests(t *testing.T) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	require.NotNil(t, recorder)
 
 	endpoints := []string{
@@ -89,7 +92,7 @@ func TestMetricsRecorder_E2E_HighVolumeRequests(t *testing.T) {
 }
 
 func TestMetricsRecorder_E2E_RetryScenarios(t *testing.T) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	require.NotNil(t, recorder)
 
 	t.Run("successful retry after failures", func(t *testing.T) {
@@ -113,7 +116,7 @@ func TestMetricsRecorder_E2E_RetryScenarios(t *testing.T) {
 }
 
 func TestMetricsRecorder_E2E_MixedOperations(t *testing.T) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	require.NotNil(t, recorder)
 
 	var wg sync.WaitGroup
@@ -144,7 +147,7 @@ func TestMetricsRecorder_E2E_MixedOperations(t *testing.T) {
 }
 
 func TestMetricsRecorder_E2E_EdgeCases(t *testing.T) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	require.NotNil(t, recorder)
 
 	t.Run("zero duration request", func(t *testing.T) {
@@ -176,7 +179,7 @@ func TestMetricsRecorder_E2E_EdgeCases(t *testing.T) {
 }
 
 func TestMetricsRecorder_E2E_RealWorldScenario(t *testing.T) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	require.NotNil(t, recorder)
 
 	t.Run("simulate API gateway traffic", func(t *testing.T) {
@@ -228,9 +231,9 @@ func TestMetricsRecorder_E2E_RealWorldScenario(t *testing.T) {
 }
 
 func TestMetricsRecorder_E2E_MultipleRecorders(t *testing.T) {
-	recorder1 := NewPrometheusRecorder()
-	recorder2 := NewPrometheusRecorder()
-	recorder3 := NewPrometheusRecorder()
+	recorder1 := NewPrometheusRecorder(prometheus.NewRegistry())
+	recorder2 := NewPrometheusRecorder(prometheus.NewRegistry())
+	recorder3 := NewPrometheusRecorder(prometheus.NewRegistry())
 
 	require.NotNil(t, recorder1)
 	require.NotNil(t, recorder2)
@@ -264,7 +267,7 @@ func TestMetricsRecorder_E2E_MultipleRecorders(t *testing.T) {
 }
 
 func BenchmarkMetricsRecorder_RecordRequest(b *testing.B) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -273,7 +276,7 @@ func BenchmarkMetricsRecorder_RecordRequest(b *testing.B) {
 }
 
 func BenchmarkMetricsRecorder_RecordRetry(b *testing.B) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -282,7 +285,7 @@ func BenchmarkMetricsRecorder_RecordRetry(b *testing.B) {
 }
 
 func BenchmarkMetricsRecorder_Concurrent(b *testing.B) {
-	recorder := NewPrometheusRecorder()
+	recorder := NewPrometheusRecorder(prometheus.NewRegistry())
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
@@ -293,54 +296,4 @@ func BenchmarkMetricsRecorder_Concurrent(b *testing.B) {
 			i++
 		}
 	})
-}
-
-func TestGoCollectorRegistrationError(t *testing.T) {
-	// This test verifies that initializeMetrics handles Go collector registration errors gracefully
-
-	// Save original logger
-	oldLogger := slog.Default()
-	defer slog.SetDefault(oldLogger)
-
-	// Set up test logger to capture warnings
-	var logBuf bytes.Buffer
-	handler := slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
-		Level: slog.LevelWarn,
-	})
-	testLogger := slog.New(handler)
-	slog.SetDefault(testLogger)
-
-	// Save original state
-	oldReg := reg
-	oldRequestDuration := requestDuration
-	oldRetryCounter := retryCounter
-
-	// Reset package state after test
-	defer func() {
-		reg = oldReg
-		requestDuration = oldRequestDuration
-		retryCounter = oldRetryCounter
-	}()
-
-	// Pre-create a registry with Go collector already registered
-	// This will cause initializeMetrics to fail when trying to register it again
-	testReg := prometheus.NewRegistry()
-	err := testReg.Register(prometheus.NewGoCollector())
-	require.NoError(t, err)
-
-	// Set the global registry to our pre-configured one
-	reg = testReg
-	requestDuration = nil
-	retryCounter = nil
-
-	// Call initializeMetrics which will try to register Go collector again and fail
-	initializeMetrics()
-
-	// Verify metrics were still created despite the error
-	require.NotNil(t, requestDuration)
-	require.NotNil(t, retryCounter)
-
-	// Verify the error was logged
-	logOutput := logBuf.String()
-	assert.Contains(t, logOutput, "Failed to register Prometheus Go collector")
 }

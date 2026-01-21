@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
+	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -120,12 +120,12 @@ func TestRetry_Success(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		attemptCount := 0
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			attemptCount++
 			return "success", nil
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "success", result)
@@ -141,15 +141,15 @@ func TestRetry_Success(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		attemptCount := 0
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			attemptCount++
 			if attemptCount == 1 {
-				return nil, exceptions.NewRetryableError("temporary failure")
+				return "", grayskullErrors.NewRetryableErrorWithStatus(0, "temporary failure")
 			}
 			return "success", nil
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "success", result)
@@ -165,15 +165,15 @@ func TestRetry_Success(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		attemptCount := 0
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			attemptCount++
 			if attemptCount < 3 {
-				return nil, exceptions.NewRetryableError("temporary failure")
+				return "", grayskullErrors.NewRetryableErrorWithStatus(0, "temporary failure")
 			}
 			return "success", nil
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "success", result)
@@ -193,10 +193,10 @@ func TestRetry_Failure(t *testing.T) {
 		attemptCount := 0
 		task := func() (interface{}, error) {
 			attemptCount++
-			return nil, errors.New("permanent error")
+			return nil, grayskullErrors.NewGrayskullErrorWithMessage("permanent error")
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -215,10 +215,10 @@ func TestRetry_Failure(t *testing.T) {
 		attemptCount := 0
 		task := func() (interface{}, error) {
 			attemptCount++
-			return nil, exceptions.NewRetryableError("always fails")
+			return nil, grayskullErrors.NewRetryableErrorWithStatus(0, "always fails")
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -235,15 +235,15 @@ func TestRetry_Failure(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		task := func() (interface{}, error) {
-			return nil, exceptions.NewRetryableError("retryable error")
+			return nil, grayskullErrors.NewRetryableErrorWithStatus(0, "retryable error")
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
 
-		var grayskullErr *exceptions.GrayskullError
+		var grayskullErr *grayskullErrors.GrayskullError
 		assert.True(t, errors.As(err, &grayskullErr))
 	})
 }
@@ -260,14 +260,14 @@ func TestRetry_ContextCancellation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			return "should not execute", nil
 		}
 
-		result, err := retryUtil.Retry(ctx, task)
+		result, err := Retry(ctx, retryUtil, task)
 
 		assert.Error(t, err)
-		assert.Nil(t, result)
+		assert.Equal(t, "", result)
 		assert.Contains(t, err.Error(), "operation canceled")
 	})
 
@@ -287,10 +287,10 @@ func TestRetry_ContextCancellation(t *testing.T) {
 			if attemptCount == 2 {
 				cancel() // Cancel after second attempt
 			}
-			return nil, exceptions.NewRetryableError("temporary failure")
+			return nil, grayskullErrors.NewRetryableErrorWithStatus(0, "temporary failure")
 		}
 
-		result, err := retryUtil.Retry(ctx, task)
+		result, err := Retry(ctx, retryUtil, task)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -311,10 +311,10 @@ func TestRetry_ContextCancellation(t *testing.T) {
 		attemptCount := 0
 		task := func() (interface{}, error) {
 			attemptCount++
-			return nil, exceptions.NewRetryableError("temporary failure")
+			return nil, grayskullErrors.NewRetryableErrorWithStatus(0, "temporary failure")
 		}
 
-		result, err := retryUtil.Retry(ctx, task)
+		result, err := Retry(ctx, retryUtil, task)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -332,16 +332,16 @@ func TestRetry_ExponentialBackoff(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		attemptTimes := []time.Time{}
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			attemptTimes = append(attemptTimes, time.Now())
 			if len(attemptTimes) < 4 {
-				return nil, exceptions.NewRetryableError("retry")
+				return "", grayskullErrors.NewRetryableErrorWithStatus(0, "retry")
 			}
 			return "success", nil
 		}
 
 		startTime := time.Now()
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "success", result)
@@ -362,16 +362,16 @@ func TestRetry_ExponentialBackoff(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		attemptTimes := []time.Time{}
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			attemptTimes = append(attemptTimes, time.Now())
 			if len(attemptTimes) < 5 {
-				return nil, exceptions.NewRetryableError("retry")
+				return "", grayskullErrors.NewRetryableErrorWithStatus(0, "retry")
 			}
 			return "success", nil
 		}
 
 		startTime := time.Now()
-		_, err := retryUtil.Retry(context.Background(), task)
+		_, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		totalTime := time.Since(startTime)
@@ -394,7 +394,7 @@ func TestRetry_EdgeCases(t *testing.T) {
 			return nil, nil
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.Nil(t, result)
@@ -413,11 +413,11 @@ func TestRetry_EdgeCases(t *testing.T) {
 			Value string
 		}
 
-		task := func() (interface{}, error) {
+		task := func() (TestStruct, error) {
 			return TestStruct{Value: "test"}, nil
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.Equal(t, TestStruct{Value: "test"}, result)
@@ -434,10 +434,10 @@ func TestRetry_EdgeCases(t *testing.T) {
 		attemptCount := 0
 		task := func() (interface{}, error) {
 			attemptCount++
-			return nil, exceptions.NewRetryableError("error")
+			return nil, grayskullErrors.NewRetryableErrorWithStatus(0, "error")
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -455,15 +455,15 @@ func TestRetry_E2E_RealWorldScenarios(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		attemptCount := 0
-		task := func() (interface{}, error) {
+		task := func() (map[string]string, error) {
 			attemptCount++
 			if attemptCount <= 2 {
-				return nil, exceptions.NewRetryableErrorWithCause("network timeout", errors.New("timeout"))
+				return nil, grayskullErrors.NewRetryableErrorWithCause("network timeout", grayskullErrors.NewGrayskullErrorWithMessage("timeout"))
 			}
 			return map[string]string{"status": "ok"}, nil
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -479,15 +479,15 @@ func TestRetry_E2E_RealWorldScenarios(t *testing.T) {
 		retryUtil := NewRetryUtil(config)
 
 		attemptCount := 0
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			attemptCount++
 			if attemptCount < 4 {
-				return nil, exceptions.NewRetryableErrorWithStatus(503, "service unavailable")
+				return "", grayskullErrors.NewRetryableErrorWithStatus(503, "service unavailable")
 			}
 			return "service recovered", nil
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "service recovered", result)
@@ -505,10 +505,10 @@ func TestRetry_E2E_RealWorldScenarios(t *testing.T) {
 		attemptCount := 0
 		task := func() (interface{}, error) {
 			attemptCount++
-			return nil, exceptions.NewRetryableErrorWithStatus(500, "internal server error")
+			return nil, grayskullErrors.NewRetryableErrorWithStatus(500, "internal server error")
 		}
 
-		result, err := retryUtil.Retry(context.Background(), task)
+		result, err := Retry(context.Background(), retryUtil, task)
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -525,13 +525,13 @@ func BenchmarkRetry_Success(b *testing.B) {
 	}
 	retryUtil := NewRetryUtil(config)
 
-	task := func() (interface{}, error) {
+	task := func() (string, error) {
 		return "success", nil
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = retryUtil.Retry(context.Background(), task)
+		_, _ = Retry(context.Background(), retryUtil, task)
 	}
 }
 
@@ -546,13 +546,13 @@ func BenchmarkRetry_WithRetries(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		attemptCount := 0
-		task := func() (interface{}, error) {
+		task := func() (string, error) {
 			attemptCount++
 			if attemptCount < 2 {
-				return nil, exceptions.NewRetryableError("retry")
+				return "", grayskullErrors.NewRetryableErrorWithStatus(0, "retry")
 			}
 			return "success", nil
 		}
-		_, _ = retryUtil.Retry(context.Background(), task)
+		_, _ = Retry(context.Background(), retryUtil, task)
 	}
 }

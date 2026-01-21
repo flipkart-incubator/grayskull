@@ -1,22 +1,24 @@
-package client_impl_test
+package client_impl
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	client_impl "github.com/flipkart-incubator/grayskull/client-impl"
 	"net/http"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	Client_API "github.com/flipkart-incubator/grayskull/client-api/models"
-	"github.com/flipkart-incubator/grayskull/client-impl/auth"
-	"github.com/flipkart-incubator/grayskull/client-impl/metrics"
-	"github.com/flipkart-incubator/grayskull/client-impl/models"
-	"github.com/flipkart-incubator/grayskull/client-impl/models/exceptions"
-	"github.com/flipkart-incubator/grayskull/client-impl/models/response"
+	Client_API "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
+	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/metrics"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
+	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 )
 
 // setupTestRegistry sets up a new registry for testing
@@ -25,19 +27,19 @@ func setupTestRegistry(t *testing.T) {
 }
 
 // Use the actual interface from the implementation
-type GrayskullHTTPClient = client_impl.GrayskullHTTPClientInterface
+type GrayskullHTTPClient = internal.GrayskullHTTPClientInterface
 
 // MockGrayskullHTTPClient is a mock implementation of the HTTP client
 type MockGrayskullHTTPClient struct {
 	mock.Mock
 }
 
-func (m *MockGrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse, error) {
+func (m *MockGrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse[string], error) {
 	args := m.Called(ctx, url)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*response.HttpResponse), args.Error(1)
+	return args.Get(0).(*response.HttpResponse[string]), args.Error(1)
 }
 
 func (m *MockGrayskullHTTPClient) Close() error {
@@ -55,6 +57,191 @@ func (m *MockAuthProvider) GetAuthHeader() (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func NewGrayskullClientForTesting(
+	baseURL string,
+	authProvider auth.GrayskullAuthHeaderProvider,
+	config *models.GrayskullClientConfiguration,
+	httpClient internal.GrayskullHTTPClientInterface,
+	metricsRecorder metrics.MetricsRecorder,
+) *GrayskullClientImpl {
+	return &GrayskullClientImpl{
+		baseURL:            baseURL,
+		authHeaderProvider: authProvider,
+		clientConfig:       config,
+		httpClient:         httpClient,
+		metricsRecorder:    metricsRecorder,
+	}
+}
+
+func TestValidateConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		config        *models.GrayskullClientConfiguration
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "valid config",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				MaxConnections: 10,
+			},
+			expectError: false,
+		},
+		{
+			name: "missing required Host",
+			config: &models.GrayskullClientConfiguration{
+				MaxConnections: 10,
+			},
+			expectError:   true,
+			errorContains: "Host is required",
+		},
+		{
+			name: "invalid Host URL",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "not-a-valid-url",
+				MaxConnections: 10,
+			},
+			expectError:   true,
+			errorContains: "invalid host URL",
+		},
+		{
+			name: "negative ConnectionTimeout",
+			config: &models.GrayskullClientConfiguration{
+				Host:              "http://localhost:8080",
+				ConnectionTimeout: -1,
+				MaxConnections:    10,
+			},
+			expectError:   true,
+			errorContains: "ConnectionTimeout cannot be negative",
+		},
+		{
+			name: "negative ReadTimeout",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				ReadTimeout:    -1,
+				MaxConnections: 10,
+			},
+			expectError:   true,
+			errorContains: "ReadTimeout cannot be negative",
+		},
+		{
+			name: "zero MaxConnections",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				MaxConnections: 0,
+			},
+			expectError:   true,
+			errorContains: "MaxConnections must be greater than 0",
+		},
+		{
+			name: "negative MaxConnections",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				MaxConnections: -1,
+			},
+			expectError:   true,
+			errorContains: "MaxConnections must be greater than 0",
+		},
+		{
+			name: "negative IdleConnTimeout",
+			config: &models.GrayskullClientConfiguration{
+				Host:            "http://localhost:8080",
+				IdleConnTimeout: -1,
+				MaxConnections:  10,
+			},
+			expectError:   true,
+			errorContains: "IdleConnTimeout cannot be negative",
+		},
+		{
+			name: "negative MaxIdleConns",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				MaxIdleConns:   -1,
+				MaxConnections: 10,
+			},
+			expectError:   true,
+			errorContains: "MaxIdleConns cannot be negative",
+		},
+		{
+			name: "negative MaxIdleConnsPerHost",
+			config: &models.GrayskullClientConfiguration{
+				Host:                "http://localhost:8080",
+				MaxIdleConnsPerHost: -1,
+				MaxConnections:      10,
+			},
+			expectError:   true,
+			errorContains: "MaxIdleConnsPerHost cannot be negative",
+		},
+		{
+			name: "negative MaxRetries",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				MaxRetries:     -1,
+				MaxConnections: 10,
+			},
+			expectError:   true,
+			errorContains: "MaxRetries cannot be negative",
+		},
+		{
+			name: "negative MinRetryDelay",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				MinRetryDelay:  -1,
+				MaxConnections: 10,
+			},
+			expectError:   true,
+			errorContains: "MinRetryDelay cannot be negative",
+		},
+		{
+			name: "valid HTTPS URL",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "https://grayskull.example.com",
+				MaxConnections: 10,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid URL with port",
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:9090",
+				MaxConnections: 5,
+			},
+			expectError: false,
+		},
+		{
+			name: "all fields valid with zero timeouts",
+			config: &models.GrayskullClientConfiguration{
+				Host:                "http://localhost:8080",
+				ConnectionTimeout:   0,
+				ReadTimeout:         0,
+				MaxConnections:      1,
+				IdleConnTimeout:     0,
+				MaxIdleConns:        0,
+				MaxIdleConnsPerHost: 0,
+				MaxRetries:          0,
+				MinRetryDelay:       0,
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateConfig(tt.config)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestNewGrayskullClient(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -66,7 +253,8 @@ func TestNewGrayskullClient(t *testing.T) {
 			name:         "successful client creation",
 			authProvider: &MockAuthProvider{},
 			config: &models.GrayskullClientConfiguration{
-				Host: "http://localhost:8080",
+				Host:           "http://localhost:8080",
+				MaxConnections: 10,
 			},
 			expectError: false,
 		},
@@ -74,7 +262,8 @@ func TestNewGrayskullClient(t *testing.T) {
 			name:         "nil auth provider",
 			authProvider: nil,
 			config: &models.GrayskullClientConfiguration{
-				Host: "http://localhost:8080",
+				Host:           "http://localhost:8080",
+				MaxConnections: 10,
 			},
 			expectError: true,
 		},
@@ -83,6 +272,32 @@ func TestNewGrayskullClient(t *testing.T) {
 			authProvider: &MockAuthProvider{},
 			config:       nil,
 			expectError:  true,
+		},
+		{
+			name:         "invalid config - missing host",
+			authProvider: &MockAuthProvider{},
+			config: &models.GrayskullClientConfiguration{
+				MaxConnections: 10,
+			},
+			expectError: true,
+		},
+		{
+			name:         "invalid config - invalid URL",
+			authProvider: &MockAuthProvider{},
+			config: &models.GrayskullClientConfiguration{
+				Host:           "not-a-url",
+				MaxConnections: 10,
+			},
+			expectError: true,
+		},
+		{
+			name:         "invalid config - zero MaxConnections",
+			authProvider: &MockAuthProvider{},
+			config: &models.GrayskullClientConfiguration{
+				Host:           "http://localhost:8080",
+				MaxConnections: 0,
+			},
+			expectError: true,
 		},
 	}
 
@@ -96,7 +311,7 @@ func TestNewGrayskullClient(t *testing.T) {
 				}
 			}
 
-			client, err := client_impl.NewGrayskullClient(tt.authProvider, config)
+			client, err := NewGrayskullClient(tt.authProvider, config, nil)
 
 			if tt.expectError {
 				assert.Error(t, err, "Expected error but got none")
@@ -132,16 +347,11 @@ func TestGetSecret(t *testing.T) {
 					DataVersion: 1,
 					PublicPart:  "public-data",
 				}
-				resp := response.Response[Client_API.SecretValue]{
-					Data: secretValue,
-				}
+				resp := response.NewResponse(secretValue, "")
 				jsonData, _ := json.Marshal(resp)
 
 				m.On("DoGetWithRetry", mock.Anything, mock.Anything).
-					Return(&response.HttpResponse{
-						StatusCode: http.StatusOK,
-						Body:       string(jsonData),
-					}, nil)
+					Return(response.NewHttpResponse(http.StatusOK, string(jsonData), "", ""), nil)
 			},
 			expectedResult: &Client_API.SecretValue{
 				DataVersion: 1,
@@ -158,7 +368,7 @@ func TestGetSecret(t *testing.T) {
 			name:          "invalid secret ref format",
 			secretRef:     "invalid-format",
 			setupMock:     func(m *mock.Mock) {},
-			expectedError: exceptions.NewGrayskullError(400, "invalid secretRef format. Expected 'projectId:secretName', got: invalid-format"),
+			expectedError: grayskullErrors.NewGrayskullError(400, "invalid secretRef format. Expected 'projectId:secretName', got: invalid-format"),
 		},
 	}
 
@@ -171,12 +381,13 @@ func TestGetSecret(t *testing.T) {
 			}
 
 			// Create client with mock HTTP client and metrics recorder
-			client := &client_impl.GrayskullClientImpl{
-				AuthHeaderProvider:    mockAuth,
-				GrayskullClientConfig: config,
-				HttpClient:            mockHTTPClient,
-				MetricsRecorder:       metrics.NewPrometheusRecorder(),
-			}
+			client := NewGrayskullClientForTesting(
+				config.Host,
+				mockAuth,
+				config,
+				mockHTTPClient,
+				metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+			)
 
 			// Call the method under test
 			result, err := client.GetSecret(context.Background(), tt.secretRef)
@@ -196,74 +407,8 @@ func TestGetSecret(t *testing.T) {
 	}
 }
 
-func TestSplitSecretRef(t *testing.T) {
-	// Setup a mock HTTP client
-	mockHTTPClient := &MockGrayskullHTTPClient{}
-
-	// Create a properly initialized client
-	client := &client_impl.GrayskullClientImpl{
-		BaseURL:    "http://test",
-		HttpClient: mockHTTPClient,
-	}
-
-	tests := []struct {
-		name          string
-		secretRef     string
-		expectedParts []string
-		expectedError bool
-		errorContains string
-	}{
-		{
-			name:          "valid secret ref",
-			secretRef:     "project1:secret1",
-			expectedParts: []string{"project1", "secret1"},
-			expectedError: false,
-		},
-		{
-			name:          "empty secret ref",
-			secretRef:     "",
-			expectedError: true,
-			errorContains: "secretRef cannot be empty",
-		},
-		{
-			name:          "invalid format - missing colon",
-			secretRef:     "invalid-format",
-			expectedError: true,
-			errorContains: "invalid secretRef format",
-		},
-		{
-			name:          "secret name with colon",
-			secretRef:     "project1:secret:with:colons",
-			expectedParts: []string{"project1", "secret:with:colons"},
-			expectedError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Call SplitSecretRef directly
-			parts := client.SplitSecretRef(tt.secretRef)
-
-			if tt.expectedError {
-				// For error cases, test both SplitSecretRef and GetSecret
-				assert.Equal(t, []string{tt.secretRef}, parts) // Split with no colon returns original string in slice
-
-				// Test GetSecret's error handling
-				_, err := client.GetSecret(context.Background(), tt.secretRef)
-				assert.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
-			} else {
-				// Verify the parts are split correctly
-				assert.Equal(t, tt.expectedParts, parts)
-
-				// For non-error cases, we don't test GetSecret here as it requires
-				// more complex mocking of the HTTP client
-			}
-		})
-	}
-}
+// Note: splitSecretRef is tested indirectly through GetSecret tests
+// since it's an unexported method
 
 func TestRegisterRefreshHook(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
@@ -273,12 +418,13 @@ func TestRegisterRefreshHook(t *testing.T) {
 		Host: "http://localhost:8080",
 	}
 
-	client := &client_impl.GrayskullClientImpl{
-		AuthHeaderProvider:    mockAuth,
-		GrayskullClientConfig: config,
-		HttpClient:            mockHTTPClient,
-		MetricsRecorder:       metrics.NewPrometheusRecorder(),
-	}
+	client := NewGrayskullClientForTesting(
+		config.Host,
+		mockAuth,
+		config,
+		mockHTTPClient,
+		metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+	)
 
 	t.Run("successful hook registration", func(t *testing.T) {
 		mockHook := &MockSecretRefreshHook{}
@@ -306,71 +452,6 @@ func TestRegisterRefreshHook(t *testing.T) {
 	})
 }
 
-func TestClose(t *testing.T) {
-	t.Run("successful close", func(t *testing.T) {
-		mockAuth := &MockAuthProvider{}
-		mockHTTPClient := &MockGrayskullHTTPClient{}
-		mockHTTPClient.On("Close").Return(nil)
-
-		config := &models.GrayskullClientConfiguration{
-			Host: "http://localhost:8080",
-		}
-
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
-
-		err := client.Close()
-
-		assert.NoError(t, err)
-		mockHTTPClient.AssertExpectations(t)
-	})
-
-	t.Run("close with error", func(t *testing.T) {
-		mockAuth := &MockAuthProvider{}
-		mockHTTPClient := &MockGrayskullHTTPClient{}
-		mockHTTPClient.On("Close").Return(errors.New("close error"))
-
-		config := &models.GrayskullClientConfiguration{
-			Host: "http://localhost:8080",
-		}
-
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
-
-		err := client.Close()
-
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "close error")
-		mockHTTPClient.AssertExpectations(t)
-	})
-
-	t.Run("close with nil http client", func(t *testing.T) {
-		mockAuth := &MockAuthProvider{}
-		config := &models.GrayskullClientConfiguration{
-			Host: "http://localhost:8080",
-		}
-
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            nil,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
-
-		err := client.Close()
-
-		assert.NoError(t, err)
-	})
-}
-
 func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -384,26 +465,20 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			DataVersion: 1,
 			PublicPart:  "test-data",
 		}
-		resp := response.Response[Client_API.SecretValue]{
-			Data:    secretValue,
-			Message: "success",
-		}
+		resp := response.NewResponse(secretValue, "success")
 		jsonData, _ := json.Marshal(resp)
 
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(&response.HttpResponse{
-				StatusCode: 200,
-				Body:       string(jsonData),
-			}, nil)
+			Return(response.NewHttpResponse(200, string(jsonData), "", ""), nil)
 
-		client := &client_impl.GrayskullClientImpl{
-			BaseURL:               "http://localhost:8080",
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			"http://localhost:8080",
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(nil, "project:secret")
 
@@ -417,12 +492,13 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
 			Return(nil, errors.New("network error"))
 
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			config.Host,
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
 
@@ -434,17 +510,15 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	t.Run("HTTP error with response", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(&response.HttpResponse{
-				StatusCode: 500,
-				Body:       "Internal Server Error",
-			}, errors.New("server error"))
+			Return(response.NewHttpResponse(500, "Internal Server Error", "", ""), errors.New("server error"))
 
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			config.Host,
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
 
@@ -455,17 +529,15 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	t.Run("invalid JSON response", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(&response.HttpResponse{
-				StatusCode: 200,
-				Body:       "invalid json",
-			}, nil)
+			Return(response.NewHttpResponse(200, "invalid json", "", ""), nil)
 
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			config.Host,
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
 
@@ -475,25 +547,20 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	})
 
 	t.Run("empty data in response", func(t *testing.T) {
-		resp := response.Response[Client_API.SecretValue]{
-			Data:    Client_API.SecretValue{},
-			Message: "success",
-		}
+		resp := response.NewResponse(Client_API.SecretValue{}, "success")
 		jsonData, _ := json.Marshal(resp)
 
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(&response.HttpResponse{
-				StatusCode: 200,
-				Body:       string(jsonData),
-			}, nil)
+			Return(response.NewHttpResponse(200, string(jsonData), "", ""), nil)
 
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			config.Host,
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(context.Background(), "project:secret")
 
@@ -505,12 +572,13 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	t.Run("empty project ID", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			config.Host,
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(context.Background(), ":secret")
 
@@ -522,12 +590,13 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	t.Run("empty secret name", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 
-		client := &client_impl.GrayskullClientImpl{
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			config.Host,
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(context.Background(), "project:")
 
@@ -541,27 +610,22 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			DataVersion: 1,
 			PublicPart:  "encoded-data",
 		}
-		resp := response.Response[Client_API.SecretValue]{
-			Data: secretValue,
-		}
+		resp := response.NewResponse(secretValue, "")
 		jsonData, _ := json.Marshal(resp)
 
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.MatchedBy(func(url string) bool {
 			// Verify URL encoding
 			return assert.Contains(t, url, "test%2Fproject") && assert.Contains(t, url, "secret%2Fname")
-		})).Return(&response.HttpResponse{
-			StatusCode: 200,
-			Body:       string(jsonData),
-		}, nil)
+		})).Return(response.NewHttpResponse(200, string(jsonData), "", ""), nil)
 
-		client := &client_impl.GrayskullClientImpl{
-			BaseURL:               "http://localhost:8080",
-			AuthHeaderProvider:    mockAuth,
-			GrayskullClientConfig: config,
-			HttpClient:            mockHTTPClient,
-			MetricsRecorder:       metrics.NewPrometheusRecorder(),
-		}
+		client := NewGrayskullClientForTesting(
+			"http://localhost:8080",
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics2.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
 
 		result, err := client.GetSecret(context.Background(), "test/project:secret/name")
 

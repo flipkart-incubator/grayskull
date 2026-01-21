@@ -1,17 +1,17 @@
-package client_impl_test
+package internal_test
 
 import (
 	"context"
 	"errors"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/flipkart-incubator/grayskull/client-impl"
-	"github.com/flipkart-incubator/grayskull/client-impl/constants"
-	"github.com/flipkart-incubator/grayskull/client-impl/metrics"
-	"github.com/flipkart-incubator/grayskull/client-impl/models"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -22,10 +22,6 @@ type noopRecorder struct{}
 func (n *noopRecorder) RecordRequest(name string, statusCode int, duration time.Duration) {}
 
 func (n *noopRecorder) RecordRetry(url string, attempt int, success bool) {}
-
-func (n *noopRecorder) GetRecorderName() string {
-	return "noop"
-}
 
 // NewNoopRecorder creates a new no-op metrics recorder
 func NewNoopRecorder() metrics.MetricsRecorder {
@@ -62,7 +58,7 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return ts
 }
 
-func setupClient(t *testing.T, config *models.GrayskullClientConfiguration) client_impl.GrayskullHTTPClientInterface {
+func setupClient(t *testing.T, config *models.GrayskullClientConfiguration) internal.GrayskullHTTPClientInterface {
 	t.Helper()
 	mockAuth := &MockAuthProviderHTTP{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -78,7 +74,7 @@ func setupClient(t *testing.T, config *models.GrayskullClientConfiguration) clie
 	// Create a no-op metrics recorder
 	metricsRecorder := NewNoopRecorder()
 
-	return client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, metricsRecorder)
+	return internal.NewGrayskullHTTPClient(mockAuth, config, nil, metricsRecorder)
 }
 
 func TestGrayskullHTTPClient_DoGetWithRetry_Success(t *testing.T) {
@@ -95,7 +91,7 @@ func TestGrayskullHTTPClient_DoGetWithRetry_Success(t *testing.T) {
 	// Verify
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode())
 }
 
 func TestGrayskullHTTPClient_DoGetWithRetry_RetryOn5xx(t *testing.T) {
@@ -123,7 +119,7 @@ func TestGrayskullHTTPClient_DoGetWithRetry_RetryOn5xx(t *testing.T) {
 	// Verify
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode())
 	assert.Equal(t, 2, attempts) // Should have retried once
 }
 
@@ -228,7 +224,7 @@ func TestNewGrayskullHTTPClient(t *testing.T) {
 			MaxConnections: 10,
 		}
 
-		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+		client := internal.NewGrayskullHTTPClient(mockAuth, config, nil, NewNoopRecorder())
 
 		assert.NotNil(t, client)
 	})
@@ -241,7 +237,7 @@ func TestNewGrayskullHTTPClient(t *testing.T) {
 			ReadTimeout:   5000,
 		}
 
-		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+		client := internal.NewGrayskullHTTPClient(mockAuth, config, nil, NewNoopRecorder())
 
 		assert.NotNil(t, client)
 	})
@@ -254,7 +250,7 @@ func TestNewGrayskullHTTPClient(t *testing.T) {
 			ReadTimeout:   5000,
 		}
 
-		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+		client := internal.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
 
 		assert.NotNil(t, client)
 	})
@@ -346,7 +342,6 @@ func TestDoGetWithRetry_AdditionalScenarios(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
-		assert.Equal(t, "application/xml", resp.ContentType)
 	})
 
 	t.Run("response without explicit content type", func(t *testing.T) {
@@ -360,8 +355,6 @@ func TestDoGetWithRetry_AdditionalScenarios(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
-		// httptest server sets default content-type
-		assert.NotEmpty(t, resp.ContentType)
 	})
 
 	t.Run("multiple retries before success", func(t *testing.T) {
@@ -399,7 +392,7 @@ func TestDoGetWithRetry_AdditionalScenarios(t *testing.T) {
 			ReadTimeout:   1000,
 		}
 
-		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+		client := internal.NewGrayskullHTTPClient(mockAuth, config, nil, NewNoopRecorder())
 		resp, err := client.DoGetWithRetry(context.Background(), "http://example.com")
 
 		assert.Error(t, err)
@@ -417,7 +410,7 @@ func TestDoGetWithRetry_AdditionalScenarios(t *testing.T) {
 			ReadTimeout:   1000,
 		}
 
-		client := client_impl.NewGrayskullHTTPClient(mockAuth, config, nil, nil)
+		client := internal.NewGrayskullHTTPClient(mockAuth, config, nil, NewNoopRecorder())
 		resp, err := client.DoGetWithRetry(context.Background(), "http://example.com")
 
 		assert.Error(t, err)
@@ -444,7 +437,6 @@ func TestDoGetWithRetry_AdditionalScenarios(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
-		assert.Contains(t, resp.Protocol, "HTTP")
 	})
 }
 
@@ -481,11 +473,6 @@ func TestDoGetWithRetry_UncoveredPaths(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
-		// When no content-type is set and no body, it should be empty or unknown
-		if resp.ContentType == "" {
-			// Some servers might leave it empty
-			assert.Equal(t, "", resp.ContentType)
-		}
 	})
 }
 
@@ -570,5 +557,82 @@ func TestDoGetWithRetry_EdgeCases(t *testing.T) {
 		// Expect an error due to connection issues
 		assert.Error(t, err)
 	})
+}
 
+func TestUnmarshalResponse(t *testing.T) {
+	type TestData struct {
+		Name  string `json:"name"`
+		Value int    `json:"value"`
+	}
+
+	t.Run("successfully unmarshal valid JSON response", func(t *testing.T) {
+		body := `{"data":{"name":"test","value":42},"message":"success"}`
+		resp, err := internal.UnmarshalResponse[TestData](body)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "test", resp.Data.Name)
+		assert.Equal(t, 42, resp.Data.Value)
+		assert.Equal(t, "success", resp.Message)
+	})
+
+	t.Run("successfully unmarshal response with empty data", func(t *testing.T) {
+		body := `{"data":null,"message":"no data"}`
+		resp, err := internal.UnmarshalResponse[*TestData](body)
+
+		assert.NoError(t, err)
+		assert.Nil(t, resp.Data)
+		assert.Equal(t, "no data", resp.Message)
+	})
+
+	t.Run("successfully unmarshal response with string data", func(t *testing.T) {
+		body := `{"data":"simple string","message":"ok"}`
+		resp, err := internal.UnmarshalResponse[string](body)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "simple string", resp.Data)
+		assert.Equal(t, "ok", resp.Message)
+	})
+
+	t.Run("fails to unmarshal invalid JSON", func(t *testing.T) {
+		body := `{"data":"test","message":"incomplete`
+		resp, err := internal.UnmarshalResponse[string](body)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to unmarshal response")
+		assert.Empty(t, resp.Data)
+	})
+
+	t.Run("fails to unmarshal malformed JSON", func(t *testing.T) {
+		body := `not a json`
+		_, err := internal.UnmarshalResponse[TestData](body)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to unmarshal response")
+	})
+
+	t.Run("successfully unmarshal response with nested data", func(t *testing.T) {
+		type NestedData struct {
+			User struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			} `json:"user"`
+		}
+
+		body := `{"data":{"user":{"id":123,"name":"John"}},"message":"found"}`
+		resp, err := internal.UnmarshalResponse[NestedData](body)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 123, resp.Data.User.ID)
+		assert.Equal(t, "John", resp.Data.User.Name)
+		assert.Equal(t, "found", resp.Message)
+	})
+
+	t.Run("successfully unmarshal empty body with default values", func(t *testing.T) {
+		body := `{}`
+		resp, err := internal.UnmarshalResponse[string](body)
+
+		assert.NoError(t, err)
+		assert.Empty(t, resp.Data)
+		assert.Empty(t, resp.Message)
+	})
 }

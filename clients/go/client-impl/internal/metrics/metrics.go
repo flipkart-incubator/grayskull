@@ -1,19 +1,11 @@
 package metrics
 
 import (
-	"log/slog"
-	"sync"
+	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-)
-
-var (
-	once            sync.Once
-	reg             *prometheus.Registry
-	requestDuration *prometheus.HistogramVec
-	retryCounter    *prometheus.CounterVec
 )
 
 const (
@@ -26,25 +18,14 @@ type prometheusRecorder struct {
 	retryCounter    *prometheus.CounterVec
 }
 
-// initFunc is the initialization function that can be overridden for testing
-var initFunc = initializeMetrics
-
-// initializeMetrics initializes the Prometheus registry and metrics
-func initializeMetrics() {
-	// Create registry if not already set (allows testing with pre-configured registry)
-	if reg == nil {
-		reg = prometheus.NewRegistry()
-	}
-	prometheus.DefaultRegisterer = reg
-	prometheus.DefaultGatherer = reg
-
-	// Register Go collector once with the package-level registry
-	if err := reg.Register(prometheus.NewGoCollector()); err != nil {
-		slog.Warn("Failed to register Prometheus Go collector", "error", err)
+// NewPrometheusRecorder creates a new Prometheus-based metrics recorder with the given registry.
+// If registry is nil, prometheus.DefaultRegisterer will be used.
+func NewPrometheusRecorder(registry prometheus.Registerer) metrics2.MetricsRecorder {
+	if registry == nil {
+		registry = prometheus.DefaultRegisterer
 	}
 
-	// Create metrics once with the package-level registry
-	requestDuration = promauto.With(reg).NewHistogramVec(
+	requestDuration := promauto.With(registry).NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
@@ -55,7 +36,7 @@ func initializeMetrics() {
 		[]string{"name", "status_code"},
 	)
 
-	retryCounter = promauto.With(reg).NewCounterVec(
+	retryCounter := promauto.With(registry).NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
@@ -64,11 +45,6 @@ func initializeMetrics() {
 		},
 		[]string{"url", "success"},
 	)
-}
-
-// NewPrometheusRecorder creates a new Prometheus-based metrics recorder
-func NewPrometheusRecorder() MetricsRecorder {
-	once.Do(initFunc)
 
 	return &prometheusRecorder{
 		requestDuration: requestDuration,
@@ -89,11 +65,3 @@ func (p *prometheusRecorder) RecordRetry(url string, attemptNumber int, success 
 	}
 	p.retryCounter.WithLabelValues(url, successStr).Inc()
 }
-
-// GetRecorderName returns the name of this metrics recorder implementation
-func (p *prometheusRecorder) GetRecorderName() string {
-	return "prometheus"
-}
-
-// init is intentionally left empty to prevent auto-registration
-func init() {}
