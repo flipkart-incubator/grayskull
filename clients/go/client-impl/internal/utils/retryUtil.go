@@ -84,7 +84,7 @@ func Retry[T any](ctx context.Context, r *RetryUtil, task func() (T, error)) (T,
 		select {
 		case <-time.After(delay):
 		case <-ctx.Done():
-			errMsg := fmt.Sprintf("operation canceled during retry%v", lastErr)
+			errMsg := fmt.Sprintf("operation canceled during retry: %v", lastErr)
 			return defaultValue, grayskullErrors.NewRetryableErrorWithCause(errMsg, ctx.Err())
 		}
 	}

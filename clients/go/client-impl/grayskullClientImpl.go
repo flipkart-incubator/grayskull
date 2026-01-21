@@ -135,28 +135,32 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 
 	// Fetch the secret with automatic retry logic
 	httpResponse, err := g.httpClient.DoGetWithRetry(ctx, url)
+	if httpResponse != nil {
+		statusCode = httpResponse.StatusCode()
+	}
 	if err != nil {
-		if httpResponse != nil {
-			statusCode = httpResponse.StatusCode()
-		}
+		duration := time.Since(startTime)
+		g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
 		return nil, errors.NewGrayskullErrorWithCause(statusCode, "failed to fetch secret", err)
 	}
-
-	statusCode = httpResponse.StatusCode()
 
 	// Unmarshal JSON response using the generic Response type
 	secretResp, err := internal.UnmarshalResponse[Client_API.SecretValue](httpResponse.Body())
 	if err != nil {
+		duration := time.Since(startTime)
+		g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
 		return nil, errors.NewGrayskullErrorWithCause(500, "failed to parse response", err)
 	}
 
 	// After unmarshaling the response
 	data := secretResp.Data
 	if data == (Client_API.SecretValue{}) {
+		duration := time.Since(startTime)
+		g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
 		return nil, errors.NewGrayskullError(500, "no data in response")
 	}
 
-	// Record metrics
+	// Record metrics for success case
 	duration := time.Since(startTime)
 	g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
 
@@ -167,7 +171,7 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 // RegisterRefreshHook registers a refresh hook for a secret
 func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef string, hook Client_API_Hooks.SecretRefreshHook) (Client_API_Hooks.RefreshHandlerRef, error) {
 	if secretRef == "" {
-		return nil, fmt.Errorf("secretRef cannot be empty")
+		return nil, errors.NewGrayskullError(400, "secretRef cannot be empty")
 	}
 	if hook == nil {
 		return nil, errors.NewGrayskullError(400, "hook cannot be nil")

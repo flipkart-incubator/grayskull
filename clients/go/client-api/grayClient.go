@@ -13,6 +13,6 @@ type Client interface {
 
 	// RegisterRefreshHook registers a refresh hook for a secret.
 	// Note: This is a placeholder implementation. The hook will be registered but
-	// will not be invoked until server-side long-polling support is implemented.
+	// will not be invoked until the refresh mechanism (e.g., long-polling or SSE) is implemented.
 	RegisterRefreshHook(ctx context.Context, secretRef string, hook hooks.SecretRefreshHook) (hooks.RefreshHandlerRef, error)
 }

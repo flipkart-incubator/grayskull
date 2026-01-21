@@ -2,6 +2,7 @@ package metrics
 
 import (
 	metrics2 "github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,7 +55,7 @@ func NewPrometheusRecorder(registry prometheus.Registerer) metrics2.MetricsRecor
 
 // RecordRequest records an HTTP request with its duration
 func (p *prometheusRecorder) RecordRequest(name string, statusCode int, duration time.Duration) {
-	p.requestDuration.WithLabelValues(name, string(rune(statusCode))).Observe(duration.Seconds())
+	p.requestDuration.WithLabelValues(name, strconv.Itoa(statusCode)).Observe(duration.Seconds())
 }
 
 // RecordRetry records a retry attempt for a request

@@ -8,7 +8,7 @@ import "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 // asynchronously when the monitored secret is updated on the server.
 //
 // Note: This is currently part of a placeholder implementation. While hooks can be registered,
-// they will not be invoked until server-sent events support is added in a future release.
+// they will not be invoked until the refresh mechanism (e.g., long-polling or SSE) is implemented.
 type SecretRefreshHook interface {
 	OnUpdate(secret models.SecretValue) error
 }
