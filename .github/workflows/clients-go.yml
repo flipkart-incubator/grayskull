@@ -24,16 +24,16 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24.0'
-        cache-dependency-path: clients/go/go.sum
+        go-version: '1.23.0'
+        cache-dependency-path: clients/go/client-impl/go.sum
     
     - name: Download dependencies for client-api
       working-directory: clients/go/client-api
-      run: go mod download
+      run: go mod tidy
     
     - name: Download dependencies for client-impl
       working-directory: clients/go/client-impl
-      run: go mod download
+      run: go mod tidy
     
     - name: Build Go Clients
       working-directory: clients/go
