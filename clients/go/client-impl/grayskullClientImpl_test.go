@@ -350,7 +350,7 @@ func TestGetSecret(t *testing.T) {
 				jsonData, _ := json.Marshal(resp)
 
 				m.On("DoGetWithRetry", mock.Anything, mock.Anything).
-					Return(response.NewHttpResponse(http.StatusOK, string(jsonData), "", ""), nil)
+					Return(response.NewHttpResponse(http.StatusOK, string(jsonData)), nil)
 			},
 			expectedResult: &Client_API.SecretValue{
 				DataVersion: 1,
@@ -426,16 +426,20 @@ func TestRegisterRefreshHook(t *testing.T) {
 	)
 
 	t.Run("successful hook registration", func(t *testing.T) {
-		mockHook := &MockSecretRefreshHook{}
-		ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", mockHook)
+		hook := func(secret Client_API.SecretValue) error {
+			return nil
+		}
+		ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", hook)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, ref)
 	})
 
 	t.Run("empty secret ref", func(t *testing.T) {
-		mockHook := &MockSecretRefreshHook{}
-		ref, err := client.RegisterRefreshHook(context.Background(), "", mockHook)
+		hook := func(secret Client_API.SecretValue) error {
+			return nil
+		}
+		ref, err := client.RegisterRefreshHook(context.Background(), "", hook)
 
 		assert.Error(t, err)
 		assert.Nil(t, ref)
@@ -469,7 +473,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(200, string(jsonData), "", ""), nil)
+			Return(response.NewHttpResponse(200, string(jsonData)), nil)
 
 		client := NewGrayskullClientForTesting(
 			"http://localhost:8080",
@@ -509,7 +513,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	t.Run("HTTP error with response", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(500, "Internal Server Error", "", ""), errors.New("server error"))
+			Return(response.NewHttpResponse(500, "Internal Server Error"), errors.New("server error"))
 
 		client := NewGrayskullClientForTesting(
 			config.Host,
@@ -528,7 +532,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	t.Run("invalid JSON response", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(200, "invalid json", "", ""), nil)
+			Return(response.NewHttpResponse(200, "invalid json"), nil)
 
 		client := NewGrayskullClientForTesting(
 			config.Host,
@@ -551,7 +555,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 
 		mockHTTPClient := &MockGrayskullHTTPClient{}
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(200, string(jsonData), "", ""), nil)
+			Return(response.NewHttpResponse(200, string(jsonData)), nil)
 
 		client := NewGrayskullClientForTesting(
 			config.Host,
@@ -616,7 +620,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.MatchedBy(func(url string) bool {
 			// Verify URL encoding
 			return assert.Contains(t, url, "test%2Fproject") && assert.Contains(t, url, "secret%2Fname")
-		})).Return(response.NewHttpResponse(200, string(jsonData), "", ""), nil)
+		})).Return(response.NewHttpResponse(200, string(jsonData)), nil)
 
 		client := NewGrayskullClientForTesting(
 			"http://localhost:8080",
@@ -631,18 +635,4 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
 	})
-}
-
-// MockSecretRefreshHook is a mock implementation of SecretRefreshHook
-type MockSecretRefreshHook struct {
-	mock.Mock
-}
-
-func (m *MockSecretRefreshHook) OnRefresh(secretValue *Client_API.SecretValue) {
-	m.Called(secretValue)
-}
-
-func (m *MockSecretRefreshHook) OnUpdate(secretValue Client_API.SecretValue) error {
-	args := m.Called(secretValue)
-	return args.Error(0)
 }

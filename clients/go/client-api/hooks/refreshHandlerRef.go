@@ -1,5 +1,7 @@
 package hooks
 
+import "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
+
 // RefreshHandlerRef is an interface that manages the lifecycle of a registered secret refresh hook.
 // It provides methods to inspect the status of a registered hook and to unregister it when it's no longer needed.
 // Instances are returned by GrayskullClient.RegisterRefreshHook.
@@ -17,3 +19,5 @@ type RefreshHandlerRef interface {
 	// This method is idempotent - calling it multiple times has no additional effect.
 	Unregister()
 }
+
+type SecretRefreshHook func(secret models.SecretValue) error

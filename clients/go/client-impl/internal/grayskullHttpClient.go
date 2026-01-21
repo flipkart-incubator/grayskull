@@ -30,7 +30,7 @@ type GrayskullHTTPClientInterface interface {
 type GrayskullHTTPClient struct {
 	httpClient         *http.Client
 	authHeaderProvider auth.GrayskullAuthHeaderProvider
-	retryUtil          *utils.RetryUtil
+	retryConfig        utils.RetryConfig
 	logger             *slog.Logger
 	metricsRecorder    metrics.MetricsRecorder
 }
@@ -65,7 +65,7 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 	return &GrayskullHTTPClient{
 		httpClient:         client,
 		authHeaderProvider: authProvider,
-		retryUtil:          utils.NewRetryUtil(retryConfig),
+		retryConfig:        retryConfig,
 		logger:             logger,
 		metricsRecorder:    metricsRecorder,
 	}
@@ -75,7 +75,7 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse[string], error) {
 	var attemptCount int
 
-	httpResp, err := utils.Retry(ctx, c.retryUtil, func() (*response.HttpResponse[string], error) {
+	httpResp, err := utils.Retry(ctx, c.retryConfig, func() (*response.HttpResponse[string], error) {
 		attemptCount++
 		return c.doGet(ctx, url)
 	})
@@ -161,18 +161,9 @@ func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (*response.
 	// Record the request metrics
 	c.metricsRecorder.RecordRequest(url, resp.StatusCode, time.Since(startTime))
 
-	headers := make(map[string]string)
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "unknown"
-	}
-	headers["Content-Type"] = contentType
-
 	return response.NewHttpResponse(
 		resp.StatusCode,
 		string(body),
-		contentType,
-		resp.Proto,
 	), nil
 }
 

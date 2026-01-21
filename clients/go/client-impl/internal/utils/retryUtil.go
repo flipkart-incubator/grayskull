@@ -18,13 +18,8 @@ type RetryConfig struct {
 	MaxRetryDelay time.Duration
 }
 
-// RetryUtil provides retry functionality with exponential backoff
-type RetryUtil struct {
-	config RetryConfig
-}
-
-// NewRetryUtil creates a new RetryUtil with the given configuration
-func NewRetryUtil(config RetryConfig) *RetryUtil {
+// Retry executes the task with retry logic
+func Retry[T any](ctx context.Context, config RetryConfig, task func() (T, error)) (T, error) {
 	if config.MaxAttempts <= 0 {
 		config.MaxAttempts = 3
 	}
@@ -35,18 +30,11 @@ func NewRetryUtil(config RetryConfig) *RetryUtil {
 		config.MaxRetryDelay = time.Minute
 	}
 
-	return &RetryUtil{
-		config: config,
-	}
-}
-
-// Retry executes the task with retry logic
-func Retry[T any](ctx context.Context, r *RetryUtil, task func() (T, error)) (T, error) {
 	var lastErr error
 	var defaultValue T
-	delay := r.config.InitialDelay
+	delay := config.InitialDelay
 
-	for attempt := 1; attempt <= r.config.MaxAttempts; attempt++ {
+	for attempt := 1; attempt <= config.MaxAttempts; attempt++ {
 		// Check if context is done before each attempt
 		if err := ctx.Err(); err != nil {
 			return defaultValue, grayskullErrors.NewRetryableErrorWithCause("operation canceled", err)
@@ -65,15 +53,15 @@ func Retry[T any](ctx context.Context, r *RetryUtil, task func() (T, error)) (T,
 		}
 
 		lastErr = retryableErr
-		if attempt >= r.config.MaxAttempts {
+		if attempt >= config.MaxAttempts {
 			break
 		}
 
 		// Calculate backoff with jitter
 		delay = time.Duration(
 			math.Min(
-				float64(r.config.InitialDelay)*math.Pow(2, float64(attempt-1)),
-				float64(r.config.MaxRetryDelay),
+				float64(config.InitialDelay)*math.Pow(2, float64(attempt-1)),
+				float64(config.MaxRetryDelay),
 			),
 		)
 		// Add jitter (up to 25% of the delay)

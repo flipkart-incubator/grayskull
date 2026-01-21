@@ -91,7 +91,7 @@ func TestGrayskullHTTPClient_DoGetWithRetry_Success(t *testing.T) {
 	// Verify
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, http.StatusOK, resp.StatusCode())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestGrayskullHTTPClient_DoGetWithRetry_RetryOn5xx(t *testing.T) {
@@ -119,7 +119,7 @@ func TestGrayskullHTTPClient_DoGetWithRetry_RetryOn5xx(t *testing.T) {
 	// Verify
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, http.StatusOK, resp.StatusCode())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, 2, attempts) // Should have retried once
 }
 

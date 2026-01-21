@@ -9,10 +9,4 @@ const (
 	// GrayskullRequestID is the unique request identifier for correlating logs across the request lifecycle.
 	// Also sent as the X-Request-Id header to enable end-to-end tracing.
 	GrayskullRequestID contextKey = "grayskullRequestId"
-
-	// ProjectID represents the Grayskull project ID being accessed.
-	ProjectID contextKey = "projectId"
-
-	// SecretName represents the name of the secret being accessed.
-	SecretName contextKey = "secretName"
 )

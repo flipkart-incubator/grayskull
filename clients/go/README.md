@@ -160,16 +160,13 @@ import (
     "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 )
 
-// Implement the SecretRefreshHook interface
-type MyRefreshHook struct{}
-
-func (h *MyRefreshHook) OnUpdate(secret models.SecretValue) error {
+// Define a refresh hook function
+hook := func(secret models.SecretValue) error {
     fmt.Printf("Secret updated! New version: %d\n", secret.DataVersion)
     return updateCache(secret)
 }
 
 // Register the hook
-hook := &MyRefreshHook{}
 handle, err := client.RegisterRefreshHook(
     context.Background(),
     "my-project:api-key",
@@ -180,7 +177,7 @@ if err != nil {
 }
 
 // Later: unregister the hook
-handle.UnRegister()
+handle.Unregister()
 ```
 
 ## Configuration

@@ -13,14 +13,14 @@ const (
 	subsystem = "http_client"
 )
 
-type prometheusRecorder struct {
+type PrometheusRecorder struct {
 	requestDuration *prometheus.HistogramVec
 	retryCounter    *prometheus.CounterVec
 }
 
 // NewPrometheusRecorder creates a new Prometheus-based metrics recorder with the given registry.
 // If registry is nil, prometheus.DefaultRegisterer will be used.
-func NewPrometheusRecorder(registry prometheus.Registerer) MetricsRecorder {
+func NewPrometheusRecorder(registry prometheus.Registerer) *PrometheusRecorder {
 	if registry == nil {
 		registry = prometheus.DefaultRegisterer
 	}
@@ -46,19 +46,19 @@ func NewPrometheusRecorder(registry prometheus.Registerer) MetricsRecorder {
 		[]string{"url", "success"},
 	)
 
-	return &prometheusRecorder{
+	return &PrometheusRecorder{
 		requestDuration: requestDuration,
 		retryCounter:    retryCounter,
 	}
 }
 
 // RecordRequest records an HTTP request with its duration
-func (p *prometheusRecorder) RecordRequest(name string, statusCode int, duration time.Duration) {
+func (p *PrometheusRecorder) RecordRequest(name string, statusCode int, duration time.Duration) {
 	p.requestDuration.WithLabelValues(name, strconv.Itoa(statusCode)).Observe(duration.Seconds())
 }
 
 // RecordRetry records a retry attempt for a request
-func (p *prometheusRecorder) RecordRetry(url string, attemptNumber int, success bool) {
+func (p *PrometheusRecorder) RecordRetry(url string, attemptNumber int, success bool) {
 	successStr := "false"
 	if success {
 		successStr = "true"

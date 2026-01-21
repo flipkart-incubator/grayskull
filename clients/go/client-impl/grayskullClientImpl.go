@@ -126,10 +126,6 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 		return nil, errors.NewGrayskullError(400, fmt.Sprintf("projectId and secretName cannot be empty in secretRef: %s", secretRef))
 	}
 
-	// Add context values
-	ctx = context.WithValue(ctx, constants.ProjectID, projectID)
-	ctx = context.WithValue(ctx, constants.SecretName, secretName)
-
 	// URL encode the path parameters
 	encodedProjectID := url.PathEscape(projectID)
 	encodedSecretName := url.PathEscape(secretName)
@@ -138,7 +134,7 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	// Fetch the secret with automatic retry logic
 	httpResponse, err := g.httpClient.DoGetWithRetry(ctx, url)
 	if httpResponse != nil {
-		statusCode = httpResponse.StatusCode()
+		statusCode = httpResponse.StatusCode
 	}
 	if err != nil {
 		duration := time.Since(startTime)
@@ -147,7 +143,7 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	}
 
 	// Unmarshal JSON response using the generic Response type
-	secretResp, err := internal.UnmarshalResponse[Client_API.SecretValue](httpResponse.Body())
+	secretResp, err := internal.UnmarshalResponse[Client_API.SecretValue](httpResponse.Body)
 	if err != nil {
 		duration := time.Since(startTime)
 		g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
