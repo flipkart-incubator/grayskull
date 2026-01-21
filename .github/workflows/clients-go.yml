@@ -37,11 +37,15 @@ jobs:
     
     - name: Build Go Clients
       working-directory: clients/go
-      run: go build -v ./...
+      run: |
+        cd client-api && go build -v ./...
+        cd ../client-impl && go build -v ./...
     
     - name: Run Tests with Coverage
       working-directory: clients/go
-      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+      run: |
+        cd client-api && go test -v -race -coverprofile=coverage-api.out -covermode=atomic ./...
+        cd ../client-impl && go test -v -race -coverprofile=coverage-impl.out -covermode=atomic ./...
     
     - name: Install go-junit-report
       run: go install github.com/jstemmer/go-junit-report/v2@latest
@@ -49,7 +53,8 @@ jobs:
     - name: Generate JUnit Test Report
       working-directory: clients/go
       run: |
-        go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report.xml
+        cd client-api && go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report-api.xml
+        cd ../client-impl && go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report-impl.xml
       continue-on-error: true
     
     - name: Upload Test Results
@@ -57,13 +62,15 @@ jobs:
       with:
         name: Go Client Test Results
         path: |
-          clients/go/test-report.xml
-          clients/go/coverage.out
+          clients/go/client-api/test-report-api.xml
+          clients/go/client-api/coverage-api.out
+          clients/go/client-impl/test-report-impl.xml
+          clients/go/client-impl/coverage-impl.out
     
     - name: Publish code coverage
       uses: codecov/codecov-action@v5
       with:
-        files: "clients/go/coverage.out"
+        files: "clients/go/client-api/coverage-api.out,clients/go/client-impl/coverage-impl.out"
         token: ${{ secrets.CODECOV_TOKEN }}
         flags: go-client
 
