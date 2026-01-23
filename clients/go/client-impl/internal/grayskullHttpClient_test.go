@@ -125,6 +125,19 @@ func TestGrayskullHTTPClient_E2E_MaxRetriesExceeded(t *testing.T) {
 }
 
 func TestGrayskullHTTPClient_E2E_NetworkError(t *testing.T) {
+	// Create a server that immediately closes connections to simulate network error
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Hijack and close connection to simulate network failure
+		hj, ok := w.(http.Hijacker)
+		if ok {
+			conn, _, _ := hj.Hijack()
+			if conn != nil {
+				conn.Close()
+			}
+		}
+	}))
+	defer testServer.Close()
+
 	client := setupClient(t, &models.GrayskullClientConfiguration{
 		MaxRetries:    2,
 		MinRetryDelay: 10,
@@ -132,19 +145,25 @@ func TestGrayskullHTTPClient_E2E_NetworkError(t *testing.T) {
 	})
 
 	var result testResponse
-	statusCode, err := client.DoGetWithRetry(context.Background(), "http://invalid-url-that-does-not-exist", &result)
+	statusCode, err := client.DoGetWithRetry(context.Background(), testServer.URL, &result)
 
 	assert.Error(t, err)
 	assert.Equal(t, 0, statusCode)
 }
 
 func TestGrayskullHTTPClient_E2E_ContextCancellation(t *testing.T) {
+	// Create a test server that would normally respond
+	testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data":"test"}`))
+	}))
+
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	cancel() // Cancel immediately before request
 
 	client := setupClient(t, nil)
 	var result testResponse
-	statusCode, err := client.DoGetWithRetry(ctx, "http://example.com", &result)
+	statusCode, err := client.DoGetWithRetry(ctx, testServer.URL, &result)
 
 	assert.Error(t, err)
 	assert.Equal(t, 0, statusCode)

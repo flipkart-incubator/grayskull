@@ -113,17 +113,20 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	var statusCode int
 
 	if secretRef == "" {
+		g.metricsRecorder.RecordRequest("get_secret", 400, time.Since(startTime))
 		return nil, errors.NewGrayskullError(400, "secretRef cannot be empty")
 	}
 
 	// Parse secretRef format: "projectId:secretName"
 	parts := g.splitSecretRef(secretRef)
 	if len(parts) != 2 {
+		g.metricsRecorder.RecordRequest("get_secret", 400, time.Since(startTime))
 		return nil, errors.NewGrayskullError(400, fmt.Sprintf("invalid secretRef format. Expected 'projectId:secretName', got: %s", secretRef))
 	}
 
 	projectID, secretName := parts[0], parts[1]
 	if projectID == "" || secretName == "" {
+		g.metricsRecorder.RecordRequest("get_secret", 400, time.Since(startTime))
 		return nil, errors.NewGrayskullError(400, fmt.Sprintf("projectId and secretName cannot be empty in secretRef: %s", secretRef))
 	}
 
@@ -144,14 +147,12 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	// After unmarshaling the response
 	data := secretResp.Data
 	if data == (Client_API.SecretValue{}) {
-		duration := time.Since(startTime)
-		g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
+		g.metricsRecorder.RecordRequest("get_secret", statusCode, time.Since(startTime))
 		return nil, errors.NewGrayskullError(500, "no data in response")
 	}
 
 	// Record metrics for success case
-	duration := time.Since(startTime)
-	g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
+	g.metricsRecorder.RecordRequest("get_secret", statusCode, time.Since(startTime))
 
 	// Return a pointer to the Data field
 	return &data, nil
