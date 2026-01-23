@@ -14,6 +14,7 @@ import (
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
@@ -129,25 +130,15 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	// URL encode the path parameters
 	encodedProjectID := url.PathEscape(projectID)
 	encodedSecretName := url.PathEscape(secretName)
-	url := fmt.Sprintf("%s/v1/projects/%s/secrets/%s/data", g.baseURL, encodedProjectID, encodedSecretName)
+	getSecretUrl := fmt.Sprintf("%s/v1/projects/%s/secrets/%s/data", g.baseURL, encodedProjectID, encodedSecretName)
 
-	// Fetch the secret with automatic retry logic
-	httpResponse, err := g.httpClient.DoGetWithRetry(ctx, url)
-	if httpResponse != nil {
-		statusCode = httpResponse.StatusCode
-	}
+	// Fetch the secret with automatic retry logic and unmarshal directly
+	var secretResp response.Response[Client_API.SecretValue]
+	statusCode, err := g.httpClient.DoGetWithRetry(ctx, getSecretUrl, &secretResp)
 	if err != nil {
 		duration := time.Since(startTime)
 		g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
 		return nil, errors.NewGrayskullErrorWithCause(statusCode, "failed to fetch secret", err)
-	}
-
-	// Unmarshal JSON response using the generic Response type
-	secretResp, err := internal.UnmarshalResponse[Client_API.SecretValue](httpResponse.Body)
-	if err != nil {
-		duration := time.Since(startTime)
-		g.metricsRecorder.RecordRequest("get_secret", statusCode, duration)
-		return nil, errors.NewGrayskullErrorWithCause(500, "failed to parse response", err)
 	}
 
 	// After unmarshaling the response

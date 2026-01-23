@@ -33,12 +33,9 @@ type MockGrayskullHTTPClient struct {
 	mock.Mock
 }
 
-func (m *MockGrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string) (*response.HttpResponse[string], error) {
-	args := m.Called(ctx, url)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*response.HttpResponse[string]), args.Error(1)
+func (m *MockGrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string, result any) (int, error) {
+	args := m.Called(ctx, url, result)
+	return args.Int(0), args.Error(1)
 }
 
 func (m *MockGrayskullHTTPClient) Close() error {
@@ -349,8 +346,12 @@ func TestGetSecret(t *testing.T) {
 				resp := response.NewResponse(secretValue, "")
 				jsonData, _ := json.Marshal(resp)
 
-				m.On("DoGetWithRetry", mock.Anything, mock.Anything).
-					Return(response.NewHttpResponse(http.StatusOK, string(jsonData)), nil)
+				m.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						result := args.Get(2).(*response.Response[Client_API.SecretValue])
+						json.Unmarshal(jsonData, result)
+					}).
+					Return(http.StatusOK, nil)
 			},
 			expectedResult: &Client_API.SecretValue{
 				DataVersion: 1,
@@ -472,8 +473,12 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		jsonData, _ := json.Marshal(resp)
 
 		mockHTTPClient := &MockGrayskullHTTPClient{}
-		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(200, string(jsonData)), nil)
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				result := args.Get(2).(*response.Response[Client_API.SecretValue])
+				json.Unmarshal(jsonData, result)
+			}).
+			Return(200, nil)
 
 		client := NewGrayskullClientForTesting(
 			"http://localhost:8080",
@@ -492,8 +497,8 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 
 	t.Run("HTTP error with nil response", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
-		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(nil, errors.New("network error"))
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+			Return(0, errors.New("network error"))
 
 		client := NewGrayskullClientForTesting(
 			config.Host,
@@ -512,8 +517,8 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 
 	t.Run("HTTP error with response", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
-		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(500, "Internal Server Error"), errors.New("server error"))
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+			Return(500, errors.New("server error"))
 
 		client := NewGrayskullClientForTesting(
 			config.Host,
@@ -531,8 +536,12 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 
 	t.Run("invalid JSON response", func(t *testing.T) {
 		mockHTTPClient := &MockGrayskullHTTPClient{}
-		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(200, "invalid json"), nil)
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				result := args.Get(2).(*response.Response[Client_API.SecretValue])
+				json.Unmarshal([]byte("invalid json"), result)
+			}).
+			Return(200, errors.New("failed to unmarshal response: invalid character 'i' looking for beginning of value"))
 
 		client := NewGrayskullClientForTesting(
 			config.Host,
@@ -546,7 +555,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "failed to parse response")
+		assert.Contains(t, err.Error(), "failed to unmarshal response")
 	})
 
 	t.Run("empty data in response", func(t *testing.T) {
@@ -554,8 +563,12 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		jsonData, _ := json.Marshal(resp)
 
 		mockHTTPClient := &MockGrayskullHTTPClient{}
-		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything).
-			Return(response.NewHttpResponse(200, string(jsonData)), nil)
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				result := args.Get(2).(*response.Response[Client_API.SecretValue])
+				json.Unmarshal(jsonData, result)
+			}).
+			Return(200, nil)
 
 		client := NewGrayskullClientForTesting(
 			config.Host,
@@ -620,7 +633,12 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.MatchedBy(func(url string) bool {
 			// Verify URL encoding
 			return assert.Contains(t, url, "test%2Fproject") && assert.Contains(t, url, "secret%2Fname")
-		})).Return(response.NewHttpResponse(200, string(jsonData)), nil)
+		}), mock.Anything).
+			Run(func(args mock.Arguments) {
+				result := args.Get(2).(*response.Response[Client_API.SecretValue])
+				json.Unmarshal(jsonData, result)
+			}).
+			Return(200, nil)
 
 		client := NewGrayskullClientForTesting(
 			"http://localhost:8080",
