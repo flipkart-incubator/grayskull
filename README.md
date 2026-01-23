@@ -6,6 +6,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-green.svg)](https://spring.io/projects/spring-boot)
 [![Build](https://github.com/flipkart-incubator/grayskull/actions/workflows/maven.yml/badge.svg)](https://github.com/flipkart-incubator/grayskull/actions/workflows/maven.yml)
 [![Build](https://github.com/flipkart-incubator/grayskull/actions/workflows/clients-maven.yml/badge.svg)](https://github.com/flipkart-incubator/grayskull/actions/workflows/clients-maven.yml)
+[![Go Client](https://github.com/flipkart-incubator/grayskull/actions/workflows/clients-go.yml/badge.svg)](https://github.com/flipkart-incubator/grayskull/actions/workflows/clients-go.yml)
 [![Coverage](https://codecov.io/github/flipkart-incubator/grayskull/graph/badge.svg)](https://codecov.io/gh/flipkart-incubator/grayskull)
 
 **Grayskull** is an enterprise-grade secret management service designed for secure storage, retrieval, and lifecycle management of sensitive data like API keys, database credentials, and certificates.
@@ -15,7 +16,7 @@
 - **Pluggable Architecture** - Extensible storage backends (WIP), authentication and authorization providers
 - **Access Control** - Fine-grained authorization and audit logging
 
-## Quick Start
+## Quick Start (Java)
 
 ### Prerequisites
 
@@ -81,11 +82,69 @@ GrayskullClient client = new GrayskullClientImpl(auth, config);
 SecretValue secret = client.getSecret("my-project:database-password");
 String dbPassword = secret.getPrivatePart();
 ```
+
+---
+
+## Quick Start (Go)
+
+### Prerequisites
+
+- Go 1.21+
+- Access to a running Grayskull server
+
+### 1. Install the Go Client
+
+```bash
+go get github.com/flipkart-incubator/grayskull/clients/go/client-impl
+go get github.com/flipkart-incubator/grayskull/clients/go/client-api
+```
+
+### 2. Use the Go Client
+
+Basic usage:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    client_impl "github.com/flipkart-incubator/grayskull/clients/go/client-impl"
+    "github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
+    "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
+)
+
+func main() {
+    // Configure client
+    config := models.NewDefaultConfig()
+    config.Host = "http://localhost:8080"
+    
+    // Create client with authentication
+    authProvider := auth.NewBasicAuthHeaderProvider("user", "pass")
+    client, err := client_impl.NewGrayskullClient(authProvider, config, nil)
+    if err != nil {
+        log.Fatalf("Failed to create client: %v", err)
+    }
+    
+    // Retrieve secrets
+    ctx := context.Background()
+    secret, err := client.GetSecret(ctx, "my-project:database-password")
+    if err != nil {
+        log.Fatalf("Failed to get secret: %v", err)
+    }
+    
+    dbPassword := secret.PrivatePart
+    fmt.Printf("Database password: %s\n", dbPassword)
+}
+```
+
 ## Project Structure
 
 - **Server** - `server` contains the core logic of Grayskull. It is not built to be standalone application but to be used as dependency in applications
 - **SPI** - `server` needs some additional things which are pluggable. So SPI layer is used to provide interfaces for pluggable components
-- **Client SDK** - Java library for seamless integration
+- **Client SDKs** - Java and Go libraries for seamless integration with comprehensive features
 - **Derby Audit System** - Provided an implementation of Async Audit SPI backed by Derby database
 - **Simple App** - Since `server` is not a standalone application `simple-app` provided as a simple standalone application which just depends on server and derby-audit.
 
@@ -209,14 +268,44 @@ This way own SPI implementations are picked up first instead of simple implement
 ---
 
 ### Clients SDK
+
 Clients are provided as separate modules in the `clients` folder. Following is the structure of the `clients` folder:
 ```text
 clients
-└── java
+├── java
+│   ├── client-api
+│   └── client-impl
+└── go
     ├── client-api
     └── client-impl
 ```
-For now only Java clients are provided, with support for Java 8 and higher. For usage and examples of the Java client see the [documentation](clients/java/README.md).
+
+Grayskull provides production-ready client SDKs for both Java and Go with comprehensive features:
+
+#### Java Client
+- **Compatibility**: Java 8 and higher
+- **Features**:
+  - Simple, intuitive API for secret retrieval
+  - Automatic retries with exponential backoff
+  - Built-in Dropwizard metrics integration
+  - Thread-safe concurrent request handling
+  - Pluggable authentication providers
+  - Comprehensive error handling
+- **Documentation**: See the [Java client documentation](clients/java/README.md) for detailed usage and examples
+- **Installation**: Available on Clojars repository
+
+#### Go Client
+- **Compatibility**: Go 1.21 and higher
+- **Features**:
+  - Clean, idiomatic Go API with context support
+  - Automatic retries with exponential backoff and jitter
+  - Built-in Prometheus metrics integration
+  - Thread-safe with connection pooling
+  - Pluggable authentication providers
+  - Structured logging with request correlation
+  - Comprehensive error handling with typed errors
+- **Documentation**: See the [Go client documentation](clients/go/README.md) for detailed usage and examples
+- **Installation**: Available via `go get`
 
 
 ## Development
@@ -252,7 +341,7 @@ This should also generate code coverage report in `target/site/jacoco` folder of
 - [ ] Real-time secret update notifications
 - [ ] Automated secret lifecycle management
 - [ ] Enhanced metrics on secret usage
-- [ ] Additional Golang SDKs
+- [x] Go client SDK
 - [ ] Advanced lifecycle policies
 
 ## Contributing

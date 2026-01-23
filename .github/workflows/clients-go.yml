@@ -1,0 +1,85 @@
+# This workflow builds and tests the Grayskull Go Client SDK independently from the main project
+# The clients are a separate Go module for broader compatibility
+
+name: Go Client
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'clients/go/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'clients/go/**'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23.0'
+        cache-dependency-path: clients/go/client-impl/go.sum
+    
+    - name: Download dependencies for client-api
+      working-directory: clients/go/client-api
+      run: go mod tidy
+    
+    - name: Download dependencies for client-impl
+      working-directory: clients/go/client-impl
+      run: go mod tidy
+    
+    - name: Build Go Clients
+      working-directory: clients/go
+      run: |
+        cd client-api && go build -v ./...
+        cd ../client-impl && go build -v ./...
+    
+    - name: Run Tests with Coverage
+      working-directory: clients/go
+      run: |
+        cd client-api && go test -v -race -coverprofile=coverage-api.out -covermode=atomic ./...
+        cd ../client-impl && go test -v -race -coverprofile=coverage-impl.out -covermode=atomic ./...
+    
+    - name: Install go-junit-report
+      run: go install github.com/jstemmer/go-junit-report/v2@latest
+    
+    - name: Generate JUnit Test Report
+      working-directory: clients/go
+      run: |
+        cd client-api && go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report-api.xml
+        cd ../client-impl && go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report-impl.xml
+      continue-on-error: true
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v5
+      with:
+        name: Go Client Test Results
+        path: |
+          clients/go/client-api/test-report-api.xml
+          clients/go/client-api/coverage-api.out
+          clients/go/client-impl/test-report-impl.xml
+          clients/go/client-impl/coverage-impl.out
+    
+    - name: Publish code coverage
+      uses: codecov/codecov-action@v5
+      with:
+        files: "clients/go/client-api/coverage-api.out,clients/go/client-impl/coverage-impl.out"
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: go-client
+
+  event_file:
+    name: "Event File"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload
+        uses: actions/upload-artifact@v5
+        with:
+          name: Event File
+          path: ${{ github.event_path }}

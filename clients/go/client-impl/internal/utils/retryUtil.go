@@ -1,0 +1,86 @@
+package utils
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"math/rand"
+	"time"
+
+	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
+)
+
+// RetryConfig holds configuration for retry behavior
+type RetryConfig struct {
+	MaxAttempts   int
+	InitialDelay  time.Duration
+	MaxRetryDelay time.Duration
+}
+
+// Retry executes the task with retry logic
+func Retry[T any](ctx context.Context, config RetryConfig, task func() (T, error)) (T, error) {
+	if config.MaxAttempts <= 0 {
+		config.MaxAttempts = 3
+	}
+	if config.InitialDelay <= 0 {
+		config.InitialDelay = 100 * time.Millisecond
+	}
+	if config.MaxRetryDelay <= 0 {
+		config.MaxRetryDelay = time.Minute
+	}
+
+	var lastErr error
+	var defaultValue T
+	delay := config.InitialDelay
+
+	for attempt := 1; attempt <= config.MaxAttempts; attempt++ {
+		// Check if context is done before each attempt
+		if err := ctx.Err(); err != nil {
+			return defaultValue, grayskullErrors.NewRetryableErrorWithCause("operation canceled", err)
+		}
+
+		// Execute the task
+		result, err := task()
+		if err == nil {
+			return result, nil
+		}
+
+		// Check if error is retryable
+		var retryableErr *grayskullErrors.RetryableError
+		if !errors.As(err, &retryableErr) {
+			return defaultValue, err // Non-retryable error
+		}
+
+		lastErr = retryableErr
+		if attempt >= config.MaxAttempts {
+			break
+		}
+
+		// Calculate backoff with jitter
+		delay = time.Duration(
+			math.Min(
+				float64(config.InitialDelay)*math.Pow(2, float64(attempt-1)),
+				float64(config.MaxRetryDelay),
+			),
+		)
+		// Add jitter (up to 25% of the delay)
+		jitter := time.Duration(rand.Float64() * 0.25 * float64(delay))
+		delay += jitter
+
+		// Wait before next retry
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			errMsg := fmt.Sprintf("operation canceled during retry: %v", lastErr)
+			return defaultValue, grayskullErrors.NewRetryableErrorWithCause(errMsg, ctx.Err())
+		}
+	}
+
+	// If we've exhausted all retry attempts, return a GrayskullError
+	return defaultValue, grayskullErrors.NewGrayskullErrorWithCause(
+		0,
+		"max retry attempts reached",
+		lastErr,
+	)
+}
