@@ -206,7 +206,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
     private static String urlEncode(String value) {
         try {
-            return URLEncoder.encode(value, "UTF-8");
+            return URLEncoder.encode(value, "UTF-8")
+                    .replace("+", "%20")     
+                    .replace("%7E", "~")    
+                    .replace("*", "%2A");    
         } catch (UnsupportedEncodingException e) {
             throw new GrayskullException(500, "Failed to URL encode value: " + value, e);
         }
