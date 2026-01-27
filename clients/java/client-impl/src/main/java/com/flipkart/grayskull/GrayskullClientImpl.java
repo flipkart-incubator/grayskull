@@ -15,12 +15,11 @@ import com.flipkart.grayskull.hooks.NoOpRefreshHandlerRef;
 import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.models.response.Response;
+import okhttp3.HttpUrl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -117,10 +116,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
             log.debug("[RequestId:{}] Fetching secret for secretRef: {}", requestId, secretRef);
 
-            // URL encode the path parameters to handle special characters (spaces, slashes, etc.)
-            String encodedProjectId = urlEncode(projectId);
-            String encodedSecretName = urlEncode(secretName);
-            String url = baseUrl + String.format("/v1/projects/%s/secrets/%s/data", encodedProjectId, encodedSecretName);
+            String url = buildUrl("v1", "projects", projectId, "secrets", secretName, "data");
             
             // Fetch the secret with automatic retry logic
             HttpResponse httpResponse = httpClient.doGetWithRetry(url);
@@ -204,15 +200,19 @@ public final class GrayskullClientImpl implements GrayskullClient {
         }
     }
 
-    private static String urlEncode(String value) {
-        try {
-            return URLEncoder.encode(value, "UTF-8")
-                    .replace("+", "%20")     
-                    .replace("%7E", "~")    
-                    .replace("*", "%2A");    
-        } catch (UnsupportedEncodingException e) {
-            throw new GrayskullException(500, "Failed to URL encode value: " + value, e);
+
+    private String buildUrl(String... pathSegments) {
+        HttpUrl parsedBaseUrl = HttpUrl.parse(baseUrl);
+        if (parsedBaseUrl == null) {
+            throw new IllegalStateException("Invalid baseUrl: " + baseUrl);
         }
+        
+        HttpUrl.Builder builder = parsedBaseUrl.newBuilder();
+        for (String segment : pathSegments) {
+            builder.addPathSegment(segment);
+        }
+        
+        return builder.build().toString();
     }
 
     private String generateRequestId() {
