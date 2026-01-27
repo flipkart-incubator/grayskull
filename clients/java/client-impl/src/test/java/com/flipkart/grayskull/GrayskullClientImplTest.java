@@ -216,9 +216,9 @@ class GrayskullClientImplTest {
         // Then
         assertNotNull(result);
         
-        // Verify URL is properly encoded - colons after the first one are encoded as %3A
+        // Verify URL is properly encoded - colons are allowed unencoded per RFC 3986
         verify(mockHttpClient).doGetWithRetry(
-                eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret%3Awith%3Acolons/data")
+                eq("https://test.grayskull.com/v1/projects/my-project/secrets/secret:with:colons/data")
         );
     }
 
@@ -241,10 +241,10 @@ class GrayskullClientImplTest {
         assertEquals(expectedSecret.getPublicPart(), result.getPublicPart());
         assertEquals(expectedSecret.getPrivatePart(), result.getPrivatePart());
         
-        // Verify URL is properly encoded with special characters
-        // @ should be encoded as %40, # should be encoded as %23
+        // Verify URL is properly encoded with special characters per RFC 3986
+        // @ is allowed unencoded, # is encoded as %23
         verify(mockHttpClient).doGetWithRetry(
-                eq("https://test.grayskull.com/v1/projects/project/secrets/secret%40domain%23tag/data")
+                eq("https://test.grayskull.com/v1/projects/project/secrets/secret@domain%23tag/data")
         );
     }
 
