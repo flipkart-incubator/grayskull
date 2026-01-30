@@ -376,9 +376,9 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
         }
 
         @Test
-        void shouldReturnBadRequestWhenDestroyingWithoutSoftDeleting() throws Exception {
-            final String projectId = "project-destroy";
-            final String secretName = "secret-destroy";
+        void shouldReturnNotFoundWhenDestroyingAlreadyDestroyedSecret() throws Exception {
+            final String projectId = "project-destroy-not-found";
+            final String secretName = "secret-destroy-not-found";
             performCreateSecret(projectId, secretName, "initial-value", ADMIN_USER);
             performDeleteSecret(projectId, secretName, ADMIN_USER).andExpect(status().isOk());
             performDestroySecret(projectId, secretName, ADMIN_USER)
@@ -389,9 +389,9 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
         }
 
         @Test
-        void shouldReturnNotFOundWhenDestroyingAlreadyDestroyedSecret() throws Exception {
-            final String projectId = "project-destroy";
-            final String secretName = "secret-destroy";
+        void shouldReturnBadRequestWhenDestroyingWithoutSoftDeleting() throws Exception {
+            final String projectId = "project-destroy-bad-request";
+            final String secretName = "secret-destroy-bad-request";
             performCreateSecret(projectId, secretName, "initial-value", ADMIN_USER);
 
             performDestroySecret(projectId, secretName, ADMIN_USER)

@@ -63,8 +63,8 @@ public class SecretRepositoryImpl implements SecretRepository {
             throw new IllegalArgumentException(
                     "Expected SecretEntity but got: " + secret.getClass().getName());
         }
-        mongoRepository.delete((SecretEntity) secret);
         secretDataMongoRepository.deleteAllBySecretId(secret.getId());
+        mongoRepository.delete((SecretEntity) secret);
     }
 
     @Override

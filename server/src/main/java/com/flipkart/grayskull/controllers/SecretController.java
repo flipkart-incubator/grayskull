@@ -109,7 +109,7 @@ public class SecretController {
         return ResponseTemplate.success(response, "Successfully upgraded secret data.");
     }
 
-    @Operation(summary = "Disables a secret, marking it as soft-deleted.")
+    @Operation(summary = "Disables a secret, marking it as soft-deleted. If destroy is true, hard deletes the secret.")
     @DeleteMapping("/{secretName}")
     @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, #secretName, 'secrets.delete')")
     public ResponseTemplate<Void> deleteSecret(@PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
