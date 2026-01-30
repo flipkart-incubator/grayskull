@@ -113,9 +113,15 @@ public class SecretController {
     @DeleteMapping("/{secretName}")
     @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, #secretName, 'secrets.delete')")
     public ResponseTemplate<Void> deleteSecret(@PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
-            @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
-        secretService.deleteSecret(projectId, secretName);
-        return ResponseTemplate.success("Successfully deleted secret.");
+                                               @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
+                                               @RequestParam(defaultValue = "false") boolean destroy) {
+        if (!destroy) {
+            secretService.deleteSecret(projectId, secretName);
+            return ResponseTemplate.success("Successfully soft deleted secret.");
+        } else {
+            secretService.destroySecret(projectId, secretName);
+            return ResponseTemplate.success("Successfully hard deleted secret.");
+        }
     }
 
     @Operation(summary = "Retrieves a specific version of a secret's data. Its an Admin API.")
