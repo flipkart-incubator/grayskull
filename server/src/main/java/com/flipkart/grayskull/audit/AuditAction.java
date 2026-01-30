@@ -24,5 +24,10 @@ public enum AuditAction {
     /**
      * Represents the deletion of a secret.
      */
-    DELETE_SECRET
+    DELETE_SECRET,
+
+    /**
+     * Represents the hard deletion of a secret.
+     */
+    DESTROY_SECRET,
 }

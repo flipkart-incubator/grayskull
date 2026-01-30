@@ -4,6 +4,8 @@ import com.flipkart.grayskull.audit.Audit;
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.configuration.KmsConfig;
 import com.flipkart.grayskull.entities.ProjectEntity;
+import com.flipkart.grayskull.exception.BadRequestException;
+import com.flipkart.grayskull.exception.NotFoundException;
 import com.flipkart.grayskull.mappers.SecretMapper;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.models.Secret;
@@ -196,6 +198,17 @@ public class SecretServiceImpl implements SecretService {
         secret.setState(LifecycleState.DISABLED);
         secret.setUpdatedBy(authnUtil.getCurrentUsername());
         secretRepository.save(secret);
+    }
+
+    @Override
+    @Transactional
+    @Audit(action = AuditAction.DESTROY_SECRET)
+    public void destroySecret(String projectId, String secretName) {
+        Secret secret = secretRepository.findByProjectIdAndName(projectId, secretName).orElseThrow(() -> new NotFoundException("Secret with name " + secretName + " not found."));
+        if (!secret.getState().equals(LifecycleState.DISABLED)) {
+            throw new BadRequestException("Secret has to soft deleted before destroying. Call the api with destroy=false first");
+        }
+        secretRepository.delete(secret);
     }
 
     /**

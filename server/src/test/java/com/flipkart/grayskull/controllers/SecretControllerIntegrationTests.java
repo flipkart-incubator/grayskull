@@ -114,12 +114,17 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
         void shouldDeleteSecret() throws Exception {
             final String projectId = "project-delete";
             final String secretName = "deletable-secret";
+            shouldDeleteSecret(projectId, secretName);
+        }
+
+        void shouldDeleteSecret(final String projectId, final String secretName) throws Exception {
+
             performCreateSecret(projectId, secretName, "some-value", ADMIN_USER);
 
             // Act & Assert: Delete the secret
             performDeleteSecret(projectId, secretName, ADMIN_USER)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.message").value("Successfully deleted secret."));
+                    .andExpect(jsonPath("$.message").value("Successfully soft deleted secret."));
 
             // Act & Assert: Verify it's gone from public APIs
             performReadSecretMetadata(projectId, secretName, ADMIN_USER)
@@ -130,6 +135,31 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
                             .with(user(ADMIN_USER)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.state").value("DISABLED"));
+        }
+
+        @Test
+        void shouldDestroySecret() throws Exception {
+            final String projectId = "project-destroy";
+            final String secretName = "destroyable-secret";
+            shouldDeleteSecret(projectId, secretName);
+
+            performDestroySecret(projectId, secretName, ADMIN_USER)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("Successfully hard deleted secret."));
+
+            // after destroy secret should be gone from public APIs
+            performReadSecretMetadata(projectId, secretName, ADMIN_USER)
+                    .andExpect(status().isNotFound());
+
+            // after destroy secret should be gone from admin APIs
+            mockMvc.perform(get(String.format("/v1/projects/%s/secrets/%s/versions/1", projectId, secretName))
+                    .with(user(ADMIN_USER)))
+                    .andExpect(status().isNotFound());
+
+            // after destroy we should be able to create a secret with the same name
+            performCreateSecret(projectId, secretName, "some-value", ADMIN_USER)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("Successfully created secret."));
         }
 
         @Test
@@ -343,6 +373,29 @@ class SecretControllerIntegrationTests extends BaseIntegrationTest {
             performDeleteSecret("project-delete-non-existent", "non-existent-secret", ADMIN_USER)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        }
+
+        @Test
+        void shouldReturnNotFoundWhenDestroyingAlreadyDestroyedSecret() throws Exception {
+            final String projectId = "project-destroy-not-found";
+            final String secretName = "secret-destroy-not-found";
+            performCreateSecret(projectId, secretName, "initial-value", ADMIN_USER);
+            performDeleteSecret(projectId, secretName, ADMIN_USER).andExpect(status().isOk());
+            performDestroySecret(projectId, secretName, ADMIN_USER)
+                    .andExpect(status().isOk());
+
+            performDestroySecret(projectId, secretName, ADMIN_USER)
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        void shouldReturnBadRequestWhenDestroyingWithoutSoftDeleting() throws Exception {
+            final String projectId = "project-destroy-bad-request";
+            final String secretName = "secret-destroy-bad-request";
+            performCreateSecret(projectId, secretName, "initial-value", ADMIN_USER);
+
+            performDestroySecret(projectId, secretName, ADMIN_USER)
+                    .andExpect(status().isBadRequest());
         }
     }
 

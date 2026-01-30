@@ -10,5 +10,6 @@ import java.util.Optional;
  */
 public interface SecretDataMongoRepository extends MongoRepository<SecretDataEntity, String> {
     Optional<SecretDataEntity> findBySecretIdAndDataVersion(String secretId, long dataVersion);
+    void deleteAllBySecretId(String secretId);
 }
 
