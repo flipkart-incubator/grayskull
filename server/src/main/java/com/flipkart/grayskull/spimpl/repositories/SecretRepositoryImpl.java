@@ -4,7 +4,9 @@ import com.flipkart.grayskull.entities.SecretEntity;
 import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
+import com.flipkart.grayskull.spimpl.repositories.mongo.SecretDataMongoRepository;
 import com.flipkart.grayskull.spimpl.repositories.mongo.SecretMongoRepository;
+import lombok.AllArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
@@ -17,13 +19,11 @@ import java.util.Optional;
  * Implements the SPI contract using Spring Data.
  */
 @Repository
+@AllArgsConstructor
 public class SecretRepositoryImpl implements SecretRepository {
 
     private final SecretMongoRepository mongoRepository;
-
-    public SecretRepositoryImpl(SecretMongoRepository mongoRepository) {
-        this.mongoRepository = mongoRepository;
-    }
+    private final SecretDataMongoRepository secretDataMongoRepository;
 
     @Override
     public List<Secret> findByProjectIdAndState(String projectId, LifecycleState state, int offset, int limit) {
@@ -55,6 +55,16 @@ public class SecretRepositoryImpl implements SecretRepository {
     @Override
     public Optional<Secret> findByProjectIdAndNameAndState(String projectId, String name, LifecycleState state) {
         return mongoRepository.findByProjectIdAndNameAndState(projectId, name, state).map(entity -> entity);
+    }
+
+    @Override
+    public void delete(Secret secret) {
+        if (!(secret instanceof SecretEntity)) {
+            throw new IllegalArgumentException(
+                    "Expected SecretEntity but got: " + secret.getClass().getName());
+        }
+        secretDataMongoRepository.deleteAllBySecretId(secret.getId());
+        mongoRepository.delete((SecretEntity) secret);
     }
 
     @Override

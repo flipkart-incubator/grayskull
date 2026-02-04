@@ -61,4 +61,11 @@ public interface SecretRepository {
      * @return An Optional containing the secret if found.
      */
     Optional<Secret> findByProjectIdAndNameAndState(String projectId, String name, LifecycleState state);
+
+    /**
+     * Deletes a secret.
+     *
+     * @param secret The secret to delete.
+     */
+    void delete(Secret secret);
 }
