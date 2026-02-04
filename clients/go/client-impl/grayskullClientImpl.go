@@ -3,13 +3,14 @@ package client_impl
 import (
 	"context"
 	"fmt"
+	Client_API "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 
+	clientapi "github.com/flipkart-incubator/grayskull/clients/go/client-api"
 	Client_API_Hooks "github.com/flipkart-incubator/grayskull/clients/go/client-api/hooks"
-	Client_API "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
@@ -58,8 +59,8 @@ func validateConfig(config *models.GrayskullClientConfiguration) error {
 	return nil
 }
 
-// NewGrayskullClient creates a new instance of GrayskullClientImpl
-func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, metricsRecorder metrics.MetricsRecorder) (*GrayskullClientImpl, error) {
+// NewGrayskullClient creates a new instance of Grayskull client
+func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, metricsRecorder metrics.MetricsRecorder) (clientapi.Client, error) {
 	if authProvider == nil {
 		return nil, errors.NewGrayskullErrorWithMessage("authHeaderProvider cannot be nil")
 	}

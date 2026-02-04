@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -41,13 +42,20 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 	}
 
 	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			// Connection timeout - how long to wait for the initial connection
+			Timeout:   time.Duration(config.ConnectionTimeout) * time.Millisecond,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
 		MaxIdleConns:        config.MaxIdleConns,
 		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
 		IdleConnTimeout:     time.Duration(config.IdleConnTimeout) * time.Millisecond,
 	}
 
 	client := &http.Client{
-		Timeout:   time.Duration(config.ReadTimeout) * time.Millisecond,
+		// Total request timeout = ConnectionTimeout + ReadTimeout
+		// This ensures we don't wait forever for a response after connection is established
+		Timeout:   time.Duration(config.ConnectionTimeout+config.ReadTimeout) * time.Millisecond,
 		Transport: transport,
 	}
 
