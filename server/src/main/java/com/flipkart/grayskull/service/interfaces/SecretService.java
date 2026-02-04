@@ -17,7 +17,7 @@ public interface SecretService {
     /**
      * Lists secrets for a given project with pagination. Always returns the latest
      * version of the secret.
-     * 
+     *
      * @param projectId The ID of the project.
      * @param offset    The starting offset for pagination.
      * @param limit     The maximum number of secrets to return.
@@ -28,7 +28,7 @@ public interface SecretService {
 
     /**
      * Creates a new secret for a given project.
-     * 
+     *
      * @param projectId The ID of the project.
      * @param request   The request body containing the secret details.
      * @return A {@link SecretResponse} containing the details of the created
@@ -39,7 +39,7 @@ public interface SecretService {
     /**
      * Reads the metadata of a specific secret. Always returns the latest version of
      * the secret.
-     * 
+     *
      * @param projectId  The ID of the project.
      * @param secretName The name of the secret.
      * @return {@link SecretMetadata} for the requested secret.
@@ -49,7 +49,7 @@ public interface SecretService {
     /**
      * Reads the value of a specific secret. Always returns the latest version of
      * the secret.
-     * 
+     *
      * @param projectId  The ID of the project.
      * @param secretName The name of the secret.
      * @return A {@link SecretDataResponse} containing the secret's value.
@@ -58,7 +58,7 @@ public interface SecretService {
 
     /**
      * Upgrades the data of an existing secret, creating a new version.
-     * 
+     *
      * @param projectId  The ID of the project.
      * @param secretName The name of the secret to upgrade.
      * @param request    The request containing the new secret data.
@@ -68,15 +68,23 @@ public interface SecretService {
 
     /**
      * Disables a secret, marking it as soft-deleted.
-     * 
+     *
      * @param projectId  The ID of the project.
      * @param secretName The name of the secret to delete.
      */
     void deleteSecret(String projectId, String secretName);
 
     /**
+     * Permanently deletes a secret from the DB. this permanent deletion is only possible after soft deletion.
+     *
+     * @param projectId  The ID of the project
+     * @param secretName The name of the secret to delete
+     */
+    void destroySecret(String projectId, String secretName);
+
+    /**
      * Retrieves a specific version of a secret's data. Its an Admin API.
-     * 
+     *
      * @param projectId  The ID of the project.
      * @param secretName The name of the secret.
      * @param version    The version of the secret data to retrieve.

@@ -32,4 +32,10 @@ public interface GrayskullClient extends AutoCloseable {
      */
     RefreshHandlerRef registerRefreshHook(String secretRef, SecretRefreshHook hook);
 
+    /**
+     * Closes this client and releases all resources.
+     */
+    @Override
+    void close();
+
 }

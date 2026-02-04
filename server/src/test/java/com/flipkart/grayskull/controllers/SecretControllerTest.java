@@ -127,4 +127,28 @@ class SecretControllerTest {
             verify(plugins.get(i)).validateMetadata(any(), any());
         }
     }
+
+    @Test
+    @DisplayName("Should soft delete secret when destroy=false")
+    void shouldSoftDeleteSecretWhenDestroyFalse() {
+        // Act
+        var result = secretController.deleteSecret(PROJECT_ID, SECRET_NAME, false);
+
+        // Assert
+        verify(secretService).deleteSecret(PROJECT_ID, SECRET_NAME);
+        verify(secretService, never()).destroySecret(anyString(), anyString());
+        assertThat(result.getMessage()).isEqualTo("Successfully soft deleted secret.");
+    }
+
+    @Test
+    @DisplayName("Should hard delete secret when destroy=true")
+    void shouldHardDeleteSecretWhenDestroyTrue() {
+        // Act
+        var result = secretController.deleteSecret(PROJECT_ID, SECRET_NAME, true);
+
+        // Assert
+        verify(secretService).destroySecret(PROJECT_ID, SECRET_NAME);
+        verify(secretService, never()).deleteSecret(anyString(), anyString());
+        assertThat(result.getMessage()).isEqualTo("Successfully hard deleted secret.");
+    }
 }

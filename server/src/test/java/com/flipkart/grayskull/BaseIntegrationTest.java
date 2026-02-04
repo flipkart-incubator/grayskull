@@ -89,6 +89,11 @@ public abstract class BaseIntegrationTest {
                 .with(user(username)));
     }
 
+    protected ResultActions performDestroySecret(String projectId, String secretName, String username) throws Exception {
+        return mockMvc.perform(delete("/v1/projects/{projectId}/secrets/{secretName}?destroy=true", projectId, secretName)
+                .with(user(username)));
+    }
+
     private CreateSecretRequest buildCreateSecretRequest(String name, String publicPart, String value) {
         SecretDataPayload payload = new SecretDataPayload(publicPart, value);
         CreateSecretRequest createRequest = new CreateSecretRequest();
