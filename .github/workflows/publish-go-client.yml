@@ -31,15 +31,23 @@ jobs:
       
       - name: Validate version format
         run: |
-          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: Version must be in format vX.Y.Z (e.g., v1.0.0)"
-            exit 1
+          VERSION="${{ inputs.version }}"
+          # Add 'v' prefix if not present
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              VERSION="v$VERSION"
+              echo "Normalized version to: $VERSION"
+            else
+              echo "Error: Version must be in format X.Y.Z or vX.Y.Z (e.g., 1.0.0 or v1.0.0)"
+              exit 1
+            fi
           fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
       
       - name: Check if tag exists
         run: |
           for module in clients/go/client-api clients/go/client-impl; do
-            tag="${module}/v${{ inputs.version }}"
+            tag="${module}/$VERSION"
             if git rev-parse "$tag" >/dev/null 2>&1; then
               echo "Error: Tag $tag already exists"
               exit 1
@@ -95,8 +103,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           for module in clients/go/client-api clients/go/client-impl; do
-            tag="${module}/v${{ inputs.version }}"
-            git tag -a "$tag" -m "Release Go client ${{ inputs.version }} ($module)"
+            tag="${module}/$VERSION"
+            git tag -a "$tag" -m "Release Go client $VERSION ($module)"
             git push origin "$tag"
           done
       
@@ -105,15 +113,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: clients/go/client-api/v${{ inputs.version }}
-          release_name: Client API ${{ inputs.version }}
+          tag_name: clients/go/client-api/$VERSION
+          release_name: Client API $VERSION
           body: |
-            ## Grayskull Client API ${{ inputs.version }}
+            ## Grayskull Client API $VERSION
             
             ### Installation
             
             ```bash
-            go get github.com/flipkart-incubator/grayskull/clients/go/client-api@v${{ inputs.version }}
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-api@$VERSION
             ```
             
             ### Usage
@@ -129,15 +137,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: clients/go/client-impl/v${{ inputs.version }}
-          release_name: Client Implementation ${{ inputs.version }}
+          tag_name: clients/go/client-impl/$VERSION
+          release_name: Client Implementation $VERSION
           body: |
-            ## Grayskull Client Implementation ${{ inputs.version }}
+            ## Grayskull Client Implementation $VERSION
             
             ### Installation
             
             ```bash
-            go get github.com/flipkart-incubator/grayskull/clients/go/client-impl@v${{ inputs.version }}
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-impl@$VERSION
             ```
             
             ### Usage
@@ -150,7 +158,7 @@ jobs:
       
       - name: Trigger GOPROXY update
         run: |
-          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-api/@v/v${{ inputs.version }}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@v${{ inputs.version }}" || true
-          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-impl/@v/v${{ inputs.version }}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@v${{ inputs.version }}" || true
+          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-api/@v/${VERSION#v}.info" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@$VERSION" || true
+          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-impl/@v/${VERSION#v}.info" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@$VERSION" || true
