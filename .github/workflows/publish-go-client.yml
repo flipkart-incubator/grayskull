@@ -87,27 +87,29 @@ jobs:
         working-directory: clients/go/client-impl
         run: go build -v ./...
       
-      - name: Create and push tag
+      - name: Create and push tags
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "go-${{ inputs.version }}" -m "Release Go client ${{ inputs.version }}"
-          git push origin "go-${{ inputs.version }}"
+          git tag -a "client-api/${{ inputs.version }}" -m "Release client-api ${{ inputs.version }}"
+          git tag -a "client-impl/${{ inputs.version }}" -m "Release client-impl ${{ inputs.version }}"
+          git push origin "client-api/${{ inputs.version }}"
+          git push origin "client-impl/${{ inputs.version }}"
       
-      - name: Create GitHub Release
+      - name: Create GitHub Release - client-api
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: go-${{ inputs.version }}
-          release_name: Go Client ${{ inputs.version }}
+          tag_name: client-api/${{ inputs.version }}
+          release_name: Client API ${{ inputs.version }}
           body: |
-            ## Grayskull Go Client ${{ inputs.version }}
+            ## Grayskull Client API ${{ inputs.version }}
             
             ### Installation
             
             ```bash
-            go get github.com/flipkart-incubator/grayskull@go-${{ inputs.version }}
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-api@client-api/${{ inputs.version }}
             ```
             
             ### Usage
@@ -115,12 +117,36 @@ jobs:
             ```go
             import "github.com/flipkart-incubator/grayskull/clients/go/client-api"
             ```
+          draft: false
+          prerelease: false
+      
+      - name: Create GitHub Release - client-impl
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: client-impl/${{ inputs.version }}
+          release_name: Client Implementation ${{ inputs.version }}
+          body: |
+            ## Grayskull Client Implementation ${{ inputs.version }}
             
-            See the [README](https://github.com/flipkart-incubator/grayskull/tree/main/clients/go) for more details.
+            ### Installation
+            
+            ```bash
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-impl@client-impl/${{ inputs.version }}
+            ```
+            
+            ### Usage
+            
+            ```go
+            import "github.com/flipkart-incubator/grayskull/clients/go/client-impl"
+            ```
           draft: false
           prerelease: false
       
       - name: Trigger GOPROXY update
         run: |
-          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/@v/go-${{ inputs.version }}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull@go-${{ inputs.version }}" || true
+          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-api/@v/client-api-${{ inputs.version }}.info" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@client-api-${{ inputs.version }}" || true
+          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-impl/@v/client-impl-${{ inputs.version }}.info" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@client-impl-${{ inputs.version }}" || true
