@@ -28,8 +28,6 @@ jobs:
           cache-dependency-path: |
             clients/go/client-api/go.sum
             clients/go/client-impl/go.sum
-            clients/go/test-service/go.sum
-            clients/go/test-service/client/go.sum
       
       - name: Validate version format
         run: |
@@ -53,28 +51,12 @@ jobs:
         working-directory: clients/go/client-impl
         run: go mod download
       
-      - name: Download dependencies - test-service
-        working-directory: clients/go/test-service
-        run: go mod download
-      
-      - name: Download dependencies - test-service client
-        working-directory: clients/go/test-service/client
-        run: go mod download
-      
       - name: Run tests
         working-directory: clients/go/client-api
         run: go test -v ./...
       
       - name: Run tests - client-impl
         working-directory: clients/go/client-impl
-        run: go test -v ./...
-      
-      - name: Run tests - test-service
-        working-directory: clients/go/test-service
-        run: go test -v ./...
-      
-      - name: Run tests - test-service client
-        working-directory: clients/go/test-service/client
         run: go test -v ./...
       
       - name: Verify module
@@ -97,40 +79,12 @@ jobs:
             exit 1
           fi
       
-      - name: Verify module - test-service
-        working-directory: clients/go/test-service
-        run: |
-          go mod verify
-          go mod tidy
-          if [ -n "$(git status --porcelain go.mod go.sum)" ]; then
-            echo "Error: go.mod or go.sum has uncommitted changes after go mod tidy"
-            exit 1
-          fi
-      
-      - name: Verify module - test-service client
-        working-directory: clients/go/test-service/client
-        run: |
-          go mod verify
-          go mod tidy
-          if [ -n "$(git status --porcelain go.mod go.sum)" ]; then
-            echo "Error: go.mod or go.sum has uncommitted changes after go mod tidy"
-            exit 1
-          fi
-      
       - name: Build
         working-directory: clients/go/client-api
         run: go build -v ./...
       
       - name: Build - client-impl
         working-directory: clients/go/client-impl
-        run: go build -v ./...
-      
-      - name: Build - test-service
-        working-directory: clients/go/test-service
-        run: go build -v ./...
-      
-      - name: Build - test-service client
-        working-directory: clients/go/test-service/client
         run: go build -v ./...
       
       - name: Create and push tag
