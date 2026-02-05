@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., v1.0.0)'
+        description: 'Version to publish (e.g., v0.1.0)'
         required: true
         type: string
 
@@ -25,7 +25,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
-          cache-dependency-path: clients/go/go.sum
+          cache-dependency-path: |
+            clients/go/client-api/go.sum
+            clients/go/client-impl/go.sum
       
       - name: Validate version format
         run: |
@@ -36,21 +38,42 @@ jobs:
       
       - name: Check if tag exists
         run: |
-          if git rev-parse "go-${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "Error: Tag go-${{ inputs.version }} already exists"
-            exit 1
-          fi
+          for module in clients/go/client-api clients/go/client-impl; do
+            tag="${module}/v${{ inputs.version }}"
+            if git rev-parse "$tag" >/dev/null 2>&1; then
+              echo "Error: Tag $tag already exists"
+              exit 1
+            fi
+          done
       
       - name: Download dependencies
-        working-directory: clients/go
+        working-directory: clients/go/client-api
+        run: go mod download
+      
+      - name: Download dependencies - client-impl
+        working-directory: clients/go/client-impl
         run: go mod download
       
       - name: Run tests
-        working-directory: clients/go
+        working-directory: clients/go/client-api
+        run: go test -v ./...
+      
+      - name: Run tests - client-impl
+        working-directory: clients/go/client-impl
         run: go test -v ./...
       
       - name: Verify module
-        working-directory: clients/go
+        working-directory: clients/go/client-api
+        run: |
+          go mod verify
+          go mod tidy
+          if [ -n "$(git status --porcelain go.mod go.sum)" ]; then
+            echo "Error: go.mod or go.sum has uncommitted changes after go mod tidy"
+            exit 1
+          fi
+      
+      - name: Verify module - client-impl
+        working-directory: clients/go/client-impl
         run: |
           go mod verify
           go mod tidy
@@ -60,30 +83,37 @@ jobs:
           fi
       
       - name: Build
-        working-directory: clients/go
+        working-directory: clients/go/client-api
         run: go build -v ./...
       
-      - name: Create and push tag
+      - name: Build - client-impl
+        working-directory: clients/go/client-impl
+        run: go build -v ./...
+      
+      - name: Create and push tags
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "go-${{ inputs.version }}" -m "Release Go client ${{ inputs.version }}"
-          git push origin "go-${{ inputs.version }}"
+          for module in clients/go/client-api clients/go/client-impl; do
+            tag="${module}/v${{ inputs.version }}"
+            git tag -a "$tag" -m "Release Go client ${{ inputs.version }} ($module)"
+            git push origin "$tag"
+          done
       
-      - name: Create GitHub Release
+      - name: Create GitHub Release - client-api
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: go-${{ inputs.version }}
-          release_name: Go Client ${{ inputs.version }}
+          tag_name: clients/go/client-api/v${{ inputs.version }}
+          release_name: Client API ${{ inputs.version }}
           body: |
-            ## Grayskull Go Client ${{ inputs.version }}
+            ## Grayskull Client API ${{ inputs.version }}
             
             ### Installation
             
             ```bash
-            go get github.com/flipkart-incubator/grayskull@go-${{ inputs.version }}
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-api@v${{ inputs.version }}
             ```
             
             ### Usage
@@ -91,12 +121,36 @@ jobs:
             ```go
             import "github.com/flipkart-incubator/grayskull/clients/go/client-api"
             ```
+          draft: false
+          prerelease: false
+      
+      - name: Create GitHub Release - client-impl
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: clients/go/client-impl/v${{ inputs.version }}
+          release_name: Client Implementation ${{ inputs.version }}
+          body: |
+            ## Grayskull Client Implementation ${{ inputs.version }}
             
-            See the [README](https://github.com/flipkart-incubator/grayskull/tree/main/clients/go) for more details.
+            ### Installation
+            
+            ```bash
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-impl@v${{ inputs.version }}
+            ```
+            
+            ### Usage
+            
+            ```go
+            import "github.com/flipkart-incubator/grayskull/clients/go/client-impl"
+            ```
           draft: false
           prerelease: false
       
       - name: Trigger GOPROXY update
         run: |
-          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/@v/go-${{ inputs.version }}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull@go-${{ inputs.version }}" || true
+          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-api/@v/v${{ inputs.version }}.info" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@v${{ inputs.version }}" || true
+          curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-impl/@v/v${{ inputs.version }}.info" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@v${{ inputs.version }}" || true
