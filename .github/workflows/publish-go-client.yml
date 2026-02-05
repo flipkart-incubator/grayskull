@@ -4,7 +4,7 @@
 
 name: Publish Go Client
 
-on: 
+on:
   workflow_dispatch:
     inputs:
       version:
@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -28,7 +28,7 @@ jobs:
           cache-dependency-path: |
             clients/go/client-api/go.sum
             clients/go/client-impl/go.sum
-      
+
       - name: Validate version format
         run: |
           VERSION="${{ inputs.version }}"
@@ -43,7 +43,7 @@ jobs:
             fi
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-      
+
       - name: Check if tag exists
         run: |
           for module in clients/go/client-api clients/go/client-impl; do
@@ -53,23 +53,23 @@ jobs:
               exit 1
             fi
           done
-      
+
       - name: Download dependencies
         working-directory: clients/go/client-api
         run: go mod download
-      
+
       - name: Download dependencies - client-impl
         working-directory: clients/go/client-impl
         run: go mod download
-      
+
       - name: Run tests
         working-directory: clients/go/client-api
         run: go test -v ./...
-      
+
       - name: Run tests - client-impl
         working-directory: clients/go/client-impl
         run: go test -v ./...
-      
+
       - name: Verify module
         working-directory: clients/go/client-api
         run: |
@@ -79,7 +79,7 @@ jobs:
             echo "Error: go.mod or go.sum has uncommitted changes after go mod tidy"
             exit 1
           fi
-      
+
       - name: Verify module - client-impl
         working-directory: clients/go/client-impl
         run: |
@@ -89,15 +89,15 @@ jobs:
             echo "Error: go.mod or go.sum has uncommitted changes after go mod tidy"
             exit 1
           fi
-      
+
       - name: Build
         working-directory: clients/go/client-api
         run: go build -v ./...
-      
+
       - name: Build - client-impl
         working-directory: clients/go/client-impl
         run: go build -v ./...
-      
+
       - name: Create and push tags
         run: |
           git config user.name "github-actions[bot]"
@@ -107,21 +107,21 @@ jobs:
             git tag -a "$tag" -m "Release Go client $VERSION ($module)"
             git push origin "$tag"
           done
-      
+
       - name: Create GitHub Release - client-api
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: clients/go/client-api/$VERSION
-          release_name: Client API $VERSION
+          tag_name: clients/go/client-api/${{ env.VERSION }}
+          release_name: Client API ${{ env.VERSION }}
           body: |
-            ## Grayskull Client API $VERSION
+            ## Grayskull Client API ${{ env.VERSION }}
             
             ### Installation
             
             ```bash
-            go get github.com/flipkart-incubator/grayskull/clients/go/client-api@$VERSION
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-api@${{ env.VERSION }}
             ```
             
             ### Usage
@@ -131,21 +131,21 @@ jobs:
             ```
           draft: false
           prerelease: false
-      
+
       - name: Create GitHub Release - client-impl
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: clients/go/client-impl/$VERSION
-          release_name: Client Implementation $VERSION
+          tag_name: clients/go/client-impl/${{ env.VERSION }}
+          release_name: Client Implementation ${{ env.VERSION }}
           body: |
-            ## Grayskull Client Implementation $VERSION
+            ## Grayskull Client Implementation ${{ env.VERSION }}
             
             ### Installation
             
             ```bash
-            go get github.com/flipkart-incubator/grayskull/clients/go/client-impl@$VERSION
+            go get github.com/flipkart-incubator/grayskull/clients/go/client-impl@${{ env.VERSION }}
             ```
             
             ### Usage
@@ -155,10 +155,11 @@ jobs:
             ```
           draft: false
           prerelease: false
-      
+
       - name: Trigger GOPROXY update
         run: |
+          VERSION="${{ env.VERSION }}"
           curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-api/@v/${VERSION#v}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@$VERSION" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@${{ env.VERSION }}" || true
           curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-impl/@v/${VERSION#v}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@$VERSION" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@${{ env.VERSION }}" || true
