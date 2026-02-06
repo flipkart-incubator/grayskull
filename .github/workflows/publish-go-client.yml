@@ -160,6 +160,6 @@ jobs:
         run: |
           VERSION="${{ env.VERSION }}"
           curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-api/@v/${VERSION#v}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@${{ env.VERSION }}" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-api@$VERSION" || true
           curl -f "https://proxy.golang.org/github.com/flipkart-incubator/grayskull/clients/go/client-impl/@v/${VERSION#v}.info" || true
-          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@${{ env.VERSION }}" || true
+          curl -f "https://sum.golang.org/lookup/github.com/flipkart-incubator/grayskull/clients/go/client-impl@$VERSION" || true
