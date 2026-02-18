@@ -163,6 +163,13 @@
                 <version>3.5.3</version>
                 <configuration>
                     <argLine>@{jacocoArgLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+                    <!-- required by latest github action. testcontainers docker api version should be 1.44-->
+                    <systemProperties>
+                        <property>
+                            <name>api.version</name>
+                            <value>1.44</value>
+                        </property>
+                    </systemProperties>
                 </configuration>
             </plugin>
             <plugin>
