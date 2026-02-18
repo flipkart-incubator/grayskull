@@ -18,10 +18,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static com.flipkart.grayskull.audit.AuditConstants.*;
 import static com.flipkart.grayskull.audit.utils.SanitizingObjectMapper.MASK_OBJECT_MAPPER;
@@ -80,8 +77,9 @@ public class AuditAspect {
             String resourceName = extractResourceName(result, arguments);
             Integer resourceVersion = extractResourceVersion(audit.action(), result);
 
-            Map<String, String> metadata = buildMetadata(arguments, result);
-            auditMetadataEnhancers.forEach(plugin -> metadata.putAll(plugin.getAdditionalMetadata()));
+            Map<String, String> metadata = new HashMap<>();
+            auditMetadataEnhancers.stream().map(AuditMetadataEnhancer::getAdditionalMetadata).filter(Objects::nonNull).forEach(metadata::putAll);
+            metadata.putAll(buildMetadata(arguments, result));
 
             AuditEntryEntity entry = AuditEntryEntity.builder()
                     .projectId(projectId)
