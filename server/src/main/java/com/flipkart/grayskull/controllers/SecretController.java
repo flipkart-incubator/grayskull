@@ -2,6 +2,7 @@ package com.flipkart.grayskull.controllers;
 
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
@@ -24,10 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 @RequestMapping("/v1/projects/{projectId}/secrets")
@@ -39,6 +37,7 @@ public class SecretController {
     private final AsyncAuditLogger asyncAuditLogger;
     private final RequestUtils requestUtils;
     private final List<MetadataValidator> metadataValidators;
+    private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -80,6 +79,7 @@ public class SecretController {
             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
         Map<String, String> auditMetadata = new HashMap<>();
+        auditMetadataEnhancers.stream().map(AuditMetadataEnhancer::getAdditionalMetadata).filter(Objects::nonNull).forEach(auditMetadata::putAll);
         auditMetadata.put("publicPart", response.getPublicPart());
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         String actorName = authentication.getActor();
@@ -134,6 +134,7 @@ public class SecretController {
             @RequestParam(name = "state", required = false) Optional<LifecycleState> state) {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         Map<String, String> auditMetadata = new HashMap<>();
+        auditMetadataEnhancers.stream().map(AuditMetadataEnhancer::getAdditionalMetadata).filter(Objects::nonNull).forEach(auditMetadata::putAll);
         auditMetadata.put("publicPart", response.getPublicPart());
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         String actorName = authentication.getActor();
