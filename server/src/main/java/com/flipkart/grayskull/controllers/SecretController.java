@@ -2,6 +2,7 @@ package com.flipkart.grayskull.controllers;
 
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
@@ -39,6 +40,7 @@ public class SecretController {
     private final AsyncAuditLogger asyncAuditLogger;
     private final RequestUtils requestUtils;
     private final List<MetadataValidator> metadataValidators;
+    private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -81,6 +83,7 @@ public class SecretController {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
+        auditMetadataEnhancers.forEach(plugin -> auditMetadata.putAll(plugin.getAdditionalMetadata()));
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         String actorName = authentication.getActor();
         String userId = authentication.getName();
@@ -135,6 +138,7 @@ public class SecretController {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadata.put("publicPart", response.getPublicPart());
+        auditMetadataEnhancers.forEach(plugin -> auditMetadata.putAll(plugin.getAdditionalMetadata()));
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         String actorName = authentication.getActor();
         String userId = authentication.getName();

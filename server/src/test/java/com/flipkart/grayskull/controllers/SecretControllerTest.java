@@ -2,6 +2,7 @@ package com.flipkart.grayskull.controllers;
 
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -36,12 +37,13 @@ class SecretControllerTest {
 
     private final RequestUtils requestUtils = mock(RequestUtils.class);
     private final List<MetadataValidator> plugins = new ArrayList<>();
+    private final List<AuditMetadataEnhancer> auditMetadataEnhancers = new ArrayList<>();
 
     private SecretController secretController;
 
     @BeforeEach
     void setUp() {
-        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins);
+        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins, auditMetadataEnhancers);
         SecurityContextHolder.setContext(new SecurityContextImpl(new GrayskullAuthentication("user", "actor-name")));
     }
 

@@ -2,6 +2,7 @@ package com.flipkart.grayskull.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
+import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
@@ -18,6 +19,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -44,6 +46,7 @@ public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
     private final RequestUtils requestUtils;
+    private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
 
     /**
      * Advice that runs after an audited method returns successfully.
@@ -78,6 +81,7 @@ public class AuditAspect {
             Integer resourceVersion = extractResourceVersion(audit.action(), result);
 
             Map<String, String> metadata = buildMetadata(arguments, result);
+            auditMetadataEnhancers.forEach(plugin -> metadata.putAll(plugin.getAdditionalMetadata()));
 
             AuditEntryEntity entry = AuditEntryEntity.builder()
                     .projectId(projectId)
