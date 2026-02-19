@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * Generic data access interface for AuditEntry entities.
- * This interface defines the contract for persisting audit logs.
+ * This interface defines the contract for persisting and querying audit logs.
  */
 public interface AuditEntryRepository {
 
@@ -25,4 +25,30 @@ public interface AuditEntryRepository {
      * @return the saved audit entries; will never be null.
      */
     List<AuditEntry> saveAll(Iterable<AuditEntry> entities);
+
+    /**
+     * Finds audit entries by optional filters with pagination.
+     * All filter parameters are optional (can be null).
+     * 
+     * @param projectId Optional project ID filter
+     * @param resourceName Optional resource name filter
+     * @param resourceType Optional resource type filter
+     * @param action Optional action filter
+     * @param offset Pagination offset
+     * @param limit Pagination limit
+     * @return List of audit entries matching the filters
+     */
+    List<AuditEntry> findByFilters(String projectId, String resourceName, String resourceType, String action, int offset, int limit);
+
+    /**
+     * Counts audit entries matching the optional filters.
+     * All filter parameters are optional (can be null).
+     * 
+     * @param projectId Optional project ID filter
+     * @param resourceName Optional resource name filter
+     * @param resourceType Optional resource type filter
+     * @param action Optional action filter
+     * @return Count of audit entries matching the filters
+     */
+    long countByFilters(String projectId, String resourceName, String resourceType, String action);
 }
