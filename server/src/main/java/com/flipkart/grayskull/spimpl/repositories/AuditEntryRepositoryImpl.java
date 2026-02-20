@@ -30,4 +30,18 @@ public class AuditEntryRepositoryImpl implements AuditEntryRepository {
     public List<AuditEntry> saveAll(Iterable<AuditEntry> entries) {
         return mongoRepository.saveAll(Streamable.of(entries).map(auditEntryMapper::toEntity)).stream().map(AuditEntry.class::cast).toList();
     }
+
+    @Override
+    public List<AuditEntry> findByFilters(String projectId, String resourceName, String resourceType, String action, int offset, int limit) {
+
+        return mongoRepository.findByFilters(projectId, resourceName, resourceType, action, offset, limit)
+                .stream()
+                .map(AuditEntry.class::cast)
+                .toList();
+    }
+
+    @Override
+    public long countByFilters(String projectId, String resourceName, String resourceType, String action) {
+        return mongoRepository.countByFilters(projectId, resourceName, resourceType, action);
+    }
 }
