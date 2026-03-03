@@ -78,7 +78,10 @@ public class AuditAspect {
             Integer resourceVersion = extractResourceVersion(audit.action(), result);
 
             Map<String, String> metadata = new HashMap<>();
-            auditMetadataEnhancers.stream().map(AuditMetadataEnhancer::getAdditionalMetadata).filter(Objects::nonNull).forEach(metadata::putAll);
+            auditMetadataEnhancers.stream()
+                    .map(AuditMetadataEnhancer::getAdditionalMetadata)
+                    .filter(Objects::nonNull)
+                    .forEach(metadata::putAll);
             metadata.putAll(buildMetadata(arguments, result));
 
             AuditEntryEntity entry = AuditEntryEntity.builder()
