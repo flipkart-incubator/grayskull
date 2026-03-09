@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import org.springframework.data.util.Streamable;
 import org.springframework.stereotype.Repository;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,16 +34,16 @@ public class AuditEntryRepositoryImpl implements AuditEntryRepository {
     }
 
     @Override
-    public List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, int offset, int limit) {
+    public List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp, int offset, int limit) {
 
-        return mongoRepository.findByFilters(projectId, resourceName, resourceType, action, userType, offset, limit)
+        return mongoRepository.findByFilters(projectId, resourceName, resourceType, action, userType, afterTimestamp, offset, limit)
                 .stream()
                 .map(AuditEntry.class::cast)
                 .toList();
     }
 
     @Override
-    public long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType) {
-        return mongoRepository.countByFilters(projectId, resourceName, resourceType, action, userType);
+    public long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp) {
+        return mongoRepository.countByFilters(projectId, resourceName, resourceType, action, userType, afterTimestamp);
     }
 }

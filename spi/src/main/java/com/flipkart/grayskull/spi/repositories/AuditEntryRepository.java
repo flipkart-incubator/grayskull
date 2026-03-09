@@ -2,6 +2,7 @@ package com.flipkart.grayskull.spi.repositories;
 
 import com.flipkart.grayskull.spi.models.AuditEntry;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,11 +37,12 @@ public interface AuditEntryRepository {
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
      * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
+     * @param afterTimestamp Optional timestamp filter (entries after this time)
      * @param offset Pagination offset
      * @param limit Pagination limit
      * @return List of audit entries matching the filters
      */
-    List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, int offset, int limit);
+    List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp, int offset, int limit);
 
     /**
      * Counts audit entries matching the optional filters.
@@ -51,7 +53,8 @@ public interface AuditEntryRepository {
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
      * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
+     * @param afterTimestamp Optional timestamp filter (entries after this time)
      * @return Count of audit entries matching the filters
      */
-    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType);
+    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp);
 }

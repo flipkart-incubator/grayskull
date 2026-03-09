@@ -8,6 +8,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,9 +25,9 @@ public class AuditEntryMongoRepositoryImpl {
     private final MongoTemplate mongoTemplate;
     private final UserTypeConfiguration userTypeConfig;
 
-    public List<AuditEntryEntity> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, int offset, int limit) {
+    public List<AuditEntryEntity> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp, int offset, int limit) {
 
-        Query query = buildFilterQuery(projectId, resourceName, resourceType, action, userType);
+        Query query = buildFilterQuery(projectId, resourceName, resourceType, action, userType, afterTimestamp);
         query.with(Sort.by(Sort.Direction.DESC, "timestamp"));
         query.skip(offset);
         query.limit(limit);
@@ -34,9 +35,9 @@ public class AuditEntryMongoRepositoryImpl {
         return mongoTemplate.find(query, AuditEntryEntity.class);
     }
 
-    public long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType) {
+    public long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp) {
 
-        Query query = buildFilterQuery(projectId, resourceName, resourceType, action, userType);
+        Query query = buildFilterQuery(projectId, resourceName, resourceType, action, userType, afterTimestamp);
         return mongoTemplate.count(query, AuditEntryEntity.class);
     }
 
@@ -49,9 +50,10 @@ public class AuditEntryMongoRepositoryImpl {
      * @param resourceType Optional resource type
      * @param action Optional action
      * @param userType Optional user type string (e.g., "SERVICE", "HUMAN")
+     * @param afterTimestamp Optional timestamp filter (entries after this time)
      * @return MongoDB Query object with appropriate filters
      */
-    private Query buildFilterQuery(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType) {
+    private Query buildFilterQuery(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp) {
 
         Query query = new Query();
 
@@ -66,6 +68,9 @@ public class AuditEntryMongoRepositoryImpl {
                 query.addCriteria(Criteria.where("userId").regex("^" + prefix));
             }
         });
+        
+        // Add timestamp filter
+        afterTimestamp.ifPresent(date -> query.addCriteria(Criteria.where("timestamp").gt(date)));
 
         return query;
     }
@@ -80,7 +85,7 @@ public class AuditEntryMongoRepositoryImpl {
         return switch (userType) {
             case "SERVICE" -> userTypeConfig.getServiceUserPrefix();
             case "HUMAN" -> userTypeConfig.getHumanUserPrefix();
-            default -> null;  // Unknown user type - no filter applied
+            default -> null;
         };
     }
 }

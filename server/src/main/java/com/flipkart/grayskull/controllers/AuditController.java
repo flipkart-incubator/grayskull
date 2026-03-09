@@ -14,6 +14,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.util.Date;
 import java.util.Optional;
 
 /**
@@ -36,6 +38,7 @@ public class AuditController {
      * @param resourceType Optional resource type to filter audit entries (e.g., "SECRET", "PROJECT")
      * @param action Optional action to filter audit entries (e.g., CREATE_SECRET, READ_SECRET)
      * @param userType Optional user type filter (SERVICE or HUMAN)
+     * @param afterTimestamp Optional ISO-8601 timestamp (entries after this time)
      * @param offset Pagination offset (default: 0)
      * @param limit Pagination limit (default: 10, max: 100)
      * @return ResponseTemplate containing list of audit entries
@@ -49,10 +52,11 @@ public class AuditController {
             @RequestParam(name = "resourceType", required = false) @Size(max = 100) String resourceType,
             @RequestParam(name = "action", required = false) AuditAction action,
             @RequestParam(name = "userType", required = false) UserType userType,
+            @RequestParam(name = "afterTimestamp", required = false) String afterTimestamp,
             @RequestParam(name = "offset", defaultValue = "0") @Min(0) int offset,
             @RequestParam(name = "limit", defaultValue = "10") @Min(1) @Max(100) int limit) {
         
-        AuditEntriesResponse response = auditService.getAuditEntries(Optional.of(projectId), Optional.ofNullable(resourceName), Optional.ofNullable(resourceType), Optional.ofNullable(action), Optional.ofNullable(userType), offset, limit);
+        AuditEntriesResponse response = auditService.getAuditEntries(Optional.of(projectId), Optional.ofNullable(resourceName), Optional.ofNullable(resourceType), Optional.ofNullable(action), Optional.ofNullable(userType), parseTimestamp(afterTimestamp), offset, limit);
         
         return ResponseTemplate.success(response, "Successfully retrieved audit entries.");
     }
@@ -60,12 +64,14 @@ public class AuditController {
     /**
      * Retrieves audit entries across all projects with optional filtering.
      * Requires global admin permission.
+     * Supports time-range filtering via afterTimestamp for efficient querying.
      * 
      * @param projectId Optional project ID to filter audit entries
      * @param resourceName Optional resource name to filter audit entries
      * @param resourceType Optional resource type to filter audit entries (e.g., "SECRET", "PROJECT")
      * @param action Optional action to filter audit entries (e.g., CREATE_SECRET, READ_SECRET)
      * @param userType Optional user type filter (SERVICE or HUMAN)
+     * @param afterTimestamp Optional ISO-8601 timestamp (entries after this time)
      * @param offset Pagination offset (default: 0)
      * @param limit Pagination limit (default: 10, max: 100)
      * @return ResponseTemplate containing list of audit entries
@@ -79,12 +85,25 @@ public class AuditController {
             @RequestParam(name = "resourceType", required = false) @Size(max = 100) String resourceType,
             @RequestParam(name = "action", required = false) AuditAction action,
             @RequestParam(name = "userType", required = false) UserType userType,
+            @RequestParam(name = "afterTimestamp", required = false) String afterTimestamp,
             @RequestParam(name = "offset", defaultValue = "0") @Min(0) int offset,
             @RequestParam(name = "limit", defaultValue = "10") @Min(1) @Max(100) int limit) {
         
-        AuditEntriesResponse response = auditService.getAuditEntries(Optional.ofNullable(projectId), Optional.ofNullable(resourceName), Optional.ofNullable(resourceType), Optional.ofNullable(action), Optional.ofNullable(userType), offset, limit);
+        AuditEntriesResponse response = auditService.getAuditEntries(Optional.ofNullable(projectId), Optional.ofNullable(resourceName), Optional.ofNullable(resourceType), Optional.ofNullable(action), Optional.ofNullable(userType), parseTimestamp(afterTimestamp), offset, limit);
         
         return ResponseTemplate.success(response, "Successfully retrieved audit entries.");
+    }
+
+    /**
+     * Parses an ISO-8601 timestamp string to a Date object.
+     *
+     * @param timestamp ISO-8601 timestamp string
+     * @return Optional containing the parsed Date, or empty if timestamp is null
+     */
+    private Optional<Date> parseTimestamp(String timestamp) {
+        return Optional.ofNullable(timestamp)
+                .map(Instant::parse)
+                .map(Date::from);
     }
 
 }

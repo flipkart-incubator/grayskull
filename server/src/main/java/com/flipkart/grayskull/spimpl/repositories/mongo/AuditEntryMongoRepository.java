@@ -3,6 +3,7 @@ package com.flipkart.grayskull.spimpl.repositories.mongo;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,11 +21,12 @@ public interface AuditEntryMongoRepository extends MongoRepository<AuditEntryEnt
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
      * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
+     * @param afterTimestamp Optional timestamp filter (entries after this time)
      * @param offset Number of records to skip
      * @param limit Maximum number of records to return
      * @return List of matching audit entry entities
      */
-    List<AuditEntryEntity> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, int offset, int limit);
+    List<AuditEntryEntity> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp, int offset, int limit);
 
     /**
      * Counts audit entries matching the given filters.
@@ -34,8 +36,9 @@ public interface AuditEntryMongoRepository extends MongoRepository<AuditEntryEnt
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
      * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
+     * @param afterTimestamp Optional timestamp filter (entries after this time)
      * @return Count of matching audit entries
      */
-    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType);
+    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp);
 }
 
