@@ -1,5 +1,7 @@
 package com.flipkart.grayskull.service.impl;
 
+import com.flipkart.grayskull.audit.AuditAction;
+import com.flipkart.grayskull.audit.UserType;
 import com.flipkart.grayskull.models.dto.response.AuditEntriesResponse;
 import com.flipkart.grayskull.service.interfaces.AuditService;
 import com.flipkart.grayskull.spi.models.AuditEntry;
@@ -22,12 +24,15 @@ public class AuditServiceImpl implements AuditService {
     private final AuditEntryRepository auditEntryRepository;
 
     @Override
-    public AuditEntriesResponse getAuditEntries(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, int offset, int limit) {
+    public AuditEntriesResponse getAuditEntries(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<AuditAction> action, Optional<UserType> userType, int offset, int limit) {
         
-        List<AuditEntry> entries = auditEntryRepository.findByFilters(projectId, resourceName, resourceType, action, offset, limit);
-        long total = auditEntryRepository.countByFilters(projectId, resourceName, resourceType, action);
+        // Convert enum values to Strings for repository layer (SPI is framework-agnostic)
+        Optional<String> actionString = action.map(Enum::name);
+        Optional<String> userTypeString = userType.map(Enum::name);
+        
+        List<AuditEntry> entries = auditEntryRepository.findByFilters(projectId, resourceName, resourceType, actionString, userTypeString, offset, limit);
+        long total = auditEntryRepository.countByFilters(projectId, resourceName, resourceType, actionString, userTypeString);
 
         return new AuditEntriesResponse(entries, total);
     }
 }
-

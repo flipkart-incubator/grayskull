@@ -22,6 +22,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @CompoundIndex(name = "project_resource_timestamp_idx", def = "{'projectId': 1, 'resourceName': 1, 'timestamp': -1}")
 @CompoundIndex(name = "project_type_timestamp_idx", def = "{'projectId': 1, 'resourceType': 1, 'timestamp': -1}")
 @CompoundIndex(name = "project_action_timestamp_idx", def = "{'projectId': 1, 'action': 1, 'timestamp': -1}")
+@CompoundIndex(name = "project_user_timestamp_idx", def = "{'projectId': 1, 'userId': 1, 'timestamp': -1}")
 public class AuditEntryEntity extends AuditEntry {
 
     @Id

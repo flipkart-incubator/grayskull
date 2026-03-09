@@ -47,6 +47,10 @@ grayskull:
         actions:
           - "secrets.list"
           - "secrets.read.metadata"
+  audit:
+    user-types:
+      service-user-prefix: "service:"
+      human-user-prefix: "user:"
 
 
 management:

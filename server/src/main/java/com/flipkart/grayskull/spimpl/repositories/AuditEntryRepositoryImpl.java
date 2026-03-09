@@ -33,16 +33,16 @@ public class AuditEntryRepositoryImpl implements AuditEntryRepository {
     }
 
     @Override
-    public List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, int offset, int limit) {
+    public List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, int offset, int limit) {
 
-        return mongoRepository.findByFilters(projectId, resourceName, resourceType, action, offset, limit)
+        return mongoRepository.findByFilters(projectId, resourceName, resourceType, action, userType, offset, limit)
                 .stream()
                 .map(AuditEntry.class::cast)
                 .toList();
     }
 
     @Override
-    public long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action) {
-        return mongoRepository.countByFilters(projectId, resourceName, resourceType, action);
+    public long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType) {
+        return mongoRepository.countByFilters(projectId, resourceName, resourceType, action, userType);
     }
 }

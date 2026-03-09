@@ -35,11 +35,12 @@ public interface AuditEntryRepository {
      * @param resourceName Optional resource name filter
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
+     * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
      * @param offset Pagination offset
      * @param limit Pagination limit
      * @return List of audit entries matching the filters
      */
-    List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, int offset, int limit);
+    List<AuditEntry> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, int offset, int limit);
 
     /**
      * Counts audit entries matching the optional filters.
@@ -49,7 +50,8 @@ public interface AuditEntryRepository {
      * @param resourceName Optional resource name filter
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
+     * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
      * @return Count of audit entries matching the filters
      */
-    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action);
+    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType);
 }

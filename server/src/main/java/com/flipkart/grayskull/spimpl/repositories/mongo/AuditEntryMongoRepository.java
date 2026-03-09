@@ -19,11 +19,12 @@ public interface AuditEntryMongoRepository extends MongoRepository<AuditEntryEnt
      * @param resourceName Optional resource name filter
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
+     * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
      * @param offset Number of records to skip
      * @param limit Maximum number of records to return
      * @return List of matching audit entry entities
      */
-    List<AuditEntryEntity> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, int offset, int limit);
+    List<AuditEntryEntity> findByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, int offset, int limit);
 
     /**
      * Counts audit entries matching the given filters.
@@ -32,8 +33,9 @@ public interface AuditEntryMongoRepository extends MongoRepository<AuditEntryEnt
      * @param resourceName Optional resource name filter
      * @param resourceType Optional resource type filter
      * @param action Optional action filter
+     * @param userType Optional user type filter (e.g., "SERVICE", "HUMAN")
      * @return Count of matching audit entries
      */
-    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action);
+    long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType);
 }
 
