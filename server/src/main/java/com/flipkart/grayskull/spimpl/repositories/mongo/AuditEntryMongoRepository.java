@@ -6,6 +6,6 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 /**
  * MongoDB repository interface for AuditEntryEntity.
  */
-public interface AuditEntryMongoRepository extends MongoRepository<AuditEntryEntity, String> {
+public interface AuditEntryMongoRepository extends MongoRepository<AuditEntryEntity, String>, AuditEntryMongoRepositoryCustom {
 }
 
