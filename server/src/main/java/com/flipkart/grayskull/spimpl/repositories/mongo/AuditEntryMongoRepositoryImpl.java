@@ -20,7 +20,7 @@ import java.util.Optional;
  * AuditEntryMongoRepository's custom methods based on naming convention (*Impl).
  */
 @RequiredArgsConstructor
-public class AuditEntryMongoRepositoryImpl {
+public class AuditEntryMongoRepositoryImpl implements AuditEntryMongoRepositoryCustom {
 
     private final MongoTemplate mongoTemplate;
     private final UserTypeConfiguration userTypeConfig;
