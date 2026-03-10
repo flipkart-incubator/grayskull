@@ -11,6 +11,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * MongoDB-specific implementation of custom AuditEntry queries.
@@ -65,7 +66,7 @@ public class AuditEntryMongoRepositoryImpl implements AuditEntryMongoRepositoryC
         userType.ifPresent(typeString -> {
             String prefix = getUserTypePrefix(typeString);
             if (prefix != null) {
-                query.addCriteria(Criteria.where("userId").regex("^" + prefix));
+                query.addCriteria(Criteria.where("userId").regex("^" + Pattern.quote(prefix)));
             }
         });
         

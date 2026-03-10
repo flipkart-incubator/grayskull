@@ -287,6 +287,480 @@ class AuditControllerTest {
         }
     }
 
+    @Nested
+    @DisplayName("getAllAudits Tests")
+    class GetAllAuditsTests {
+
+        @Test
+        @DisplayName("Should retrieve all audit entries with all filters")
+        void shouldRetrieveAllAuditEntriesWithAllFilters() {
+            // Arrange
+            String afterTimestamp = "2026-03-09T08:00:00Z";
+            Date expectedDate = Date.from(Instant.parse(afterTimestamp));
+            List<AuditEntry> entries = List.of(
+                    createAuditEntry("entry1", 1),
+                    createAuditEntry("entry2", 2)
+            );
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 2L);
+
+            when(auditService.getAuditEntries(
+                    Optional.of(PROJECT_ID),
+                    Optional.of(RESOURCE_NAME),
+                    Optional.of(RESOURCE_TYPE),
+                    Optional.of(ACTION),
+                    Optional.of(UserType.SERVICE),
+                    Optional.of(expectedDate),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    PROJECT_ID, RESOURCE_NAME, RESOURCE_TYPE, ACTION, UserType.SERVICE, afterTimestamp, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            assertThat(result.getData().getEntries()).hasSize(2);
+            assertThat(result.getData().getTotal()).isEqualTo(2L);
+            assertThat(result.getMessage()).isEqualTo("Successfully retrieved audit entries.");
+
+            verify(auditService).getAuditEntries(
+                    Optional.of(PROJECT_ID),
+                    Optional.of(RESOURCE_NAME),
+                    Optional.of(RESOURCE_TYPE),
+                    Optional.of(ACTION),
+                    Optional.of(UserType.SERVICE),
+                    Optional.of(expectedDate),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should retrieve all audit entries without any filters")
+        void shouldRetrieveAllAuditEntriesWithoutFilters() {
+            // Arrange
+            List<AuditEntry> entries = List.of(
+                    createAuditEntry("entry1", 1),
+                    createAuditEntry("entry2", 2),
+                    createAuditEntry("entry3", 3)
+            );
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 3L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, null, null, null, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            assertThat(result.getData().getEntries()).hasSize(3);
+            assertThat(result.getData().getTotal()).isEqualTo(3L);
+
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should retrieve audit entries with projectId filter only")
+        void shouldRetrieveAuditEntriesWithProjectIdOnly() {
+            // Arrange
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.of(PROJECT_ID),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    PROJECT_ID, null, null, null, null, null, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.of(PROJECT_ID),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should retrieve audit entries with resource filters")
+        void shouldRetrieveAuditEntriesWithResourceFilters() {
+            // Arrange
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.of(RESOURCE_NAME),
+                    Optional.of(RESOURCE_TYPE),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, RESOURCE_NAME, RESOURCE_TYPE, null, null, null, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.of(RESOURCE_NAME),
+                    Optional.of(RESOURCE_TYPE),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should retrieve audit entries with action filter")
+        void shouldRetrieveAuditEntriesWithActionFilter() {
+            // Arrange
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(ACTION),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, ACTION, null, null, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(ACTION),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should filter audit entries by service user type")
+        void shouldFilterAuditEntriesByServiceUserType() {
+            // Arrange
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(UserType.SERVICE),
+                    Optional.empty(),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, null, UserType.SERVICE, null, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(UserType.SERVICE),
+                    Optional.empty(),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should filter audit entries by human user type")
+        void shouldFilterAuditEntriesByHumanUserType() {
+            // Arrange
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(UserType.HUMAN),
+                    Optional.empty(),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, null, UserType.HUMAN, null, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(UserType.HUMAN),
+                    Optional.empty(),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should filter audit entries with afterTimestamp")
+        void shouldFilterAuditEntriesWithAfterTimestamp() {
+            // Arrange
+            String afterTimestamp = "2026-03-09T08:00:00Z";
+            Date expectedDate = Date.from(Instant.parse(afterTimestamp));
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(expectedDate),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, null, null, afterTimestamp, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(expectedDate),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should return empty list when no audit entries found")
+        void shouldReturnEmptyListWhenNoAuditEntriesFound() {
+            // Arrange
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(Collections.emptyList(), 0L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, null, null, null, 0, 10
+            );
+
+            // Assert
+            assertThat(result.getData().getEntries()).isEmpty();
+            assertThat(result.getData().getTotal()).isZero();
+
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    10
+            );
+        }
+
+        @Test
+        @DisplayName("Should handle pagination with custom offset and limit")
+        void shouldHandlePaginationWithCustomOffsetAndLimit() {
+            // Arrange
+            List<AuditEntry> entries = List.of(
+                    createAuditEntry("entry11", 11),
+                    createAuditEntry("entry12", 12),
+                    createAuditEntry("entry13", 13)
+            );
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 100L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    10,
+                    25
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, null, null, null, 10, 25
+            );
+
+            // Assert
+            assertThat(result.getData().getEntries()).hasSize(3);
+            assertThat(result.getData().getTotal()).isEqualTo(100L);
+
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    10,
+                    25
+            );
+        }
+
+        @Test
+        @DisplayName("Should handle maximum allowed limit")
+        void shouldHandleMaximumAllowedLimit() {
+            // Arrange
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    100
+            )).thenReturn(expectedResponse);
+
+            // Act - Using maximum limit of 100
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    null, null, null, null, null, null, 0, 100
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    0,
+                    100
+            );
+        }
+
+        @Test
+        @DisplayName("Should combine multiple filters correctly")
+        void shouldCombineMultipleFiltersCorrectly() {
+            // Arrange
+            List<AuditEntry> entries = List.of(createAuditEntry("entry1", 1));
+            AuditEntriesResponse expectedResponse = new AuditEntriesResponse(entries, 1L);
+
+            when(auditService.getAuditEntries(
+                    Optional.of(PROJECT_ID),
+                    Optional.empty(),
+                    Optional.of(RESOURCE_TYPE),
+                    Optional.of(ACTION),
+                    Optional.empty(),
+                    Optional.empty(),
+                    5,
+                    20
+            )).thenReturn(expectedResponse);
+
+            // Act
+            ResponseTemplate<AuditEntriesResponse> result = auditController.getAllAudits(
+                    PROJECT_ID, null, RESOURCE_TYPE, ACTION, null, null, 5, 20
+            );
+
+            // Assert
+            assertThat(result.getData()).isEqualTo(expectedResponse);
+            verify(auditService).getAuditEntries(
+                    Optional.of(PROJECT_ID),
+                    Optional.empty(),
+                    Optional.of(RESOURCE_TYPE),
+                    Optional.of(ACTION),
+                    Optional.empty(),
+                    Optional.empty(),
+                    5,
+                    20
+            );
+        }
+    }
+
     /**
      * Helper method to create test audit entries
      */
