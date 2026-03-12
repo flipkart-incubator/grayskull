@@ -14,6 +14,7 @@ import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -76,11 +77,12 @@ public class SecretController {
     @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, #secretName, 'secrets.read.value')")
     public ResponseTemplate<SecretDataResponse> readSecretValue(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
-            @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
+            @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
+            HttpServletRequest request) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadataEnhancers.stream()
-                .map(AuditMetadataEnhancer::getAdditionalMetadata)
+                .map(enhancer -> enhancer.getAdditionalMetadata(request))
                 .filter(Objects::nonNull)
                 .forEach(auditMetadata::putAll);
         auditMetadata.put("publicPart", response.getPublicPart());
@@ -134,11 +136,12 @@ public class SecretController {
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
             @PathVariable("version") @Min(1) int version,
-            @RequestParam(name = "state", required = false) Optional<LifecycleState> state) {
+            @RequestParam(name = "state", required = false) Optional<LifecycleState> state,
+            HttpServletRequest request) {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadataEnhancers.stream()
-                .map(AuditMetadataEnhancer::getAdditionalMetadata)
+                .map(enhancer -> enhancer.getAdditionalMetadata(request))
                 .filter(Objects::nonNull)
                 .forEach(auditMetadata::putAll);
         auditMetadata.put("publicPart", response.getPublicPart());

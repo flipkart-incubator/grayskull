@@ -9,15 +9,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RequestIdAuditEnhancerTest {
 
+    private final RequestIdAuditEnhancer enhancer = new RequestIdAuditEnhancer();
+
     @Test
     void getAdditionalMetadata_WhenHeaderIsNull_ShouldReturnNull() {
         // Arrange
         MockHttpServletRequest request = new MockHttpServletRequest();
 
-        RequestIdAuditEnhancer enhancer = new RequestIdAuditEnhancer(request);
-
         // Act
-        Map<String, String> result = enhancer.getAdditionalMetadata();
+        Map<String, String> result = enhancer.getAdditionalMetadata(request);
 
         // Assert
         assertNull(result);
@@ -29,10 +29,8 @@ class RequestIdAuditEnhancerTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Request-Id", "req-123");
 
-        RequestIdAuditEnhancer enhancer = new RequestIdAuditEnhancer(request);
-
         // Act
-        Map<String, String> result = enhancer.getAdditionalMetadata();
+        Map<String, String> result = enhancer.getAdditionalMetadata(request);
 
         // Assert
         assertNotNull(result);
@@ -45,10 +43,8 @@ class RequestIdAuditEnhancerTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Request-Id", "");
 
-        RequestIdAuditEnhancer enhancer = new RequestIdAuditEnhancer(request);
-
         // Act
-        Map<String, String> result = enhancer.getAdditionalMetadata();
+        Map<String, String> result = enhancer.getAdditionalMetadata(request);
 
         // Assert
         assertNull(result);

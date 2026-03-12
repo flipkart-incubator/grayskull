@@ -17,6 +17,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 
@@ -59,12 +60,13 @@ class SecretControllerTest {
         // Arrange
         SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
 
         when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME)).thenReturn(expectedResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
         // Act
-        var result = secretController.readSecretValue(PROJECT_ID, SECRET_NAME);
+        var result = secretController.readSecretValue(PROJECT_ID, SECRET_NAME, request);
 
         // Assert
         assertThat(result.getData()).isEqualTo(expectedResponse);
@@ -87,12 +89,13 @@ class SecretControllerTest {
         // Arrange
         SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
 
         when(secretService.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty())).thenReturn(expectedResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
         // Act
-        var result = secretController.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty());
+        var result = secretController.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty(), request);
 
         // Assert
         assertThat(result.getData()).isEqualTo(expectedResponse);

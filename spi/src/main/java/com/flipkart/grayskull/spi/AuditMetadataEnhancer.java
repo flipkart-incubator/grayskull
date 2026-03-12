@@ -1,5 +1,7 @@
 package com.flipkart.grayskull.spi;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import java.util.Map;
 
 /**
@@ -18,5 +20,5 @@ public interface AuditMetadataEnhancer {
      *
      * @return A map of additional metadata.
      */
-    Map<String, String> getAdditionalMetadata();
+    Map<String, String> getAdditionalMetadata(HttpServletRequest request);
 }
