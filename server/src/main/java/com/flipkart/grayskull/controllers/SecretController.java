@@ -2,6 +2,7 @@ package com.flipkart.grayskull.controllers;
 
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
@@ -13,6 +14,7 @@ import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -24,10 +26,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 @RequestMapping("/v1/projects/{projectId}/secrets")
@@ -39,6 +38,7 @@ public class SecretController {
     private final AsyncAuditLogger asyncAuditLogger;
     private final RequestUtils requestUtils;
     private final List<MetadataValidator> metadataValidators;
+    private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -77,9 +77,14 @@ public class SecretController {
     @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, #secretName, 'secrets.read.value')")
     public ResponseTemplate<SecretDataResponse> readSecretValue(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
-            @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
+            @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
+            HttpServletRequest request) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
         Map<String, String> auditMetadata = new HashMap<>();
+        auditMetadataEnhancers.stream()
+                .map(enhancer -> enhancer.getAdditionalMetadata(request))
+                .filter(Objects::nonNull)
+                .forEach(auditMetadata::putAll);
         auditMetadata.put("publicPart", response.getPublicPart());
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         String actorName = authentication.getActor();
@@ -131,9 +136,14 @@ public class SecretController {
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
             @PathVariable("version") @Min(1) int version,
-            @RequestParam(name = "state", required = false) Optional<LifecycleState> state) {
+            @RequestParam(name = "state", required = false) Optional<LifecycleState> state,
+            HttpServletRequest request) {
         SecretDataVersionResponse response = secretService.getSecretDataVersion(projectId, secretName, version, state);
         Map<String, String> auditMetadata = new HashMap<>();
+        auditMetadataEnhancers.stream()
+                .map(enhancer -> enhancer.getAdditionalMetadata(request))
+                .filter(Objects::nonNull)
+                .forEach(auditMetadata::putAll);
         auditMetadata.put("publicPart", response.getPublicPart());
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         String actorName = authentication.getActor();

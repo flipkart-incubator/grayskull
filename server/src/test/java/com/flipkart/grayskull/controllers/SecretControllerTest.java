@@ -2,6 +2,7 @@ package com.flipkart.grayskull.controllers;
 
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.AuditConstants;
+import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 
@@ -36,12 +38,13 @@ class SecretControllerTest {
 
     private final RequestUtils requestUtils = mock(RequestUtils.class);
     private final List<MetadataValidator> plugins = new ArrayList<>();
+    private final List<AuditMetadataEnhancer> auditMetadataEnhancers = new ArrayList<>();
 
     private SecretController secretController;
 
     @BeforeEach
     void setUp() {
-        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins);
+        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins, auditMetadataEnhancers);
         SecurityContextHolder.setContext(new SecurityContextImpl(new GrayskullAuthentication("user", "actor-name")));
     }
 
@@ -57,12 +60,13 @@ class SecretControllerTest {
         // Arrange
         SecretDataResponse expectedResponse = SecretDataResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
 
         when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME)).thenReturn(expectedResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
         // Act
-        var result = secretController.readSecretValue(PROJECT_ID, SECRET_NAME);
+        var result = secretController.readSecretValue(PROJECT_ID, SECRET_NAME, request);
 
         // Assert
         assertThat(result.getData()).isEqualTo(expectedResponse);
@@ -85,12 +89,13 @@ class SecretControllerTest {
         // Arrange
         SecretDataVersionResponse expectedResponse = SecretDataVersionResponse.builder().publicPart(publicPart).dataVersion(5).build();
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "ip1");
+        MockHttpServletRequest request = new MockHttpServletRequest();
 
         when(secretService.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty())).thenReturn(expectedResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
         // Act
-        var result = secretController.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty());
+        var result = secretController.getSecretDataVersion(PROJECT_ID, SECRET_NAME, 5, Optional.empty(), request);
 
         // Assert
         assertThat(result.getData()).isEqualTo(expectedResponse);
