@@ -7,11 +7,14 @@ import com.flipkart.grayskull.entities.ProjectEntity;
 import com.flipkart.grayskull.exception.BadRequestException;
 import com.flipkart.grayskull.exception.NotFoundException;
 import com.flipkart.grayskull.mappers.SecretMapper;
+import com.flipkart.grayskull.models.dto.request.BulkPollSecretEntry;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
+import com.flipkart.grayskull.models.dto.response.BulkPollResponse;
+import com.flipkart.grayskull.models.dto.response.BulkPollUpdatedSecret;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -32,8 +35,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -135,6 +142,52 @@ public class SecretServiceImpl implements SecretService {
         secretEncryptionUtil.decryptSecretData(secretData);
 
         return secretMapper.toSecretDataResponse(secret, secretData);
+    }
+
+    @Override
+    public BulkPollResponse bulkPollSecrets(List<BulkPollSecretEntry> entries) {
+        // 1. Bulk-fetch metadata: one query per unique projectId instead of N individual queries
+        Map<String, List<BulkPollSecretEntry>> byProject = entries.stream()
+                .collect(Collectors.groupingBy(BulkPollSecretEntry::getProjectId));
+
+        Map<String, Secret> secretMap = new HashMap<>();
+        for (var projectGroup : byProject.entrySet()) {
+            List<String> names = projectGroup.getValue().stream()
+                    .map(BulkPollSecretEntry::getSecretName)
+                    .toList();
+            List<Secret> secrets = secretRepository.findByProjectIdAndNamesAndState(
+                    projectGroup.getKey(), names, LifecycleState.ACTIVE);
+            secrets.forEach(s -> secretMap.put(s.getProjectId() + ":" + s.getName(), s));
+        }
+
+        // 2. Fail-fast: verify every requested secret was found
+        List<BulkPollUpdatedSecret> updated = new ArrayList<>();
+        for (BulkPollSecretEntry entry : entries) {
+            Secret secret = secretMap.get(entry.getProjectId() + ":" + entry.getSecretName());
+            if (secret == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Active secret not found: " + entry.getProjectId() + "/" + entry.getSecretName());
+            }
+
+            // 3. Version check in-memory — skip decryption if unchanged
+            if (secret.getCurrentDataVersion() <= entry.getLastKnownVersion()) {
+                continue;
+            }
+
+            // 4. Only fetch + decrypt the value for secrets that actually changed
+            SecretData secretData = secretDataRepository
+                    .getBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Secret data not found for secret: " + entry.getSecretName()));
+
+            secretEncryptionUtil.decryptSecretData(secretData);
+            SecretDataResponse secretValue = secretMapper.toSecretDataResponse(secret, secretData);
+            updated.add(new BulkPollUpdatedSecret(entry.getProjectId(), entry.getSecretName(), secretValue));
+        }
+
+        return BulkPollResponse.builder()
+                .updatedSecrets(updated)
+                .build();
     }
 
     /**

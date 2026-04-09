@@ -13,6 +13,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.HashSet;
+
 import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 
 /**
@@ -112,6 +115,24 @@ public class GrayskullSecurity {
     public boolean hasPermission(String action) {
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         return authorizationProvider.isAuthorized(authentication, action);
+    }
+
+    /**
+     * Checks if the current user has permission for all given project IDs.
+     * Used by bulk operations where multiple projects may be involved in a single request.
+     * Deduplicates project IDs before checking.
+     *
+     * @param projectIds Collection of project IDs to check (may contain duplicates).
+     * @param action     The action to authorize.
+     * @return {@code true} if authorized for all projects, {@code false} if any check fails.
+     */
+    public boolean hasPermissionForAll(Collection<String> projectIds, String action) {
+        for (String projectId : new HashSet<>(projectIds)) {
+            if (!hasPermission(projectId, action)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

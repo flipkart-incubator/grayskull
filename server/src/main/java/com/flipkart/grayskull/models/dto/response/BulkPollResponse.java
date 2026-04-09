@@ -1,0 +1,19 @@
+package com.flipkart.grayskull.models.dto.response;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Value;
+
+import java.util.List;
+
+/**
+ * Response for the bulk-poll endpoint.
+ * Contains secrets whose versions have changed since the client's last known versions.
+ */
+@Value
+@Builder
+@AllArgsConstructor
+public class BulkPollResponse {
+
+    List<BulkPollUpdatedSecret> updatedSecrets;
+}

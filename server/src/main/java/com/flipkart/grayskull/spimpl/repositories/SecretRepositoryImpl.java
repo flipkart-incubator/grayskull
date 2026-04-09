@@ -58,6 +58,13 @@ public class SecretRepositoryImpl implements SecretRepository {
     }
 
     @Override
+    public List<Secret> findByProjectIdAndNamesAndState(String projectId, List<String> names, LifecycleState state) {
+        return mongoRepository.findByProjectIdAndNameInAndState(projectId, names, state).stream()
+                .map(Secret.class::cast)
+                .toList();
+    }
+
+    @Override
     public void delete(Secret secret) {
         if (!(secret instanceof SecretEntity)) {
             throw new IllegalArgumentException(

@@ -30,4 +30,9 @@ public enum AuditAction {
      * Represents the hard deletion of a secret.
      */
     DESTROY_SECRET,
+
+    /**
+     * Represents a bulk-poll request that returned updated secret values.
+     */
+    BULK_POLL_SECRETS,
 }

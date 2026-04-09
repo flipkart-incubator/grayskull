@@ -63,6 +63,17 @@ public interface SecretRepository {
     Optional<Secret> findByProjectIdAndNameAndState(String projectId, String name, LifecycleState state);
 
     /**
+     * Finds all secrets matching the given names within a project and state.
+     * Used for bulk operations to fetch multiple secrets in a single query.
+     *
+     * @param projectId The ID of the project.
+     * @param names     The list of secret names to find.
+     * @param state     The state of the secrets.
+     * @return A list of matching secrets.
+     */
+    List<Secret> findByProjectIdAndNamesAndState(String projectId, List<String> names, LifecycleState state);
+
+    /**
      * Deletes a secret.
      *
      * @param secret The secret to delete.

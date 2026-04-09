@@ -1,7 +1,9 @@
 package com.flipkart.grayskull.service.interfaces;
 
+import com.flipkart.grayskull.models.dto.request.BulkPollSecretEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
+import com.flipkart.grayskull.models.dto.response.BulkPollResponse;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -10,6 +12,7 @@ import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface SecretService {
@@ -81,6 +84,17 @@ public interface SecretService {
      * @param secretName The name of the secret to delete
      */
     void destroySecret(String projectId, String secretName);
+
+    /**
+     * Polls for secret version changes across multiple secrets.
+     * For each entry, checks if the current version exceeds the client's last known version.
+     * Returns decrypted values only for secrets that have changed.
+     * Throws if any secret is not found (fail-fast).
+     *
+     * @param entries The list of pre-authorized entries to check.
+     * @return A {@link BulkPollResponse} with updated secrets.
+     */
+    BulkPollResponse bulkPollSecrets(List<BulkPollSecretEntry> entries);
 
     /**
      * Retrieves a specific version of a secret's data. Its an Admin API.
