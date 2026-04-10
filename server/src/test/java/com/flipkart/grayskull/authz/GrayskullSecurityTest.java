@@ -15,6 +15,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.List;
 import java.util.Optional;
 
 import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
@@ -233,5 +234,66 @@ class GrayskullSecurityTest {
 
         // When & Then
         assertFalse(grayskullSecurity.checkProviderAuthorization("test-provider"));
+    }
+
+    // Tests for hasPermissionForAll method
+    @Test
+    void hasPermissionForAll_WhenAllProjectsAuthorized_ReturnsTrue() {
+        // Given
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        when(projectRepository.findByIdOrTransient("proj-a")).thenReturn(project);
+        when(projectRepository.findByIdOrTransient("proj-b")).thenReturn(project);
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"))).thenReturn(true);
+
+        // When
+        boolean result = grayskullSecurity.hasPermissionForAll(List.of("proj-a", "proj-b"), "secrets.read.value");
+
+        // Then
+        assertTrue(result);
+    }
+
+    @Test
+    void hasPermissionForAll_WhenOneProjectUnauthorized_ReturnsFalse() {
+        // Given
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        when(projectRepository.findByIdOrTransient(anyString())).thenReturn(project);
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value")))
+                .thenReturn(true)
+                .thenReturn(false);
+
+        // When
+        boolean result = grayskullSecurity.hasPermissionForAll(List.of("proj-a", "proj-b"), "secrets.read.value");
+
+        // Then
+        assertFalse(result);
+    }
+
+    @Test
+    void hasPermissionForAll_WhenEmptyCollection_ReturnsTrue() {
+        // Given
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        // When
+        boolean result = grayskullSecurity.hasPermissionForAll(List.of(), "secrets.read.value");
+
+        // Then
+        assertTrue(result);
+        verify(authorizationProvider, never()).isAuthorized(any(AuthorizationContext.class), anyString());
+    }
+
+    @Test
+    void hasPermissionForAll_ShouldDeduplicateProjectIds() {
+        // Given
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        when(projectRepository.findByIdOrTransient("proj-a")).thenReturn(project);
+        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"))).thenReturn(true);
+
+        // When
+        boolean result = grayskullSecurity.hasPermissionForAll(
+                List.of("proj-a", "proj-a", "proj-a"), "secrets.read.value");
+
+        // Then
+        assertTrue(result);
+        verify(projectRepository, times(1)).findByIdOrTransient("proj-a");
     }
 }
