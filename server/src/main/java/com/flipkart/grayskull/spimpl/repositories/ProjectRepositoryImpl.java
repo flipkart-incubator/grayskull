@@ -6,6 +6,8 @@ import com.flipkart.grayskull.spi.repositories.ProjectRepository;
 import com.flipkart.grayskull.spimpl.repositories.mongo.ProjectMongoRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -31,6 +33,13 @@ public class ProjectRepositoryImpl implements ProjectRepository {
         return mongoRepository.findById(id)
                 .map(Project.class::cast)
                 .orElseGet(() -> ProjectEntity.builder().id(id).kmsKeyId(null).build());
+    }
+
+    @Override
+    public List<Project> findAllById(Collection<String> ids) {
+        return mongoRepository.findAllById(ids).stream()
+                .map(Project.class::cast)
+                .toList();
     }
 
     @Override

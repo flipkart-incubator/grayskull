@@ -6,6 +6,7 @@ import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.BatchGetSecretsRequest;
 import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.ResponseTemplate;
+import com.flipkart.grayskull.models.dto.response.UpdatedSecret;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
@@ -21,7 +22,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/v1/secrets")
@@ -54,26 +54,33 @@ public class SecretBatchController {
         GrayskullAuthentication authentication =
                 (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
 
-        Map<String, String> auditMetadata = new HashMap<>();
+        Map<String, String> enhancerMetadata = new HashMap<>();
         auditMetadataEnhancers.stream()
                 .map(enhancer -> enhancer.getAdditionalMetadata(httpRequest))
                 .filter(Objects::nonNull)
-                .forEach(auditMetadata::putAll);
+                .forEach(enhancerMetadata::putAll);
 
-        String secretRefs = response.getUpdatedSecrets().stream()
-                .map(s -> s.getProjectId() + ":" + s.getSecretName())
-                .collect(Collectors.joining(","));
-        auditMetadata.put("updatedSecretRefs", secretRefs);
+        String userId = authentication.getName();
+        String actorId = authentication.getActor();
+        Map<String, String> ips = requestUtils.getRemoteIPs();
 
-        AuditEntry auditEntry = AuditEntry.builder()
-                .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
-                .action(AuditAction.BATCH_GET_SECRETS.name())
-                .userId(authentication.getName())
-                .actorId(authentication.getActor())
-                .ips(requestUtils.getRemoteIPs())
-                .metadata(auditMetadata)
-                .build();
+        for (UpdatedSecret secret : response.getUpdatedSecrets()) {
+            Map<String, String> metadata = new HashMap<>(enhancerMetadata);
+            metadata.put("publicPart", secret.getSecretValue().getPublicPart());
 
-        asyncAuditLogger.log(auditEntry);
+            AuditEntry auditEntry = AuditEntry.builder()
+                    .projectId(secret.getProjectId())
+                    .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
+                    .resourceName(secret.getSecretName())
+                    .resourceVersion(secret.getSecretValue().getDataVersion())
+                    .action(AuditAction.BATCH_GET_SECRETS.name())
+                    .userId(userId)
+                    .actorId(actorId)
+                    .ips(ips)
+                    .metadata(metadata)
+                    .build();
+
+            asyncAuditLogger.log(auditEntry);
+        }
     }
 }

@@ -32,7 +32,7 @@ public enum AuditAction {
     DESTROY_SECRET,
 
     /**
-     * Represents a batch-get request that returned updated secret values.
+     * Represents a secret value read via the batch endpoint.
      */
     BATCH_GET_SECRETS,
 }

@@ -1,7 +1,9 @@
 package com.flipkart.grayskull.authz;
 
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.Project;
+import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
@@ -13,9 +15,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
-
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 
@@ -119,17 +123,46 @@ public class GrayskullSecurity {
     }
 
     /**
-     * Checks if the current user has permission to perform an action on each
-     * (projectId, secretName) pair in the given list.
-     * Used by batch operations where multiple secrets across projects are involved.
+     * Batch authorization for a list of (projectId, secretName) pairs.
+     * Uses two bulk MongoDB lookups (projects + secrets) instead of per-entry queries.
+     * Only checks authz for secrets that exist; missing secrets are skipped
+     * (the service layer will exclude them from the response).
      *
      * @param entries List of entries each containing a projectId and secretName.
      * @param action  The action to authorize.
-     * @return {@code true} if authorized for all entries, {@code false} if any check fails.
+     * @return {@code true} if authorized for all found entries, {@code false} if any check fails.
      */
     public boolean hasPermissionForSecrets(List<SecretVersionEntry> entries, String action) {
+        if (entries.isEmpty()) {
+            return true;
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        Set<String> projectIds = entries.stream()
+                .map(SecretVersionEntry::getProjectId)
+                .collect(Collectors.toSet());
+        Map<String, Project> projectMap = new HashMap<>();
+        projectRepository.findAllById(projectIds).forEach(p -> projectMap.put(p.getId(), p));
+
+        Map<String, List<String>> projectToNames = entries.stream()
+                .collect(Collectors.groupingBy(
+                        SecretVersionEntry::getProjectId,
+                        Collectors.mapping(SecretVersionEntry::getSecretName, Collectors.toList())));
+        Map<String, Secret> secretMap = new HashMap<>();
+        secretRepository.findActiveByProjectAndNames(projectToNames)
+                .forEach(s -> secretMap.put(s.getProjectId() + ":" + s.getName(), s));
+
         for (SecretVersionEntry entry : entries) {
-            if (!hasPermission(entry.getProjectId(), entry.getSecretName(), action)) {
+            Secret secret = secretMap.get(entry.getProjectId() + ":" + entry.getSecretName());
+            if (secret == null) {
+                continue;
+            }
+            Project project = projectMap.get(entry.getProjectId());
+            if (project == null) {
+                return false;
+            }
+            AuthorizationContext context = AuthorizationContext.forSecret(authentication, project, secret);
+            if (!authorizationProvider.isAuthorized(context, action)) {
                 return false;
             }
         }
