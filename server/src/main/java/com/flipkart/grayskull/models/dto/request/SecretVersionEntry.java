@@ -8,12 +8,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * A single entry in a bulk-poll request, identifying a secret and its last known version.
+ * A single entry in a batch-get request, identifying a secret and its last known version.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class BulkPollSecretEntry {
+public class SecretVersionEntry {
 
     @NotBlank
     @Size(max = 255)

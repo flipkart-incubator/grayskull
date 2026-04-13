@@ -32,7 +32,7 @@ public enum AuditAction {
     DESTROY_SECRET,
 
     /**
-     * Represents a bulk-poll request that returned updated secret values.
+     * Represents a batch-get request that returned updated secret values.
      */
-    BULK_POLL_SECRETS,
+    BATCH_GET_SECRETS,
 }

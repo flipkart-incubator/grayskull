@@ -3,8 +3,8 @@ package com.flipkart.grayskull.controllers;
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.AuditConstants;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
-import com.flipkart.grayskull.models.dto.request.BulkPollRequest;
-import com.flipkart.grayskull.models.dto.response.BulkPollResponse;
+import com.flipkart.grayskull.models.dto.request.BatchGetSecretsRequest;
+import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.ResponseTemplate;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
@@ -27,21 +27,21 @@ import java.util.stream.Collectors;
 @RequestMapping("/v1/secrets")
 @RequiredArgsConstructor
 @Validated
-public class BulkPollController {
+public class SecretBatchController {
 
     private final SecretService secretService;
     private final AsyncAuditLogger asyncAuditLogger;
     private final RequestUtils requestUtils;
     private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
 
-    @Operation(summary = "Polls for secret version changes across projects in a single batched request.")
-    @PostMapping("/bulk-poll")
-    @PreAuthorize("@grayskullSecurity.hasPermissionForAll(#request.secrets.![projectId], 'secrets.read.value')")
-    public ResponseTemplate<BulkPollResponse> bulkPoll(
-            @Valid @RequestBody BulkPollRequest request,
+    @Operation(summary = "Returns current values for secrets whose versions have changed since the caller's last known versions.")
+    @PostMapping("/batch")
+    @PreAuthorize("@grayskullSecurity.hasPermissionForSecrets(#request.secrets, 'secrets.read.value')")
+    public ResponseTemplate<BatchGetSecretsResponse> batchGetSecrets(
+            @Valid @RequestBody BatchGetSecretsRequest request,
             HttpServletRequest httpRequest) {
 
-        BulkPollResponse response = secretService.bulkPollSecrets(request.getSecrets());
+        BatchGetSecretsResponse response = secretService.batchGetSecrets(request.getSecrets());
 
         if (!response.getUpdatedSecrets().isEmpty()) {
             logAudit(response, httpRequest);
@@ -50,7 +50,7 @@ public class BulkPollController {
         return ResponseTemplate.success(response, "Success");
     }
 
-    private void logAudit(BulkPollResponse response, HttpServletRequest httpRequest) {
+    private void logAudit(BatchGetSecretsResponse response, HttpServletRequest httpRequest) {
         GrayskullAuthentication authentication =
                 (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
 
@@ -67,7 +67,7 @@ public class BulkPollController {
 
         AuditEntry auditEntry = AuditEntry.builder()
                 .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
-                .action(AuditAction.BULK_POLL_SECRETS.name())
+                .action(AuditAction.BATCH_GET_SECRETS.name())
                 .userId(authentication.getName())
                 .actorId(authentication.getActor())
                 .ips(requestUtils.getRemoteIPs())

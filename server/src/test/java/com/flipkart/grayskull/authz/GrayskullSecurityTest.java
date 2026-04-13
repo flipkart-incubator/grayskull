@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.authz;
 
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
@@ -236,45 +237,55 @@ class GrayskullSecurityTest {
         assertFalse(grayskullSecurity.checkProviderAuthorization("test-provider"));
     }
 
-    // Tests for hasPermissionForAll method
+    // Tests for hasPermissionForSecrets method
     @Test
-    void hasPermissionForAll_WhenAllProjectsAuthorized_ReturnsTrue() {
+    void hasPermissionForSecrets_WhenAllSecretsAuthorized_ReturnsTrue() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(projectRepository.findByIdOrTransient("proj-a")).thenReturn(project);
-        when(projectRepository.findByIdOrTransient("proj-b")).thenReturn(project);
+        when(projectRepository.findById("proj-a")).thenReturn(Optional.of(project));
+        when(projectRepository.findById("proj-b")).thenReturn(Optional.of(project));
+        when(secretRepository.findByProjectIdAndName(anyString(), anyString())).thenReturn(Optional.of(secret));
         when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"))).thenReturn(true);
 
+        List<SecretVersionEntry> entries = List.of(
+                new SecretVersionEntry("proj-a", "secret-1", 1),
+                new SecretVersionEntry("proj-b", "secret-2", 2));
+
         // When
-        boolean result = grayskullSecurity.hasPermissionForAll(List.of("proj-a", "proj-b"), "secrets.read.value");
+        boolean result = grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value");
 
         // Then
         assertTrue(result);
     }
 
     @Test
-    void hasPermissionForAll_WhenOneProjectUnauthorized_ReturnsFalse() {
+    void hasPermissionForSecrets_WhenOneSecretUnauthorized_ReturnsFalse() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(projectRepository.findByIdOrTransient(anyString())).thenReturn(project);
+        when(projectRepository.findById(anyString())).thenReturn(Optional.of(project));
+        when(secretRepository.findByProjectIdAndName(anyString(), anyString())).thenReturn(Optional.of(secret));
         when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value")))
                 .thenReturn(true)
                 .thenReturn(false);
 
+        List<SecretVersionEntry> entries = List.of(
+                new SecretVersionEntry("proj-a", "secret-1", 1),
+                new SecretVersionEntry("proj-b", "secret-2", 2));
+
         // When
-        boolean result = grayskullSecurity.hasPermissionForAll(List.of("proj-a", "proj-b"), "secrets.read.value");
+        boolean result = grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value");
 
         // Then
         assertFalse(result);
     }
 
     @Test
-    void hasPermissionForAll_WhenEmptyCollection_ReturnsTrue() {
+    void hasPermissionForSecrets_WhenEmptyList_ReturnsTrue() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         // When
-        boolean result = grayskullSecurity.hasPermissionForAll(List.of(), "secrets.read.value");
+        boolean result = grayskullSecurity.hasPermissionForSecrets(List.of(), "secrets.read.value");
 
         // Then
         assertTrue(result);
@@ -282,18 +293,18 @@ class GrayskullSecurityTest {
     }
 
     @Test
-    void hasPermissionForAll_ShouldDeduplicateProjectIds() {
+    void hasPermissionForSecrets_WhenProjectDoesNotExist_ReturnsFalse() {
         // Given
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(projectRepository.findByIdOrTransient("proj-a")).thenReturn(project);
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"))).thenReturn(true);
+        when(projectRepository.findById("missing-proj")).thenReturn(Optional.empty());
+
+        List<SecretVersionEntry> entries = List.of(
+                new SecretVersionEntry("missing-proj", "secret-1", 1));
 
         // When
-        boolean result = grayskullSecurity.hasPermissionForAll(
-                List.of("proj-a", "proj-a", "proj-a"), "secrets.read.value");
+        boolean result = grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value");
 
         // Then
-        assertTrue(result);
-        verify(projectRepository, times(1)).findByIdOrTransient("proj-a");
+        assertFalse(result);
     }
 }

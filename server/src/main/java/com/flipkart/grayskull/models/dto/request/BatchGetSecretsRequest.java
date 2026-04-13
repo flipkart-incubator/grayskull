@@ -10,16 +10,16 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * Request body for the bulk-poll endpoint.
+ * Request body for the batch-get secrets endpoint.
  * Contains a list of secrets to check for version changes.
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class BulkPollRequest {
+public class BatchGetSecretsRequest {
 
     @NotNull
     @Size(min = 1, max = 50, message = "Must contain between 1 and 50 entries")
     @Valid
-    private List<BulkPollSecretEntry> secrets;
+    private List<SecretVersionEntry> secrets;
 }

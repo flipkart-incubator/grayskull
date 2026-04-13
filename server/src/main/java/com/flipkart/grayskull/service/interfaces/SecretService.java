@@ -1,9 +1,9 @@
 package com.flipkart.grayskull.service.interfaces;
 
-import com.flipkart.grayskull.models.dto.request.BulkPollSecretEntry;
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
-import com.flipkart.grayskull.models.dto.response.BulkPollResponse;
+import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -86,15 +86,15 @@ public interface SecretService {
     void destroySecret(String projectId, String secretName);
 
     /**
-     * Polls for secret version changes across multiple secrets.
-     * For each entry, checks if the current version exceeds the client's last known version.
+     * Checks for secret version changes across multiple secrets.
+     * For each entry, compares the current version against the client's last known version.
      * Returns decrypted values only for secrets that have changed.
-     * Throws if any secret is not found (fail-fast).
+     * Silently skips secrets that are not found or inactive.
      *
      * @param entries The list of pre-authorized entries to check.
-     * @return A {@link BulkPollResponse} with updated secrets.
+     * @return A {@link BatchGetSecretsResponse} with updated secrets.
      */
-    BulkPollResponse bulkPollSecrets(List<BulkPollSecretEntry> entries);
+    BatchGetSecretsResponse batchGetSecrets(List<SecretVersionEntry> entries);
 
     /**
      * Retrieves a specific version of a secret's data. Its an Admin API.

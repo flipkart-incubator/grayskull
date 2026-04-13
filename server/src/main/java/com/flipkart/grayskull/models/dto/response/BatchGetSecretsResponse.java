@@ -7,13 +7,14 @@ import lombok.Value;
 import java.util.List;
 
 /**
- * Response for the bulk-poll endpoint.
+ * Response for the batch-get secrets endpoint.
  * Contains secrets whose versions have changed since the client's last known versions.
  */
 @Value
 @Builder
 @AllArgsConstructor
-public class BulkPollResponse {
+public class BatchGetSecretsResponse {
 
-    List<BulkPollUpdatedSecret> updatedSecrets;
+    int updatedCount;
+    List<UpdatedSecret> updatedSecrets;
 }

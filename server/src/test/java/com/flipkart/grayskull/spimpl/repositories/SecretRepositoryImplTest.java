@@ -6,6 +6,7 @@ import com.flipkart.grayskull.spimpl.repositories.mongo.SecretDataMongoRepositor
 import com.flipkart.grayskull.spimpl.repositories.mongo.SecretMongoRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.mongodb.core.MongoTemplate;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -15,8 +16,9 @@ class SecretRepositoryImplTest {
 
     SecretDataMongoRepository secretDataMongoRepository = mock();
     SecretMongoRepository mongoRepository = mock();
+    MongoTemplate mongoTemplate = mock();
 
-    SecretRepositoryImpl repository = new SecretRepositoryImpl(mongoRepository, secretDataMongoRepository);
+    SecretRepositoryImpl repository = new SecretRepositoryImpl(mongoRepository, secretDataMongoRepository, mongoTemplate);
 
     @Test
     @DisplayName("delete should delegate to mongoRepository when Secret is SecretEntity")

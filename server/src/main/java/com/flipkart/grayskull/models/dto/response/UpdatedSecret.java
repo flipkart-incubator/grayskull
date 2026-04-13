@@ -11,7 +11,7 @@ import lombok.Value;
 @Value
 @Builder
 @AllArgsConstructor
-public class BulkPollUpdatedSecret {
+public class UpdatedSecret {
 
     String projectId;
     String secretName;

@@ -9,9 +9,14 @@ import com.flipkart.grayskull.spimpl.repositories.mongo.SecretMongoRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -24,6 +29,7 @@ public class SecretRepositoryImpl implements SecretRepository {
 
     private final SecretMongoRepository mongoRepository;
     private final SecretDataMongoRepository secretDataMongoRepository;
+    private final MongoTemplate mongoTemplate;
 
     @Override
     public List<Secret> findByProjectIdAndState(String projectId, LifecycleState state, int offset, int limit) {
@@ -58,8 +64,19 @@ public class SecretRepositoryImpl implements SecretRepository {
     }
 
     @Override
-    public List<Secret> findByProjectIdAndNamesAndState(String projectId, List<String> names, LifecycleState state) {
-        return mongoRepository.findByProjectIdAndNameInAndState(projectId, names, state).stream()
+    public List<Secret> findActiveByProjectAndNames(Map<String, List<String>> projectToNames) {
+        if (projectToNames.isEmpty()) {
+            return List.of();
+        }
+        List<Criteria> orCriteria = new ArrayList<>();
+        for (Map.Entry<String, List<String>> entry : projectToNames.entrySet()) {
+            orCriteria.add(Criteria.where("projectId").is(entry.getKey())
+                    .and("name").in(entry.getValue())
+                    .and("state").is(LifecycleState.ACTIVE));
+        }
+        Query query = new Query(new Criteria().orOperator(orCriteria));
+        query.fields().include("projectId", "name", "currentDataVersion");
+        return mongoTemplate.find(query, SecretEntity.class).stream()
                 .map(Secret.class::cast)
                 .toList();
     }

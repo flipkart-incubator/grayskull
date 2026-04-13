@@ -4,8 +4,8 @@ import com.flipkart.grayskull.configuration.KmsConfig;
 import com.flipkart.grayskull.exception.BadRequestException;
 import com.flipkart.grayskull.exception.NotFoundException;
 import com.flipkart.grayskull.mappers.SecretMapper;
-import com.flipkart.grayskull.models.dto.request.BulkPollSecretEntry;
-import com.flipkart.grayskull.models.dto.response.BulkPollResponse;
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
+import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.service.utils.AuthnUtil;
 import com.flipkart.grayskull.service.utils.SecretEncryptionUtil;
@@ -18,9 +18,9 @@ import com.flipkart.grayskull.spi.repositories.SecretRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,23 +77,24 @@ class SecretServiceImplTest {
     }
 
     @Nested
-    @DisplayName("bulkPollSecrets")
-    class BulkPollSecretsTest {
+    @DisplayName("batchGetSecrets")
+    class BatchGetSecretsTest {
 
         @Test
         @DisplayName("Should return empty list when all secrets are up-to-date")
         void shouldReturnEmpty_whenAllSecretsUpToDate() {
             Secret secret = Secret.builder()
                     .id("s1").projectId("proj").name("db-pass").currentDataVersion(3).build();
-            when(secretRepository.findByProjectIdAndNamesAndState("proj", List.of("db-pass"), LifecycleState.ACTIVE))
+            when(secretRepository.findActiveByProjectAndNames(Map.of("proj", List.of("db-pass"))))
                     .thenReturn(List.of(secret));
 
-            BulkPollResponse response = secretService.bulkPollSecrets(List.of(
-                    new BulkPollSecretEntry("proj", "db-pass", 3)
+            BatchGetSecretsResponse response = secretService.batchGetSecrets(List.of(
+                    new SecretVersionEntry("proj", "db-pass", 3)
             ));
 
+            assertThat(response.getUpdatedCount()).isZero();
             assertThat(response.getUpdatedSecrets()).isEmpty();
-            verify(secretDataRepository, never()).getBySecretIdAndDataVersion(any(), anyLong());
+            verify(secretDataRepository, never()).findBySecretIdAndVersionPairs(any());
         }
 
         @Test
@@ -104,17 +105,18 @@ class SecretServiceImplTest {
             SecretData secretData = SecretData.builder().secretId("s1").dataVersion(5).build();
             SecretDataResponse mappedResponse = SecretDataResponse.builder().dataVersion(5).publicPart("pub").build();
 
-            when(secretRepository.findByProjectIdAndNamesAndState("proj", List.of("db-pass"), LifecycleState.ACTIVE))
+            when(secretRepository.findActiveByProjectAndNames(Map.of("proj", List.of("db-pass"))))
                     .thenReturn(List.of(secret));
-            when(secretDataRepository.getBySecretIdAndDataVersion("s1", 5))
-                    .thenReturn(Optional.of(secretData));
+            when(secretDataRepository.findBySecretIdAndVersionPairs(Map.of("s1", 5L)))
+                    .thenReturn(List.of(secretData));
             when(secretMapper.toSecretDataResponse(secret, secretData))
                     .thenReturn(mappedResponse);
 
-            BulkPollResponse response = secretService.bulkPollSecrets(List.of(
-                    new BulkPollSecretEntry("proj", "db-pass", 2)
+            BatchGetSecretsResponse response = secretService.batchGetSecrets(List.of(
+                    new SecretVersionEntry("proj", "db-pass", 2)
             ));
 
+            assertThat(response.getUpdatedCount()).isEqualTo(1);
             assertThat(response.getUpdatedSecrets()).hasSize(1);
             assertThat(response.getUpdatedSecrets().get(0).getProjectId()).isEqualTo("proj");
             assertThat(response.getUpdatedSecrets().get(0).getSecretName()).isEqualTo("db-pass");
@@ -123,39 +125,41 @@ class SecretServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should fail fast with 404 when any secret is not found")
-        void shouldFailFast_whenSecretNotFound() {
-            when(secretRepository.findByProjectIdAndNamesAndState("proj", List.of("missing"), LifecycleState.ACTIVE))
+        @DisplayName("Should silently skip when secret is not found (inactive or missing)")
+        void shouldSkip_whenSecretNotFound() {
+            when(secretRepository.findActiveByProjectAndNames(Map.of("proj", List.of("missing"))))
                     .thenReturn(List.of());
 
-            assertThatThrownBy(() -> secretService.bulkPollSecrets(List.of(
-                    new BulkPollSecretEntry("proj", "missing", 0)
-            )))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("Active secret not found");
+            BatchGetSecretsResponse response = secretService.batchGetSecrets(List.of(
+                    new SecretVersionEntry("proj", "missing", 0)
+            ));
+
+            assertThat(response.getUpdatedCount()).isZero();
+            assertThat(response.getUpdatedSecrets()).isEmpty();
         }
 
         @Test
-        @DisplayName("Should fail fast with 404 when secret data is not found for a changed secret")
-        void shouldFailFast_whenSecretDataNotFound() {
+        @DisplayName("Should silently skip when secret data is not found for a changed secret")
+        void shouldSkip_whenSecretDataNotFound() {
             Secret secret = Secret.builder()
                     .id("s1").projectId("proj").name("db-pass").currentDataVersion(5).build();
 
-            when(secretRepository.findByProjectIdAndNamesAndState("proj", List.of("db-pass"), LifecycleState.ACTIVE))
+            when(secretRepository.findActiveByProjectAndNames(Map.of("proj", List.of("db-pass"))))
                     .thenReturn(List.of(secret));
-            when(secretDataRepository.getBySecretIdAndDataVersion("s1", 5))
-                    .thenReturn(Optional.empty());
+            when(secretDataRepository.findBySecretIdAndVersionPairs(Map.of("s1", 5L)))
+                    .thenReturn(List.of());
 
-            assertThatThrownBy(() -> secretService.bulkPollSecrets(List.of(
-                    new BulkPollSecretEntry("proj", "db-pass", 2)
-            )))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .hasMessageContaining("Secret data not found");
+            BatchGetSecretsResponse response = secretService.batchGetSecrets(List.of(
+                    new SecretVersionEntry("proj", "db-pass", 2)
+            ));
+
+            assertThat(response.getUpdatedCount()).isZero();
+            assertThat(response.getUpdatedSecrets()).isEmpty();
         }
 
         @Test
-        @DisplayName("Should handle cross-project queries with one bulk fetch per project")
-        void shouldGroupByProject_andFetchOncePerProject() {
+        @DisplayName("Should fetch all secrets in a single cross-project query")
+        void shouldFetchAllSecrets_inSingleQuery() {
             Secret secretA = Secret.builder()
                     .id("sa").projectId("proj-a").name("key-1").currentDataVersion(1).build();
             Secret secretB = Secret.builder()
@@ -163,26 +167,25 @@ class SecretServiceImplTest {
             SecretData dataB = SecretData.builder().secretId("sb").dataVersion(4).build();
             SecretDataResponse mappedB = SecretDataResponse.builder().dataVersion(4).build();
 
-            when(secretRepository.findByProjectIdAndNamesAndState("proj-a", List.of("key-1"), LifecycleState.ACTIVE))
-                    .thenReturn(List.of(secretA));
-            when(secretRepository.findByProjectIdAndNamesAndState("proj-b", List.of("key-2"), LifecycleState.ACTIVE))
-                    .thenReturn(List.of(secretB));
-            when(secretDataRepository.getBySecretIdAndDataVersion("sb", 4))
-                    .thenReturn(Optional.of(dataB));
+            Map<String, List<String>> expectedKeys = Map.of(
+                    "proj-a", List.of("key-1"),
+                    "proj-b", List.of("key-2"));
+            when(secretRepository.findActiveByProjectAndNames(expectedKeys))
+                    .thenReturn(List.of(secretA, secretB));
+            when(secretDataRepository.findBySecretIdAndVersionPairs(Map.of("sb", 4L)))
+                    .thenReturn(List.of(dataB));
             when(secretMapper.toSecretDataResponse(secretB, dataB))
                     .thenReturn(mappedB);
 
-            BulkPollResponse response = secretService.bulkPollSecrets(List.of(
-                    new BulkPollSecretEntry("proj-a", "key-1", 1),
-                    new BulkPollSecretEntry("proj-b", "key-2", 2)
+            BatchGetSecretsResponse response = secretService.batchGetSecrets(List.of(
+                    new SecretVersionEntry("proj-a", "key-1", 1),
+                    new SecretVersionEntry("proj-b", "key-2", 2)
             ));
 
-            assertThat(response.getUpdatedSecrets()).hasSize(1);
+            assertThat(response.getUpdatedCount()).isEqualTo(1);
             assertThat(response.getUpdatedSecrets().get(0).getProjectId()).isEqualTo("proj-b");
 
-            verify(secretRepository).findByProjectIdAndNamesAndState("proj-a", List.of("key-1"), LifecycleState.ACTIVE);
-            verify(secretRepository).findByProjectIdAndNamesAndState("proj-b", List.of("key-2"), LifecycleState.ACTIVE);
-            verify(secretDataRepository, never()).getBySecretIdAndDataVersion(eq("sa"), anyLong());
+            verify(secretRepository, times(1)).findActiveByProjectAndNames(any());
         }
 
         @Test
@@ -195,22 +198,21 @@ class SecretServiceImplTest {
             SecretData changedData = SecretData.builder().secretId("s2").dataVersion(7).build();
             SecretDataResponse mappedChanged = SecretDataResponse.builder().dataVersion(7).build();
 
-            when(secretRepository.findByProjectIdAndNamesAndState(eq("proj"), anyList(), eq(LifecycleState.ACTIVE)))
+            when(secretRepository.findActiveByProjectAndNames(anyMap()))
                     .thenReturn(List.of(unchanged, changed));
-            when(secretDataRepository.getBySecretIdAndDataVersion("s2", 7))
-                    .thenReturn(Optional.of(changedData));
+            when(secretDataRepository.findBySecretIdAndVersionPairs(Map.of("s2", 7L)))
+                    .thenReturn(List.of(changedData));
             when(secretMapper.toSecretDataResponse(changed, changedData))
                     .thenReturn(mappedChanged);
 
-            BulkPollResponse response = secretService.bulkPollSecrets(List.of(
-                    new BulkPollSecretEntry("proj", "stable", 3),
-                    new BulkPollSecretEntry("proj", "rotated", 4)
+            BatchGetSecretsResponse response = secretService.batchGetSecrets(List.of(
+                    new SecretVersionEntry("proj", "stable", 3),
+                    new SecretVersionEntry("proj", "rotated", 4)
             ));
 
-            assertThat(response.getUpdatedSecrets()).hasSize(1);
+            assertThat(response.getUpdatedCount()).isEqualTo(1);
             assertThat(response.getUpdatedSecrets().get(0).getSecretName()).isEqualTo("rotated");
 
-            verify(secretDataRepository, never()).getBySecretIdAndDataVersion(eq("s1"), anyLong());
             verify(secretEncryptionUtil).decryptSecretData(changedData);
             verify(secretEncryptionUtil, times(1)).decryptSecretData(any());
         }

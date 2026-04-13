@@ -13,8 +13,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.util.Collection;
-import java.util.HashSet;
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
+
+import java.util.List;
 
 import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 
@@ -118,17 +119,17 @@ public class GrayskullSecurity {
     }
 
     /**
-     * Checks if the current user has permission for all given project IDs.
-     * Used by bulk operations where multiple projects may be involved in a single request.
-     * Deduplicates project IDs before checking.
+     * Checks if the current user has permission to perform an action on each
+     * (projectId, secretName) pair in the given list.
+     * Used by batch operations where multiple secrets across projects are involved.
      *
-     * @param projectIds Collection of project IDs to check (may contain duplicates).
-     * @param action     The action to authorize.
-     * @return {@code true} if authorized for all projects, {@code false} if any check fails.
+     * @param entries List of entries each containing a projectId and secretName.
+     * @param action  The action to authorize.
+     * @return {@code true} if authorized for all entries, {@code false} if any check fails.
      */
-    public boolean hasPermissionForAll(Collection<String> projectIds, String action) {
-        for (String projectId : new HashSet<>(projectIds)) {
-            if (!hasPermission(projectId, action)) {
+    public boolean hasPermissionForSecrets(List<SecretVersionEntry> entries, String action) {
+        for (SecretVersionEntry entry : entries) {
+            if (!hasPermission(entry.getProjectId(), entry.getSecretName(), action)) {
                 return false;
             }
         }
