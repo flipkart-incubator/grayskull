@@ -83,6 +83,8 @@ class AuditAspectTest {
         assertThat(savedEntity.getUserId()).isEqualTo("user1");
         assertThat(savedEntity.getActorId()).isEqualTo("actor1");
         assertThat(savedEntity.getIps()).containsEntry("Remote-Conn-Addr", "127.0.0.1");
+    }
+
     @Test
     @DisplayName("auditSuccess should save AuditEntryEntity with default user and null actor when context is empty")
     void auditSuccess_shouldSaveWithDefaultUser() throws NoSuchMethodException {
