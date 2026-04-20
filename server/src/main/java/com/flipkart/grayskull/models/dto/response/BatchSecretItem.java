@@ -22,4 +22,9 @@ public class BatchSecretItem extends SecretDataResponse {
 
     String projectId;
     String secretName;
+
+    @Override
+    protected boolean canEqual(Object other) {
+        return other instanceof BatchSecretItem;
+    }
 }

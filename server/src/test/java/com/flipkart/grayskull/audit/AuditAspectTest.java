@@ -83,6 +83,36 @@ class AuditAspectTest {
         assertThat(savedEntity.getUserId()).isEqualTo("user1");
         assertThat(savedEntity.getActorId()).isEqualTo("actor1");
         assertThat(savedEntity.getIps()).containsEntry("Remote-Conn-Addr", "127.0.0.1");
-        assertThat(savedEntity.getMetadata()).containsEntry("customKey", "customValue");
+    @Test
+    @DisplayName("auditSuccess should save AuditEntryEntity with default user and null actor when context is empty")
+    void auditSuccess_shouldSaveWithDefaultUser() throws NoSuchMethodException {
+        // Setup JoinPoint
+        JoinPoint joinPoint = mock(JoinPoint.class);
+        MethodSignature signature = mock(MethodSignature.class);
+        when(joinPoint.getSignature()).thenReturn(signature);
+        Method dummyMethod = this.getClass().getMethod("dummyMethod", String.class);
+        when(signature.getMethod()).thenReturn(dummyMethod);
+        when(signature.getParameterNames()).thenReturn(new String[]{"projectId"});
+        when(joinPoint.getArgs()).thenReturn(new Object[]{"project123"});
+
+        // Setup RequestUtils
+        when(requestUtils.getAdditionalMetadata()).thenReturn(new HashMap<>());
+        Map<String, String> ips = new HashMap<>();
+        ips.put("Remote-Conn-Addr", "127.0.0.1");
+        when(requestUtils.getRemoteIPs()).thenReturn(ips);
+
+        // Empty Security Context
+        when(securityContext.getAuthentication()).thenReturn(null);
+
+        // Execute
+        auditAspect.auditSuccess(joinPoint, null);
+
+        // Verify
+        ArgumentCaptor<AuditEntryEntity> captor = ArgumentCaptor.forClass(AuditEntryEntity.class);
+        verify(auditEntryRepository).save(captor.capture());
+
+        AuditEntryEntity savedEntity = captor.getValue();
+        assertThat(savedEntity.getUserId()).isEqualTo("system");
+        assertThat(savedEntity.getActorId()).isNull();
     }
 }

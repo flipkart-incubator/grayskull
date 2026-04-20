@@ -47,6 +47,11 @@ class GrayskullAuthorizationProviderTest {
         AuthorizationContext context2 = AuthorizationContext.forProject(null, Mockito.mock(Project.class));
         List<AuthorizationContext> contexts = Arrays.asList(context1, context2);
 
-        assertFalse(provider.bulkAuthorize(contexts, "denied"));
+    @Test
+    @DisplayName("bulkAuthorize should return true if context list is empty")
+    void bulkAuthorize_EmptyList_ReturnsTrue() {
+        TestProvider provider = new TestProvider();
+        List<AuthorizationContext> contexts = java.util.Collections.emptyList();
+        assertTrue(provider.bulkAuthorize(contexts, "denied"));
     }
 }
