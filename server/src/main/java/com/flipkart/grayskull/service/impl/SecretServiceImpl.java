@@ -14,7 +14,7 @@ import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
-import com.flipkart.grayskull.models.dto.response.UpdatedSecret;
+import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -146,6 +146,9 @@ public class SecretServiceImpl implements SecretService {
 
     @Override
     public BatchGetSecretsResponse batchGetSecrets(List<SecretVersionEntry> entries) {
+        // Single bulk query to fetch active-secret metadata for every requested (projectId, name)
+        // pair. Inactive/missing secrets are intentionally excluded here so the fail-fast check
+        // below will reject any request that names a secret which does not exist in ACTIVE state.
         Map<String, List<String>> projectToNames = entries.stream()
                 .collect(Collectors.groupingBy(
                         SecretVersionEntry::getProjectId,
@@ -153,48 +156,57 @@ public class SecretServiceImpl implements SecretService {
 
         Map<String, Secret> secretMap = new HashMap<>();
         secretRepository.findActiveByProjectAndNames(projectToNames)
-                .forEach(s -> secretMap.put(s.getProjectId() + ":" + s.getName(), s));
+                .forEach(s -> secretMap.put(secretKey(s.getProjectId(), s.getName()), s));
 
-        Map<String, Long> changedSecretIdToVersion = new HashMap<>();
-        Map<String, SecretVersionEntry> changedEntryBySecretId = new HashMap<>();
+        // Fail-fast: any entry that did not resolve to an active secret causes the whole batch
+        // to error out, so missing/disabled secrets cannot be silently skipped by callers.
+        if (secretMap.size() < entries.size()) {
+            String missing = entries.stream()
+                    .map(e -> secretKey(e.getProjectId(), e.getSecretName()))
+                    .filter(key -> !secretMap.containsKey(key))
+                    .findFirst()
+                    .orElse("<unknown>");
+            throw new NotFoundException("Active secret not found for " + missing);
+        }
+
+        // Filter to only the secrets whose server-side version has advanced past the caller's
+        // cached lastKnownVersion. A null lastKnownVersion means the caller has no cache yet
+        // and wants the latest value unconditionally.
+        List<Secret> changed = new ArrayList<>();
         for (SecretVersionEntry entry : entries) {
-            Secret secret = secretMap.get(entry.getProjectId() + ":" + entry.getSecretName());
-            if (secret == null || secret.getCurrentDataVersion() <= entry.getLastKnownVersion()) {
-                continue;
+            Secret secret = secretMap.get(secretKey(entry.getProjectId(), entry.getSecretName()));
+            Integer lastKnown = entry.getLastKnownVersion();
+            if (lastKnown == null || secret.getCurrentDataVersion() > lastKnown) {
+                changed.add(secret);
             }
-            changedSecretIdToVersion.put(secret.getId(), (long) secret.getCurrentDataVersion());
-            changedEntryBySecretId.put(secret.getId(), entry);
         }
 
-        if (changedSecretIdToVersion.isEmpty()) {
-            return BatchGetSecretsResponse.builder()
-                    .updatedCount(0)
-                    .updatedSecrets(List.of())
-                    .build();
-        }
-
-        Map<String, SecretData> secretDataMap = new HashMap<>();
-        secretDataRepository.findBySecretIdAndVersionPairs(changedSecretIdToVersion)
-                .forEach(sd -> secretDataMap.put(sd.getSecretId(), sd));
-
-        List<UpdatedSecret> updated = new ArrayList<>();
-        for (Map.Entry<String, SecretVersionEntry> e : changedEntryBySecretId.entrySet()) {
-            String secretId = e.getKey();
-            SecretVersionEntry entry = e.getValue();
-            Secret secret = secretMap.get(entry.getProjectId() + ":" + entry.getSecretName());
-            SecretData secretData = secretDataMap.get(secretId);
-            if (secretData == null) {
-                continue;
-            }
+        List<BatchSecretItem> items = new ArrayList<>(changed.size());
+        for (Secret secret : changed) {
+            // Per-secret fetch is deliberate: in the common polling case, `changed` is small
+            // (often 0 or 1). Each lookup is a single indexed (secretId, dataVersion) hit.
+            SecretData secretData = secretDataRepository
+                    .getBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
+                    .orElseThrow(() -> new NotFoundException(
+                            "Secret data not found for secret: " + secret.getId()
+                                    + " at version " + secret.getCurrentDataVersion()));
             secretEncryptionUtil.decryptSecretData(secretData);
-            SecretDataResponse secretValue = secretMapper.toSecretDataResponse(secret, secretData);
-            updated.add(new UpdatedSecret(entry.getProjectId(), entry.getSecretName(), secretValue));
+            items.add(secretMapper.toBatchSecretItem(secret, secretData));
         }
 
         return BatchGetSecretsResponse.builder()
-                .updatedCount(updated.size())
-                .updatedSecrets(updated)
+                .updatedCount(items.size())
+                .updatedSecrets(items)
                 .build();
+    }
+
+    /**
+     * Composite lookup key used to index secrets by (projectId, secretName) in batch flows.
+     * Uses a non-printable separator so it cannot collide with legal projectId/secretName
+     * characters even if either value contained a colon.
+     */
+    private static String secretKey(String projectId, String secretName) {
+        return projectId + '\u0000' + secretName;
     }
 
     /**

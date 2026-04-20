@@ -2,8 +2,6 @@ package com.flipkart.grayskull.spi.repositories;
 
 import com.flipkart.grayskull.spi.models.Project;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -33,14 +31,6 @@ public interface ProjectRepository {
      * @return a Project instance; either the persisted project or a transient one.
      */
     Project findByIdOrTransient(String id);
-
-    /**
-     * Finds all projects with the given IDs.
-     *
-     * @param ids the project IDs to find, must not be null.
-     * @return a list of found projects; never null.
-     */
-    List<Project> findAllById(Collection<String> ids);
 
     /**
      * Saves a given project.

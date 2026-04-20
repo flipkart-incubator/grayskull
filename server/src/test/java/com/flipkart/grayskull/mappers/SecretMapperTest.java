@@ -5,6 +5,7 @@ import com.flipkart.grayskull.entities.SecretEntity;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.SecretDataPayload;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
+import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretMetadata;
@@ -285,6 +286,46 @@ class SecretMapperTest {
             assertEquals("old-private", response.getPrivatePart());
             assertEquals("DISABLED", response.getState());
             assertEquals(now, response.getLastRotated());
+        }
+
+        @Test
+        @DisplayName("Should map Secret and SecretData to BatchSecretItem (inherits SecretDataResponse fields)")
+        void shouldMapToBatchSecretItem() {
+            Instant now = Instant.now();
+            Secret secret = Secret.builder()
+                    .id("secret-300")
+                    .projectId("proj-x")
+                    .name("api-key")
+                    .state(LifecycleState.ACTIVE)
+                    .lastRotated(now.minusSeconds(60))
+                    .creationTime(now.minusSeconds(120))
+                    .updatedTime(now)
+                    .createdBy("u1")
+                    .updatedBy("u2")
+                    .build();
+
+            SecretData secretData = SecretData.builder()
+                    .secretId("secret-300")
+                    .dataVersion(9L)
+                    .publicPart("pub-data")
+                    .privatePart("priv-data")
+                    .state(LifecycleState.ACTIVE)
+                    .build();
+
+            BatchSecretItem item = secretMapper.toBatchSecretItem(secret, secretData);
+
+            assertNotNull(item);
+            assertEquals("proj-x", item.getProjectId());
+            assertEquals("api-key", item.getSecretName());
+            assertEquals(9L, item.getDataVersion());
+            assertEquals("pub-data", item.getPublicPart());
+            assertEquals("priv-data", item.getPrivatePart());
+            assertEquals("ACTIVE", item.getState());
+            assertEquals(now.minusSeconds(60), item.getLastRotated());
+            assertEquals(now.minusSeconds(120), item.getCreationTime());
+            assertEquals(now, item.getUpdatedTime());
+            assertEquals("u1", item.getCreatedBy());
+            assertEquals("u2", item.getUpdatedBy());
         }
     }
 

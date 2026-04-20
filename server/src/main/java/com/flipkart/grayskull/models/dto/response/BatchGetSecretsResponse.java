@@ -16,5 +16,5 @@ import java.util.List;
 public class BatchGetSecretsResponse {
 
     int updatedCount;
-    List<UpdatedSecret> updatedSecrets;
+    List<BatchSecretItem> updatedSecrets;
 }

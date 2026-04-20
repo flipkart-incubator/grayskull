@@ -28,4 +28,4 @@ public interface GrayskullAuthorizationProvider {
      */
     boolean isAuthorized(GrayskullAuthentication authentication, String action);
 
-} 
+}

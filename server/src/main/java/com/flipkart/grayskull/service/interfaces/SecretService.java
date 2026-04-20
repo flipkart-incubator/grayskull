@@ -86,13 +86,18 @@ public interface SecretService {
     void destroySecret(String projectId, String secretName);
 
     /**
-     * Checks for secret version changes across multiple secrets.
-     * For each entry, compares the current version against the client's last known version.
-     * Returns decrypted values only for secrets that have changed.
-     * Silently skips secrets that are not found or inactive.
+     * Checks for secret version changes across multiple secrets. For each entry, compares the
+     * current version against the caller's {@link SecretVersionEntry#getLastKnownVersion() last
+     * known version} and returns decrypted values only for secrets that have advanced. A null
+     * {@code lastKnownVersion} is treated as "no cache" and always yields the current value.
+     * <p>
+     * This method assumes the caller has already been authorized for every entry. Secrets that
+     * are missing or not in the {@code ACTIVE} state cause the whole batch to fail with a
+     * {@link com.flipkart.grayskull.exception.NotFoundException} rather than being silently
+     * skipped, so misconfiguration on the client side surfaces immediately.
      *
      * @param entries The list of pre-authorized entries to check.
-     * @return A {@link BatchGetSecretsResponse} with updated secrets.
+     * @return A {@link BatchGetSecretsResponse} listing only the changed secrets.
      */
     BatchGetSecretsResponse batchGetSecrets(List<SecretVersionEntry> entries);
 

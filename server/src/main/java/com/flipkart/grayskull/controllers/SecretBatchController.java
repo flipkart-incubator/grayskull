@@ -5,8 +5,8 @@ import com.flipkart.grayskull.audit.AuditConstants;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.BatchGetSecretsRequest;
 import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
+import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
 import com.flipkart.grayskull.models.dto.response.ResponseTemplate;
-import com.flipkart.grayskull.models.dto.response.UpdatedSecret;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
@@ -54,6 +54,11 @@ public class SecretBatchController {
         GrayskullAuthentication authentication =
                 (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
 
+        // Base metadata collected once from every registered AuditMetadataEnhancer and shared
+        // across the per-secret entries produced for this batch. In particular, the SDK-supplied
+        // X-Request-Id header is surfaced here via RequestIdAuditEnhancer -> "RequestId" key, so
+        // every audit entry for one batch call shares the same RequestId. This is what lets SIEM
+        // tooling correlate "which secrets were updated together in the same poll".
         Map<String, String> enhancerMetadata = new HashMap<>();
         auditMetadataEnhancers.stream()
                 .map(enhancer -> enhancer.getAdditionalMetadata(httpRequest))
@@ -64,15 +69,17 @@ public class SecretBatchController {
         String actorId = authentication.getActor();
         Map<String, String> ips = requestUtils.getRemoteIPs();
 
-        for (UpdatedSecret secret : response.getUpdatedSecrets()) {
+        for (BatchSecretItem secret : response.getUpdatedSecrets()) {
+            // Fresh map per entry so the publicPart of one secret doesn't bleed into the
+            // metadata of the next.
             Map<String, String> metadata = new HashMap<>(enhancerMetadata);
-            metadata.put("publicPart", secret.getSecretValue().getPublicPart());
+            metadata.put("publicPart", secret.getPublicPart());
 
             AuditEntry auditEntry = AuditEntry.builder()
                     .projectId(secret.getProjectId())
                     .resourceType(AuditConstants.RESOURCE_TYPE_SECRET)
                     .resourceName(secret.getSecretName())
-                    .resourceVersion(secret.getSecretValue().getDataVersion())
+                    .resourceVersion(secret.getDataVersion())
                     .action(AuditAction.BATCH_GET_SECRETS.name())
                     .userId(userId)
                     .actorId(actorId)

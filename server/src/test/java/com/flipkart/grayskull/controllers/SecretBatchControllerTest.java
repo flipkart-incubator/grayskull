@@ -6,8 +6,7 @@ import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.BatchGetSecretsRequest;
 import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
-import com.flipkart.grayskull.models.dto.response.UpdatedSecret;
-import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
+import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
@@ -45,12 +44,19 @@ class SecretBatchControllerTest {
         SecurityContextHolder.clearContext();
     }
 
+    private static BatchSecretItem item(String projectId, String name, int version, String publicPart) {
+        return BatchSecretItem.builder()
+                .projectId(projectId)
+                .secretName(name)
+                .dataVersion(version)
+                .publicPart(publicPart)
+                .build();
+    }
+
     @Test
     @DisplayName("Should log one audit entry per updated secret, matching readSecretValue pattern")
     void batchGet_shouldLogPerSecretAudit() {
-        SecretDataResponse value = SecretDataResponse.builder()
-                .dataVersion(3).publicPart("pub").build();
-        UpdatedSecret updatedSecret = new UpdatedSecret("proj-b", "api-key", value);
+        BatchSecretItem updatedSecret = item("proj-b", "api-key", 3, "pub");
         BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(1, List.of(updatedSecret));
         Map<String, String> expectedIps = Map.of("Remote-Conn-Addr", "10.0.0.1");
 
@@ -97,13 +103,9 @@ class SecretBatchControllerTest {
     @Test
     @DisplayName("Should log N audit entries for N updated secrets")
     void batchGet_shouldLogOneEntryPerUpdatedSecret() {
-        SecretDataResponse value1 = SecretDataResponse.builder()
-                .dataVersion(2).publicPart("pub1").build();
-        SecretDataResponse value2 = SecretDataResponse.builder()
-                .dataVersion(3).publicPart("pub2").build();
         BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(2, List.of(
-                new UpdatedSecret("proj-a", "db-pass", value1),
-                new UpdatedSecret("proj-b", "api-key", value2)));
+                item("proj-a", "db-pass", 2, "pub1"),
+                item("proj-b", "api-key", 3, "pub2")));
 
         BatchGetSecretsRequest request = new BatchGetSecretsRequest(List.of(
                 new SecretVersionEntry("proj-a", "db-pass", 1),
@@ -135,13 +137,11 @@ class SecretBatchControllerTest {
     @DisplayName("Should include audit metadata from enhancers in each per-secret entry")
     void batchGet_shouldIncludeEnhancerMetadataInEachEntry() {
         AuditMetadataEnhancer enhancer = mock(AuditMetadataEnhancer.class);
-        when(enhancer.getAdditionalMetadata(any())).thenReturn(Map.of("requestId", "req-123"));
+        when(enhancer.getAdditionalMetadata(any())).thenReturn(Map.of("RequestId", "req-123"));
         auditMetadataEnhancers.add(enhancer);
 
-        SecretDataResponse value = SecretDataResponse.builder()
-                .dataVersion(2).publicPart("pub").build();
         BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(1,
-                List.of(new UpdatedSecret("proj-a", "db-pass", value)));
+                List.of(item("proj-a", "db-pass", 2, "pub")));
 
         BatchGetSecretsRequest request = new BatchGetSecretsRequest(List.of(
                 new SecretVersionEntry("proj-a", "db-pass", 1)));
@@ -154,7 +154,7 @@ class SecretBatchControllerTest {
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(captor.capture());
         assertThat(captor.getValue().getMetadata())
-                .containsEntry("requestId", "req-123")
+                .containsEntry("RequestId", "req-123")
                 .containsEntry("publicPart", "pub");
     }
 
@@ -165,10 +165,8 @@ class SecretBatchControllerTest {
         when(nullEnhancer.getAdditionalMetadata(any())).thenReturn(null);
         auditMetadataEnhancers.add(nullEnhancer);
 
-        SecretDataResponse value = SecretDataResponse.builder()
-                .dataVersion(2).publicPart("pub").build();
         BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(1,
-                List.of(new UpdatedSecret("proj-a", "db-pass", value)));
+                List.of(item("proj-a", "db-pass", 2, "pub")));
 
         BatchGetSecretsRequest request = new BatchGetSecretsRequest(List.of(
                 new SecretVersionEntry("proj-a", "db-pass", 1)));
@@ -181,6 +179,36 @@ class SecretBatchControllerTest {
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(captor.capture());
         assertThat(captor.getValue().getMetadata()).containsKey("publicPart");
-        assertThat(captor.getValue().getMetadata()).doesNotContainKey("requestId");
+        assertThat(captor.getValue().getMetadata()).doesNotContainKey("RequestId");
+    }
+
+    @Test
+    @DisplayName("Per-secret metadata should not bleed into other entries in the same batch")
+    void batchGet_perSecretMetadataIsIsolated() {
+        AuditMetadataEnhancer enhancer = mock(AuditMetadataEnhancer.class);
+        when(enhancer.getAdditionalMetadata(any())).thenReturn(Map.of("RequestId", "req-xyz"));
+        auditMetadataEnhancers.add(enhancer);
+
+        BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(2, List.of(
+                item("proj-a", "s1", 2, "pubA"),
+                item("proj-b", "s2", 3, "pubB")));
+
+        BatchGetSecretsRequest request = new BatchGetSecretsRequest(List.of(
+                new SecretVersionEntry("proj-a", "s1", 1),
+                new SecretVersionEntry("proj-b", "s2", 1)));
+
+        when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
+        when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
+
+        controller.batchGetSecrets(request, new MockHttpServletRequest());
+
+        ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
+        verify(asyncAuditLogger, times(2)).log(captor.capture());
+        // Same RequestId on every entry (correlation) ...
+        assertThat(captor.getAllValues().get(0).getMetadata()).containsEntry("RequestId", "req-xyz");
+        assertThat(captor.getAllValues().get(1).getMetadata()).containsEntry("RequestId", "req-xyz");
+        // ... but each entry carries only its own publicPart.
+        assertThat(captor.getAllValues().get(0).getMetadata()).containsEntry("publicPart", "pubA");
+        assertThat(captor.getAllValues().get(1).getMetadata()).containsEntry("publicPart", "pubB");
     }
 }

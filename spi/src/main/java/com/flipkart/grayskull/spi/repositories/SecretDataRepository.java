@@ -2,8 +2,6 @@ package com.flipkart.grayskull.spi.repositories;
 
 import com.flipkart.grayskull.spi.models.SecretData;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -29,12 +27,4 @@ public interface SecretDataRepository {
      * @return An Optional containing the secret data if found.
      */
     Optional<SecretData> getBySecretIdAndDataVersion(String secretId, long dataVersion);
-
-    /**
-     * Gets secret data for multiple secrets at their specific versions in a single operation.
-     *
-     * @param secretIdToVersion Map of secretId to the specific dataVersion to retrieve.
-     * @return List of matching SecretData entries.
-     */
-    List<SecretData> findBySecretIdAndVersionPairs(Map<String, Long> secretIdToVersion);
 }
