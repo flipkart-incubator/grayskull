@@ -1,16 +1,19 @@
 package com.flipkart.grayskull.audit.utils;
 
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+
+import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 
 import java.util.*;
 
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Component
 public class RequestUtils {
 
-    private HttpServletRequest request;
+    private final HttpServletRequest request;
+    private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
 
     public Map<String, String> getRemoteIPs() {
         Map<String, String> ips = new HashMap<>();
@@ -25,5 +28,14 @@ public class RequestUtils {
         if (value != null) {
             map.put(key, value);
         }
+    }
+
+    public Map<String, String> getAdditionalMetadata() {
+        Map<String, String> metadata = new HashMap<>();
+        auditMetadataEnhancers.stream()
+                .map(enhancer -> enhancer.getAdditionalMetadata(request))
+                .filter(Objects::nonNull)
+                .forEach(metadata::putAll);
+        return metadata;
     }
 }

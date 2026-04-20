@@ -9,12 +9,10 @@ import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
-import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
-import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 
@@ -29,13 +27,11 @@ class SecretBatchControllerTest {
     private final SecretService secretService = mock(SecretService.class);
     private final AsyncAuditLogger asyncAuditLogger = mock(AsyncAuditLogger.class);
     private final RequestUtils requestUtils = mock(RequestUtils.class);
-    private final List<AuditMetadataEnhancer> auditMetadataEnhancers = new ArrayList<>();
-
     private SecretBatchController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new SecretBatchController(secretService, asyncAuditLogger, requestUtils, auditMetadataEnhancers);
+        controller = new SecretBatchController(secretService, asyncAuditLogger, requestUtils);
         SecurityContextHolder.setContext(new SecurityContextImpl(new GrayskullAuthentication("user", "actor-name")));
     }
 
@@ -66,7 +62,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
-        var result = controller.batchGetSecrets(request, new MockHttpServletRequest());
+        var result = controller.batchGetSecrets(request);
 
         assertThat(result.getData().getUpdatedCount()).isEqualTo(1);
 
@@ -93,7 +89,7 @@ class SecretBatchControllerTest {
 
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
 
-        var result = controller.batchGetSecrets(request, new MockHttpServletRequest());
+        var result = controller.batchGetSecrets(request);
 
         assertThat(result.getData().getUpdatedCount()).isZero();
         assertThat(result.getData().getUpdatedSecrets()).isEmpty();
@@ -114,7 +110,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request, new MockHttpServletRequest());
+        controller.batchGetSecrets(request);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger, times(2)).log(captor.capture());
@@ -136,9 +132,7 @@ class SecretBatchControllerTest {
     @Test
     @DisplayName("Should include audit metadata from enhancers in each per-secret entry")
     void batchGet_shouldIncludeEnhancerMetadataInEachEntry() {
-        AuditMetadataEnhancer enhancer = mock(AuditMetadataEnhancer.class);
-        when(enhancer.getAdditionalMetadata(any())).thenReturn(Map.of("RequestId", "req-123"));
-        auditMetadataEnhancers.add(enhancer);
+        when(requestUtils.getAdditionalMetadata()).thenReturn(Map.of("RequestId", "req-123"));
 
         BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(1,
                 List.of(item("proj-a", "db-pass", 2, "pub")));
@@ -149,7 +143,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request, new MockHttpServletRequest());
+        controller.batchGetSecrets(request);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(captor.capture());
@@ -161,9 +155,7 @@ class SecretBatchControllerTest {
     @Test
     @DisplayName("Should skip null metadata from enhancers")
     void batchGet_shouldSkipNullEnhancerMetadata() {
-        AuditMetadataEnhancer nullEnhancer = mock(AuditMetadataEnhancer.class);
-        when(nullEnhancer.getAdditionalMetadata(any())).thenReturn(null);
-        auditMetadataEnhancers.add(nullEnhancer);
+        when(requestUtils.getAdditionalMetadata()).thenReturn(Map.of());
 
         BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(1,
                 List.of(item("proj-a", "db-pass", 2, "pub")));
@@ -174,7 +166,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request, new MockHttpServletRequest());
+        controller.batchGetSecrets(request);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(captor.capture());
@@ -185,9 +177,7 @@ class SecretBatchControllerTest {
     @Test
     @DisplayName("Per-secret metadata should not bleed into other entries in the same batch")
     void batchGet_perSecretMetadataIsIsolated() {
-        AuditMetadataEnhancer enhancer = mock(AuditMetadataEnhancer.class);
-        when(enhancer.getAdditionalMetadata(any())).thenReturn(Map.of("RequestId", "req-xyz"));
-        auditMetadataEnhancers.add(enhancer);
+        when(requestUtils.getAdditionalMetadata()).thenReturn(Map.of("RequestId", "req-xyz"));
 
         BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(2, List.of(
                 item("proj-a", "s1", 2, "pubA"),
@@ -200,7 +190,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request, new MockHttpServletRequest());
+        controller.batchGetSecrets(request);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger, times(2)).log(captor.capture());

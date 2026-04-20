@@ -240,11 +240,11 @@ class GrayskullSecurityTest {
 
     // Tests for hasPermissionForSecrets method (batch authz).
     // Contract: no DB fetches; for each entry, transient Project/Secret are built from the
-    // request and the SPI is called in a fail-fast loop via isAuthorized(ctx, action).
+    // request and the SPI is called via bulkAuthorize.
     @Test
     void hasPermissionForSecrets_WhenAllAuthorized_ReturnsTrue_AndMakesNoDbCalls() {
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value")))
+        when(authorizationProvider.bulkAuthorize(any(), eq("secrets.read.value")))
                 .thenReturn(true);
 
         List<SecretVersionEntry> entries = List.of(
@@ -255,15 +255,16 @@ class GrayskullSecurityTest {
 
         verifyNoInteractions(projectRepository);
         verifyNoInteractions(secretRepository);
-        verify(authorizationProvider, times(2))
-                .isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"));
+        verify(authorizationProvider, times(1))
+                .bulkAuthorize(any(), eq("secrets.read.value"));
     }
 
     @Test
-    void hasPermissionForSecrets_PassesEachEntryThroughToSpiInOrder() {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void hasPermissionForSecrets_PassesAllEntriesToBulkApi() {
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        ArgumentCaptor<AuthorizationContext> captor = ArgumentCaptor.forClass(AuthorizationContext.class);
-        when(authorizationProvider.isAuthorized(captor.capture(), eq("secrets.read.value"))).thenReturn(true);
+        ArgumentCaptor<List<AuthorizationContext>> captor = ArgumentCaptor.forClass((Class) List.class);
+        when(authorizationProvider.bulkAuthorize(captor.capture(), eq("secrets.read.value"))).thenReturn(true);
 
         List<SecretVersionEntry> entries = List.of(
                 new SecretVersionEntry("proj-a", "secret-1", 1),
@@ -271,7 +272,7 @@ class GrayskullSecurityTest {
 
         assertTrue(grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value"));
 
-        List<AuthorizationContext> forwarded = captor.getAllValues();
+        List<AuthorizationContext> forwarded = captor.getValue();
         assertEquals(2, forwarded.size());
         assertEquals("proj-a", forwarded.get(0).getProjectId());
         assertEquals(Optional.of("secret-1"), forwarded.get(0).getSecretName());
@@ -280,27 +281,9 @@ class GrayskullSecurityTest {
     }
 
     @Test
-    void hasPermissionForSecrets_FailsFast_OnFirstDenial_AndStopsCalling() {
+    void hasPermissionForSecrets_WhenBulkDenies_ReturnsFalse() {
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        // First entry denied -> second entry must not be evaluated.
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value")))
-                .thenReturn(false)
-                .thenThrow(new AssertionError("should not be called after a denial"));
-
-        List<SecretVersionEntry> entries = List.of(
-                new SecretVersionEntry("proj-a", "s1", 1),
-                new SecretVersionEntry("proj-a", "s2", 2));
-
-        assertFalse(grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value"));
-        verify(authorizationProvider, times(1))
-                .isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"));
-    }
-
-    @Test
-    void hasPermissionForSecrets_FailsOnSecondEntry_ReturnsFalse() {
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value")))
-                .thenReturn(true)
+        when(authorizationProvider.bulkAuthorize(any(), eq("secrets.read.value")))
                 .thenReturn(false);
 
         List<SecretVersionEntry> entries = List.of(
@@ -308,32 +291,33 @@ class GrayskullSecurityTest {
                 new SecretVersionEntry("proj-a", "s2", 2));
 
         assertFalse(grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value"));
-        verify(authorizationProvider, times(2))
-                .isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"));
+        verify(authorizationProvider, times(1))
+                .bulkAuthorize(any(), eq("secrets.read.value"));
     }
 
     @Test
-    void hasPermissionForSecrets_WhenEmptyList_ReturnsTrue_WithoutTouchingProvider() {
+    void hasPermissionForSecrets_WhenEmptyList_ReturnsTrue() {
         SecurityContextHolder.getContext().setAuthentication(authentication);
+        when(authorizationProvider.bulkAuthorize(any(), eq("secrets.read.value"))).thenReturn(true);
 
         assertTrue(grayskullSecurity.hasPermissionForSecrets(List.of(), "secrets.read.value"));
 
         verifyNoInteractions(projectRepository);
         verifyNoInteractions(secretRepository);
-        verifyNoInteractions(authorizationProvider);
+        verify(authorizationProvider, times(1)).bulkAuthorize(any(), eq("secrets.read.value"));
     }
 
     @Test
     void hasPermissionForSecrets_WithNullLastKnownVersion_AllowsAuthzCheck() {
         // Verifies null lastKnownVersion (per SecretVersionEntry contract) is accepted and passed through.
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(authorizationProvider.isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value")))
+        when(authorizationProvider.bulkAuthorize(any(), eq("secrets.read.value")))
                 .thenReturn(true);
 
         List<SecretVersionEntry> entries = List.of(new SecretVersionEntry("proj-a", "s1", null));
 
         assertTrue(grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value"));
         verify(authorizationProvider, times(1))
-                .isAuthorized(any(AuthorizationContext.class), eq("secrets.read.value"));
+                .bulkAuthorize(any(), eq("secrets.read.value"));
     }
 }

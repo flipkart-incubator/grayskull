@@ -122,9 +122,8 @@ public class GrayskullSecurity {
      * Batch authorization for a list of (projectId, secretName) pairs.
      * <p>
      * Performs no DB lookups; transient {@link Project}/{@link Secret} objects are built
-     * from the input and each entry is checked via the single-context SPI method in a
-     * fail-fast loop. Returns {@code true} iff every entry is authorized (empty list is
-     * vacuously true). The service layer is responsible for 404s on non-existent secrets.
+     * from the input and checked via the {@code bulkAuthorize} SPI method.
+     * The service layer is responsible for 404s on non-existent secrets.
      *
      * @param entries List of entries each containing a projectId and secretName.
      * @param action  The action to authorize.
@@ -132,19 +131,16 @@ public class GrayskullSecurity {
      */
     public boolean hasPermissionForSecrets(List<SecretVersionEntry> entries, String action) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        for (SecretVersionEntry entry : entries) {
-            AuthorizationContext context = AuthorizationContext.forSecret(
-                    authentication,
-                    Project.builder().id(entry.getProjectId()).build(),
-                    Secret.builder()
-                            .projectId(entry.getProjectId())
-                            .name(entry.getSecretName())
-                            .build());
-            if (!authorizationProvider.isAuthorized(context, action)) {
-                return false;
-            }
-        }
-        return true;
+        List<AuthorizationContext> contexts = entries.stream()
+                .map(entry -> AuthorizationContext.forSecret(
+                        authentication,
+                        Project.builder().id(entry.getProjectId()).build(),
+                        Secret.builder()
+                                .projectId(entry.getProjectId())
+                                .name(entry.getSecretName())
+                                .build()))
+                .toList();
+        return authorizationProvider.bulkAuthorize(contexts, action);
     }
 
     /**
