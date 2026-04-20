@@ -102,6 +102,9 @@ public interface SecretMapper {
     @Mapping(target = "updatedBy", source = "secret.updatedBy")
     SecretDataResponse toSecretDataResponse(Secret secret, SecretData secretData);
 
+    /**
+     * Maps a {@link SecretData} entity to a {@link SecretDataVersionResponse} DTO.
+     */
     @InheritConfiguration(name = "toSecretDataResponse")
     @Mapping(target = "state", source = "secret.state")
     SecretDataVersionResponse secretDataToSecretDataVersionResponse(Secret secret, SecretData secretData);

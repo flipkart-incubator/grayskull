@@ -146,9 +146,7 @@ public class SecretServiceImpl implements SecretService {
 
     @Override
     public BatchGetSecretsResponse batchGetSecrets(List<SecretVersionEntry> entries) {
-        // Single bulk query to fetch active-secret metadata for every requested (projectId, name)
-        // pair. Inactive/missing secrets are intentionally excluded here so the fail-fast check
-        // below will reject any request that names a secret which does not exist in ACTIVE state.
+   
         Map<String, List<String>> projectToNames = entries.stream()
                 .collect(Collectors.groupingBy(
                         SecretVersionEntry::getProjectId,
@@ -158,8 +156,7 @@ public class SecretServiceImpl implements SecretService {
         secretRepository.findActiveByProjectAndNames(projectToNames)
                 .forEach(s -> secretMap.put(secretKey(s.getProjectId(), s.getName()), s));
 
-        // Fail-fast: any entry that did not resolve to an active secret causes the whole batch
-        // to error out, so missing/disabled secrets cannot be silently skipped by callers.
+        
         if (secretMap.size() < entries.size()) {
             String missing = entries.stream()
                     .map(e -> secretKey(e.getProjectId(), e.getSecretName()))
@@ -169,9 +166,7 @@ public class SecretServiceImpl implements SecretService {
             throw new NotFoundException("Active secret not found for " + missing);
         }
 
-        // Filter to only the secrets whose server-side version has advanced past the caller's
-        // cached lastKnownVersion. A null lastKnownVersion means the caller has no cache yet
-        // and wants the latest value unconditionally.
+     
         List<Secret> changed = new ArrayList<>();
         for (SecretVersionEntry entry : entries) {
             Secret secret = secretMap.get(secretKey(entry.getProjectId(), entry.getSecretName()));
@@ -183,8 +178,7 @@ public class SecretServiceImpl implements SecretService {
 
         List<BatchSecretItem> items = new ArrayList<>(changed.size());
         for (Secret secret : changed) {
-            // Per-secret fetch is deliberate: in the common polling case, `changed` is small
-            // (often 0 or 1). Each lookup is a single indexed (secretId, dataVersion) hit.
+     
             SecretData secretData = secretDataRepository
                     .getBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
                     .orElseThrow(() -> new NotFoundException(
@@ -201,9 +195,7 @@ public class SecretServiceImpl implements SecretService {
     }
 
     /**
-     * Composite lookup key used to index secrets by (projectId, secretName) in batch flows.
      * Uses a non-printable separator so it cannot collide with legal projectId/secretName
-     * characters even if either value contained a colon.
      */
     private static String secretKey(String projectId, String secretName) {
         return projectId + '\u0000' + secretName;
