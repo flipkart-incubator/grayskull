@@ -15,10 +15,6 @@ import lombok.experimental.SuperBuilder;
 /**
  * Secret data values with version metadata.
  * Contains sensitive information for authorized access.
- * <p>
- * Uses {@code @SuperBuilder} (non-final class with private-final fields) so that
- * DTOs such as {@link BatchSecretItem} can extend it and reuse its fields via
- * inheritance instead of duplicating them.
  */
 @Getter
 @ToString
@@ -29,13 +25,48 @@ import lombok.experimental.SuperBuilder;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class SecretDataResponse {
 
+    /**
+     * Data version number.
+     */
     int dataVersion;
+
+    /**
+     * Public part of the secret.
+     */
     String publicPart;
+
+    /**
+     * Private/sensitive part of the secret.
+     */
     String privatePart;
+
+    /**
+     * Last rotation timestamp.
+     */
     Instant lastRotated;
+
+    /**
+     * Version creation timestamp.
+     */
     Instant creationTime;
+
+    /**
+     * Last update timestamp.
+     */
     Instant updatedTime;
+
+    /**
+     * User who created this version.
+     */
     String createdBy;
+
+    /**
+     * User who last updated this version.
+     */
     String updatedBy;
+
+    /**
+     * Version state (ACTIVE, EXPIRED, REVOKED).
+     */
     String state;
 }

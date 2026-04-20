@@ -9,11 +9,6 @@ import lombok.NoArgsConstructor;
 
 /**
  * A single entry in a batch-get request, identifying a secret and its last known version.
- * <p>
- * {@code lastKnownVersion} is optional. When {@code null}, the caller has no prior cached
- * version and the server will always return the current value for this secret. When
- * provided, the server returns the secret only if its current version is strictly greater
- * than {@code lastKnownVersion}.
  */
 @Data
 @NoArgsConstructor
@@ -29,9 +24,7 @@ public class SecretVersionEntry {
     private String secretName;
 
     /**
-     * The last version number the caller has cached for this secret. May be {@code null}
-     * when the caller has no prior record and wants the latest value unconditionally.
-     * {@code @PositiveOrZero} is skipped when the value is null, so both semantics are preserved.
+     * The last version number the caller has cached for this secret.
      */
     @PositiveOrZero
     private Integer lastKnownVersion;

@@ -8,7 +8,6 @@ import java.util.List;
 
 /**
  * Response for the batch-get secrets endpoint.
- * Contains secrets whose versions have changed since the client's last known versions.
  */
 @Value
 @Builder

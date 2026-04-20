@@ -120,10 +120,6 @@ public class GrayskullSecurity {
 
     /**
      * Batch authorization for a list of (projectId, secretName) pairs.
-     * <p>
-     * Performs no DB lookups; transient {@link Project}/{@link Secret} objects are built
-     * from the input and checked via the {@code bulkAuthorize} SPI method.
-     * The service layer is responsible for 404s on non-existent secrets.
      *
      * @param entries List of entries each containing a projectId and secretName.
      * @param action  The action to authorize.

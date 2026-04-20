@@ -10,9 +10,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
 
 /**
- * A single item in a {@link BatchGetSecretsResponse}. Extends {@link SecretDataResponse}
- * to reuse its data/version fields and only adds the secret identity ({@code projectId},
- * {@code secretName}) at this level.
+ * A single item in a {@link BatchGetSecretsResponse}.
  */
 @Getter
 @ToString(callSuper = true)

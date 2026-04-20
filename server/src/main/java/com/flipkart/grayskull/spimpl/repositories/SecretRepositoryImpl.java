@@ -10,8 +10,6 @@ import lombok.AllArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -68,15 +66,20 @@ public class SecretRepositoryImpl implements SecretRepository {
         if (projectToNames.isEmpty()) {
             return List.of();
         }
-        List<Criteria> orCriteria = new ArrayList<>();
-        for (Map.Entry<String, List<String>> entry : projectToNames.entrySet()) {
-            orCriteria.add(Criteria.where("projectId").is(entry.getKey())
-                    .and("name").in(entry.getValue())
-                    .and("state").is(LifecycleState.ACTIVE));
+
+        List<String> allProjectIds = new ArrayList<>(projectToNames.keySet());
+        List<String> allNames = new ArrayList<>();
+        for (List<String> names : projectToNames.values()) {
+            allNames.addAll(names);
         }
-        Query query = new Query(new Criteria().orOperator(orCriteria));
-        query.fields().include("projectId", "name", "currentDataVersion");
-        return mongoTemplate.find(query, SecretEntity.class).stream()
+
+        List<SecretEntity> results = mongoRepository.findByProjectIdInAndNameInAndState(allProjectIds, allNames, LifecycleState.ACTIVE);
+        
+        return results.stream()
+                .filter(entity -> {
+                    List<String> requestedNames = projectToNames.get(entity.getProjectId());
+                    return requestedNames != null && requestedNames.contains(entity.getName());
+                })
                 .map(Secret.class::cast)
                 .toList();
     }
