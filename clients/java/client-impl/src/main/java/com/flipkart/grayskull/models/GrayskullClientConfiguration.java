@@ -87,6 +87,19 @@ public final class GrayskullClientConfiguration {
     private int minRetryDelay = 100;
 
     /**
+     * The interval in seconds between secret refresh polls.
+     * <p>
+     * When refresh hooks are registered, the SDK will poll the server for version changes
+     * at this interval. A shorter interval means faster detection of changes but more
+     * server load.
+     * </p>
+     * <p>
+     * Default: 30 seconds. Minimum: 10 seconds.
+     * </p>
+     */
+    private int pollIntervalSeconds = 30;
+
+    /**
      * Whether to enable metrics collection.
      * <p>
      * When enabled, the client will expose metrics about API calls (success/failure counts,
@@ -179,5 +192,18 @@ public final class GrayskullClientConfiguration {
             throw new IllegalArgumentException("Min retry delay must be at least 50ms, got: " + minRetryDelay);
         }
         this.minRetryDelay = minRetryDelay;
+    }
+
+    /**
+     * Sets the interval between secret refresh polls in seconds.
+     *
+     * @param pollIntervalSeconds the poll interval in seconds (must be at least 10)
+     * @throws IllegalArgumentException if pollIntervalSeconds is less than 10
+     */
+    public void setPollIntervalSeconds(int pollIntervalSeconds) {
+        if (pollIntervalSeconds < 10) {
+            throw new IllegalArgumentException("Poll interval must be at least 10 seconds, got: " + pollIntervalSeconds);
+        }
+        this.pollIntervalSeconds = pollIntervalSeconds;
     }
 }

@@ -264,14 +264,17 @@ class GrayskullClientImplTest {
     }
 
     @Test
-    void testRegisterRefreshHook_success() {
+    void testRegisterRefreshHook_success() throws Exception {
         // Given
         String secretRef = "secengg-stage:secret-1";
         AtomicInteger callCount = new AtomicInteger(0);
-        
+        SecretValue expectedSecret = new SecretValue(5, "pub", "priv");
+        HttpResponse httpResponse = createHttpResponse(expectedSecret);
+
+        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(httpResponse);
+
         SecretRefreshHook hook = (secretVal) -> {
             callCount.incrementAndGet();
-            System.out.println("Secret refreshed: " + secretVal);
         };
 
         // When
@@ -279,25 +282,99 @@ class GrayskullClientImplTest {
 
         // Then
         assertNotNull(handle);
-        // No-op implementation returns empty string and is always inactive
-        assertEquals("", handle.getSecretRef());
-        assertFalse(handle.isActive());
-        
-        // Verify hook was never called (placeholder implementation)
-        assertEquals(0, callCount.get());
+        assertEquals("secengg-stage:secret-1", handle.getSecretRef());
+        assertTrue(handle.isActive());
+        assertEquals(1, callCount.get());
     }
 
     @Test
-    void testRegisterRefreshHook_canUnregister() {
+    void testRegisterRefreshHook_hookExceptionDoesNotPropagate() throws Exception {
         // Given
         String secretRef = "secengg-stage:secret-1";
-        SecretRefreshHook hook = (secretVal) -> System.out.println("test");
+        SecretValue expectedSecret = new SecretValue(5, "pub", "priv");
+        HttpResponse httpResponse = createHttpResponse(expectedSecret);
+
+        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(httpResponse);
+
+        SecretRefreshHook failingHook = (secretVal) -> {
+            throw new RuntimeException("hook error");
+        };
+
+        // When - should not throw even though hook fails
+        RefreshHandlerRef handle = client.registerRefreshHook(secretRef, failingHook);
+
+        // Then
+        assertNotNull(handle);
+        assertTrue(handle.isActive());
+    }
+
+    @Test
+    void testRegisterRefreshHook_canUnregister() throws Exception {
+        // Given
+        String secretRef = "secengg-stage:secret-1";
+        SecretValue expectedSecret = new SecretValue(5, "pub", "priv");
+        HttpResponse httpResponse = createHttpResponse(expectedSecret);
+
+        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(httpResponse);
+
+        SecretRefreshHook hook = (secretVal) -> {};
 
         // When
         RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
-        
-        // unRegister() is a no-op but shouldn't throw
+        assertTrue(handle.isActive());
+
+        // Then - unRegister() deactivates the handle and removes the registration
         handle.unRegister();
+        assertFalse(handle.isActive());
+
+        // Idempotent: second call is a no-op, state remains inactive
+        handle.unRegister();
+        assertFalse(handle.isActive());
+    }
+
+    @Test
+    void testRegisterRefreshHook_multipleHooks_perSecret_areAllInvokedInOrder() throws Exception {
+        // Given - two hooks on the same secret; initial getSecret returns v5 for both
+        String secretRef = "proj:secret";
+        SecretValue initial = new SecretValue(5, "pub", "priv");
+        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(createHttpResponse(initial));
+
+        java.util.List<String> callOrder = new java.util.concurrent.CopyOnWriteArrayList<>();
+        SecretRefreshHook hookA = (v) -> callOrder.add("A");
+        SecretRefreshHook hookB = (v) -> callOrder.add("B");
+
+        // When
+        RefreshHandlerRef refA = client.registerRefreshHook(secretRef, hookA);
+        RefreshHandlerRef refB = client.registerRefreshHook(secretRef, hookB);
+
+        // Then - both hooks were invoked once on registration in order A, B
+        assertEquals(java.util.Arrays.asList("A", "B"), callOrder);
+        assertTrue(refA.isActive());
+        assertTrue(refB.isActive());
+
+        // And unregistering refA leaves refB active
+        refA.unRegister();
+        assertFalse(refA.isActive());
+        assertTrue(refB.isActive());
+    }
+
+    @Test
+    void testConstructor_nullHostIdentityProvider() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        assertThrows(IllegalArgumentException.class,
+                () -> new GrayskullClientImpl(mockAuthProvider, config, null),
+                "hostIdentityProvider cannot be null");
+    }
+
+    @Test
+    void testConstructor_customHostIdentityProvider_isAccepted() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        GrayskullClientImpl c = new GrayskullClientImpl(
+                mockAuthProvider, config, () -> "my-host");
+        assertNotNull(c);
+        c.close();
     }
 
     @Test
@@ -329,11 +406,15 @@ class GrayskullClientImplTest {
 
     @Test
     void testClose_handlesNullHttpClient() throws Exception {
-        // Given - create client with null http client
+        // Given - create client with null http client and null refresh manager
         GrayskullClientImpl clientWithNullHttp = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);
         Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
         httpClientField.setAccessible(true);
         httpClientField.set(clientWithNullHttp, null);
+
+        Field refreshField = GrayskullClientImpl.class.getDeclaredField("refreshManager");
+        refreshField.setAccessible(true);
+        refreshField.set(clientWithNullHttp, null);
 
         // When/Then - should not throw exception
         clientWithNullHttp.close();
