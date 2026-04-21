@@ -22,12 +22,14 @@ class GrayskullHttpClient {
 
     private final OkHttpClient httpClient;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
+    private final GrayskullClientConfiguration clientConfiguration;
     private final RetryUtil retryUtil;
 
 
     GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullClientConfiguration clientConfiguration) {
         this.authHeaderProvider = authHeaderProvider;
-        
+        this.clientConfiguration = clientConfiguration;
+
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(clientConfiguration.getConnectionTimeout(), TimeUnit.MILLISECONDS)
                 .readTimeout(clientConfiguration.getReadTimeout(), TimeUnit.MILLISECONDS)
@@ -102,6 +104,9 @@ class GrayskullHttpClient {
         if (requestId != null && !requestId.isEmpty()) {
             requestBuilder.addHeader("X-Request-Id", requestId);
         }
+
+        // Append static headers configured at client construction
+        clientConfiguration.getDefaultHeaders().forEach(requestBuilder::addHeader);
 
         return requestBuilder;
     }

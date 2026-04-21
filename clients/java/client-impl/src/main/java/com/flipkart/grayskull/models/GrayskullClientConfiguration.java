@@ -1,7 +1,13 @@
 package com.flipkart.grayskull.models;
 
+import com.flipkart.grayskull.workload.DefaultWorkloadIdentityResolver;
+import com.flipkart.grayskull.workload.WorkloadIdentityResolver;
 import lombok.Getter;
 import lombok.Setter;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Configuration properties for the Grayskull client.
@@ -98,6 +104,40 @@ public final class GrayskullClientConfiguration {
      */
     @Setter
     private boolean metricsEnabled = true;
+
+    /**
+     * Resolver for the workload identity advertised via the {@code Grayskull-Workload} header.
+     * <p>
+     * Defaults to {@link DefaultWorkloadIdentityResolver} (hostname). Downstream distributions
+     * may override with a richer implementation.
+     * </p>
+     */
+    private WorkloadIdentityResolver workloadIdentityResolver = new DefaultWorkloadIdentityResolver();
+
+    /**
+     * Static HTTP headers appended to every outbound request. Populated at client construction.
+     */
+    private final Map<String, String> defaultHeaders = new HashMap<>();
+
+    public void setWorkloadIdentityResolver(WorkloadIdentityResolver resolver) {
+        if (resolver != null) {
+            this.workloadIdentityResolver = resolver;
+        }
+    }
+
+    public WorkloadIdentityResolver getWorkloadIdentityResolver() {
+        return this.workloadIdentityResolver;
+    }
+
+    public void addDefaultHeader(String name, String value) {
+        if (name != null && value != null) {
+            this.defaultHeaders.put(name, value);
+        }
+    }
+
+    public Map<String, String> getDefaultHeaders() {
+        return Collections.unmodifiableMap(this.defaultHeaders);
+    }
 
     /**
      * Sets the Grayskull server endpoint URL.

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
+import com.flipkart.grayskull.constants.GrayskullHeaders;
 import com.flipkart.grayskull.constants.MDCKeys;
 import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
@@ -56,7 +57,11 @@ public final class GrayskullClientImpl implements GrayskullClient {
         if (grayskullClientConfiguration == null) {
             throw new IllegalArgumentException("grayskullClientConfiguration cannot be null");
         }
-        
+
+        // Resolve workload identity once and pin it as a default header.
+        String identity = grayskullClientConfiguration.getWorkloadIdentityResolver().resolve();
+        grayskullClientConfiguration.addDefaultHeader(GrayskullHeaders.WORKLOAD, identity);
+
         this.baseUrl = grayskullClientConfiguration.getHost();
         this.authHeaderProvider = authHeaderProvider;
         this.grayskullClientConfiguration = grayskullClientConfiguration;

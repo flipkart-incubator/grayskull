@@ -3,6 +3,8 @@ package com.flipkart.grayskull;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
+import com.flipkart.grayskull.constants.GrayskullHeaders;
+import com.flipkart.grayskull.workload.WorkloadIdentityResolver;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
@@ -339,6 +341,60 @@ class GrayskullClientImplTest {
         clientWithNullHttp.close();
     }
     
+    @Test
+    void testConstructor_populatesWorkloadHeader_fromDefaultResolver() {
+        // Given - a fresh config uses DefaultWorkloadIdentityResolver (hostname)
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+
+        // When
+        GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+
+        // Then - the header is present and non-empty
+        String injected = config.getDefaultHeaders().get(GrayskullHeaders.WORKLOAD);
+        assertNotNull(injected);
+        assertFalse(injected.isEmpty());
+
+        c.close();
+    }
+
+    @Test
+    void testConstructor_populatesWorkloadHeader_fromCustomResolver() {
+        // Given - an override resolver is honoured end-to-end
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        config.setWorkloadIdentityResolver((WorkloadIdentityResolver) () -> "custom-workload-id");
+
+        // When
+        GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+
+        // Then
+        assertEquals("custom-workload-id", config.getDefaultHeaders().get(GrayskullHeaders.WORKLOAD));
+
+        c.close();
+    }
+
+    @Test
+    void testConstructor_resolvesIdentityExactlyOnce() {
+        // Given - guard against the resolve() call being moved to the request path
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        AtomicInteger resolveCount = new AtomicInteger(0);
+        config.setWorkloadIdentityResolver(() -> {
+            resolveCount.incrementAndGet();
+            return "once";
+        });
+
+        // When
+        GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+
+        // Then - exactly one resolve() call regardless of subsequent usage
+        assertEquals(1, resolveCount.get());
+        assertEquals("once", config.getDefaultHeaders().get(GrayskullHeaders.WORKLOAD));
+
+        c.close();
+    }
+
     private HttpResponse createHttpResponse(SecretValue secretValue) throws Exception {
         Response<SecretValue> response = new Response<>(secretValue, "Success");
         String json = objectMapper.writeValueAsString(response);
