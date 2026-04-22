@@ -15,6 +15,7 @@ import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 class GrayskullHttpClient {
@@ -44,13 +45,25 @@ class GrayskullHttpClient {
     }
 
     HttpResponse doGetWithRetry(String url) {
+        return executeWithRetry(url, () -> doGet(url));
+    }
+
+    HttpResponse doPostWithRetry(String url, String jsonBody) {
+        return executeWithRetry(url, () -> doPost(url, jsonBody));
+    }
+
+    /**
+     * Executes {@code call} through {@link RetryUtil}, normalising exceptions and
+     * emitting the retry metric.
+     */
+    private HttpResponse executeWithRetry(String url, Callable<HttpResponse> call) {
         final int[] attemptCount = {0};
         boolean finalAttemptSuccess = false;
 
         try {
             HttpResponse result = retryUtil.retry(() -> {
                 attemptCount[0]++;
-                return doGet(url);
+                return call.call();
             });
 
             finalAttemptSuccess = true;
@@ -68,46 +81,6 @@ class GrayskullHttpClient {
             throw new GrayskullException(500, "Unexpected error during HTTP request", e);
 
         } finally {
-            if (attemptCount[0] > 1) {
-                MetricsPublisher.getInstance().recordRetry(url, attemptCount[0], finalAttemptSuccess);
-            }
-        }
-    }
-
-
-    HttpResponse doPostWithRetry(String url, String jsonBody) {
-        final int[] attemptCount = {0};
-        boolean finalAttemptSuccess = false;
-
-        long startTime = System.nanoTime();
-        int statusCode = 0;
-
-        try {
-            HttpResponse result = retryUtil.retry(() -> {
-                attemptCount[0]++;
-                return doPost(url, jsonBody);
-            });
-
-            statusCode = result.getStatusCode();
-            finalAttemptSuccess = true;
-            return result;
-
-        } catch (IllegalStateException | IllegalArgumentException e) {
-            // Configuration or usage errors - rethrow as-is
-            throw e;
-
-        } catch (GrayskullException e) {
-            statusCode = e.getStatusCode();
-            throw e;
-
-        } catch (Exception e) {
-            statusCode = 500;
-            throw new GrayskullException(500, "Unexpected error during HTTP request", e);
-
-        } finally {
-            long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
-            MetricsPublisher.getInstance().recordRequest("batchGetSecrets", statusCode, durationMs);
-
             if (attemptCount[0] > 1) {
                 MetricsPublisher.getInstance().recordRetry(url, attemptCount[0], finalAttemptSuccess);
             }

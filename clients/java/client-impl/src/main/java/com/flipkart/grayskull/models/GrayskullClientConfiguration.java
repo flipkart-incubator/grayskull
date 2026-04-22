@@ -8,7 +8,6 @@ import lombok.Setter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Configuration properties for the Grayskull client.
@@ -107,15 +106,7 @@ public final class GrayskullClientConfiguration {
     private boolean metricsEnabled = true;
 
     /**
-     * Interval in seconds between background polls to the Grayskull batch
-     * refresh endpoint. The client's scheduled poller fires at this cadence
-     * to detect new secret versions for every registered refresh hook.
-     * <p>
-     * Lower values improve reaction time to a secret rotation but increase
-     * load on the Grayskull server; higher values do the opposite. Consumers
-     * with tight rotation SLAs should tune this down, while low-risk workloads
-     * can leave it at the default.
-     * </p>
+     * Interval in seconds between background polls for registered refresh hooks.
      * <p>
      * Default: 60 (one minute)
      * </p>
@@ -134,7 +125,7 @@ public final class GrayskullClientConfiguration {
     /**
      * Static HTTP headers appended to every outbound request. Populated at client construction.
      */
-    private final Map<String, String> defaultHeaders = new ConcurrentHashMap<>();
+    private final Map<String, String> defaultHeaders = new HashMap<>();
 
     public void setWorkloadIdentityResolver(WorkloadIdentityResolver resolver) {
         if (resolver != null) {
@@ -153,7 +144,7 @@ public final class GrayskullClientConfiguration {
     }
 
     public Map<String, String> getDefaultHeaders() {
-        return new HashMap<>(this.defaultHeaders);
+        return Collections.unmodifiableMap(this.defaultHeaders);
     }
 
     /**

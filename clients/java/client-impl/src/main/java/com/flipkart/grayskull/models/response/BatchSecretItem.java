@@ -10,12 +10,7 @@ import lombok.Getter;
  * A single updated secret entry inside a {@link BatchGetSecretsResponse}.
  * <p>
  * Adds {@code projectId} and {@code secretName} to the usual secret payload
- * so callers can correlate each returned item with its registered hook. Any
- * server-side fields the client does not care about are ignored via
- * {@link JsonIgnoreProperties}.
- * </p>
- * <p>
- * This class is immutable and thread-safe.
+ * so callers can correlate each returned item with its registered hook.
  * </p>
  */
 @Getter
@@ -29,17 +24,10 @@ public final class BatchSecretItem {
     private final String publicPart;
     private final String privatePart;
 
-    /**
-     * Returns the {@code "projectId:secretName"} reference this item corresponds to.
-     */
     public String getSecretRef() {
         return projectId + ":" + secretName;
     }
 
-    /**
-     * Projects this wire DTO into the public {@link SecretValue} type that is
-     * handed to consumer refresh hooks.
-     */
     public SecretValue toSecretValue() {
         return new SecretValue(dataVersion, publicPart, privatePart);
     }

@@ -11,11 +11,7 @@ import java.util.List;
  * Response body for the {@code POST /v1/secrets/batch} endpoint.
  * <p>
  * Contains only those secrets whose server-side version is ahead of the
- * caller's {@code lastKnownVersion}. The {@code updatedCount} is a convenience
- * mirror of {@code updatedSecrets.size()}.
- * </p>
- * <p>
- * This class is immutable and thread-safe.
+ * caller's {@code lastKnownVersion}.
  * </p>
  */
 @Getter
