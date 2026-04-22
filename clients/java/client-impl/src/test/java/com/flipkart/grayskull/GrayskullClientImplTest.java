@@ -270,7 +270,7 @@ class GrayskullClientImplTest {
         // Given
         String secretRef = "secengg-stage:secret-1";
         AtomicInteger callCount = new AtomicInteger(0);
-        
+
         SecretRefreshHook hook = (secretVal) -> {
             callCount.incrementAndGet();
             System.out.println("Secret refreshed: " + secretVal);
@@ -279,13 +279,12 @@ class GrayskullClientImplTest {
         // When
         RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
 
-        // Then
+        // Then - the handle reflects the registered secret and is live until unregistered.
         assertNotNull(handle);
-        // No-op implementation returns empty string and is always inactive
-        assertEquals("", handle.getSecretRef());
-        assertFalse(handle.isActive());
-        
-        // Verify hook was never called (placeholder implementation)
+        assertEquals(secretRef, handle.getSecretRef());
+        assertTrue(handle.isActive());
+
+        // Hook is invoked by the background poller; it has not fired in this unit test.
         assertEquals(0, callCount.get());
     }
 
@@ -297,9 +296,14 @@ class GrayskullClientImplTest {
 
         // When
         RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
-        
-        // unRegister() is a no-op but shouldn't throw
+        assertTrue(handle.isActive());
+
         handle.unRegister();
+
+        // Then - idempotent and reflected in isActive()
+        assertFalse(handle.isActive());
+        handle.unRegister(); // second call is a no-op
+        assertFalse(handle.isActive());
     }
 
     @Test

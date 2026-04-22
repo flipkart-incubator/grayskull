@@ -8,6 +8,7 @@ import lombok.Setter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Configuration properties for the Grayskull client.
@@ -106,6 +107,22 @@ public final class GrayskullClientConfiguration {
     private boolean metricsEnabled = true;
 
     /**
+     * Interval in seconds between background polls to the Grayskull batch
+     * refresh endpoint. The client's scheduled poller fires at this cadence
+     * to detect new secret versions for every registered refresh hook.
+     * <p>
+     * Lower values improve reaction time to a secret rotation but increase
+     * load on the Grayskull server; higher values do the opposite. Consumers
+     * with tight rotation SLAs should tune this down, while low-risk workloads
+     * can leave it at the default.
+     * </p>
+     * <p>
+     * Default: 60 (one minute)
+     * </p>
+     */
+    private int pollingIntervalSeconds = 60;
+
+    /**
      * Resolver for the workload identity advertised via the {@code Grayskull-Workload} header.
      * <p>
      * Defaults to {@link DefaultWorkloadIdentityResolver} (hostname). Downstream distributions
@@ -117,7 +134,7 @@ public final class GrayskullClientConfiguration {
     /**
      * Static HTTP headers appended to every outbound request. Populated at client construction.
      */
-    private final Map<String, String> defaultHeaders = new HashMap<>();
+    private final Map<String, String> defaultHeaders = new ConcurrentHashMap<>();
 
     public void setWorkloadIdentityResolver(WorkloadIdentityResolver resolver) {
         if (resolver != null) {
@@ -136,7 +153,7 @@ public final class GrayskullClientConfiguration {
     }
 
     public Map<String, String> getDefaultHeaders() {
-        return Collections.unmodifiableMap(this.defaultHeaders);
+        return new HashMap<>(this.defaultHeaders);
     }
 
     /**
@@ -219,5 +236,19 @@ public final class GrayskullClientConfiguration {
             throw new IllegalArgumentException("Min retry delay must be at least 50ms, got: " + minRetryDelay);
         }
         this.minRetryDelay = minRetryDelay;
+    }
+
+    /**
+     * Sets the background poller interval in seconds.
+     *
+     * @param pollingIntervalSeconds the polling interval in seconds (must be positive)
+     * @throws IllegalArgumentException if {@code pollingIntervalSeconds} is not positive
+     */
+    public void setPollingIntervalSeconds(int pollingIntervalSeconds) {
+        if (pollingIntervalSeconds <= 0) {
+            throw new IllegalArgumentException(
+                    "Polling interval must be positive, got: " + pollingIntervalSeconds);
+        }
+        this.pollingIntervalSeconds = pollingIntervalSeconds;
     }
 }

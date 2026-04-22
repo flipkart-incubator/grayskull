@@ -46,24 +46,24 @@ class GrayskullHttpClient {
     HttpResponse doGetWithRetry(String url) {
         final int[] attemptCount = {0};
         boolean finalAttemptSuccess = false;
-        
+
         try {
             HttpResponse result = retryUtil.retry(() -> {
                 attemptCount[0]++;
                 return doGet(url);
             });
-            
+
             finalAttemptSuccess = true;
             return result;
-            
+
         } catch (IllegalStateException | IllegalArgumentException e) {
             // Configuration or usage errors - rethrow as-is
             throw e;
-        
+
         } catch (GrayskullException e) {
             // GrayskullException already has proper context (retry exhaustion, etc.) - rethrow as-is
             throw e;
-            
+
         } catch (Exception e) {
             throw new GrayskullException(500, "Unexpected error during HTTP request", e);
 
@@ -73,7 +73,47 @@ class GrayskullHttpClient {
             }
         }
     }
-    
+
+
+    HttpResponse doPostWithRetry(String url, String jsonBody) {
+        final int[] attemptCount = {0};
+        boolean finalAttemptSuccess = false;
+
+        long startTime = System.nanoTime();
+        int statusCode = 0;
+
+        try {
+            HttpResponse result = retryUtil.retry(() -> {
+                attemptCount[0]++;
+                return doPost(url, jsonBody);
+            });
+
+            statusCode = result.getStatusCode();
+            finalAttemptSuccess = true;
+            return result;
+
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            // Configuration or usage errors - rethrow as-is
+            throw e;
+
+        } catch (GrayskullException e) {
+            statusCode = e.getStatusCode();
+            throw e;
+
+        } catch (Exception e) {
+            statusCode = 500;
+            throw new GrayskullException(500, "Unexpected error during HTTP request", e);
+
+        } finally {
+            long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
+            MetricsPublisher.getInstance().recordRequest("batchGetSecrets", statusCode, durationMs);
+
+            if (attemptCount[0] > 1) {
+                MetricsPublisher.getInstance().recordRetry(url, attemptCount[0], finalAttemptSuccess);
+            }
+        }
+    }
+
     HttpResponse doGet(String url) throws RetryableException {
         Request request = buildRequest(url)
                 .get()
@@ -85,9 +125,32 @@ class GrayskullHttpClient {
 
         String body = httpResponse.getBody();
         int bodyLength = body != null ? body.length() : 0;
-        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes", 
+        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes",
                 requestId, url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
-        
+
+        return httpResponse;
+    }
+
+    HttpResponse doPost(String url, String jsonBody) throws RetryableException {
+        RequestBody body = RequestBody.create(
+                jsonBody == null ? "" : jsonBody,
+                MediaType.parse("application/json; charset=utf-8"));
+
+        Request request = buildRequest(url)
+                .post(body)
+                .build();
+
+        String requestId = MDC.get(MDCKeys.GRAYSKULL_REQUEST_ID);
+        int requestBodyLength = jsonBody != null ? jsonBody.length() : 0;
+        log.debug("[RequestId:{}] Executing POST request to: {}, bodyLength: {} bytes",
+                requestId, url, requestBodyLength);
+        HttpResponse httpResponse = executeRequest(request);
+
+        String responseBody = httpResponse.getBody();
+        int bodyLength = responseBody != null ? responseBody.length() : 0;
+        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes",
+                requestId, url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
+
         return httpResponse;
     }
 
