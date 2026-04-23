@@ -57,6 +57,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private static final int DISPATCHER_THREADS = 5;
     private static final long SHUTDOWN_AWAIT_SECONDS = 10L;
 
+    private static final int MAX_BATCH_SECRETS = 50;
+
     private final String baseUrl;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
     private final GrayskullClientConfiguration grayskullClientConfiguration;
@@ -105,10 +107,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
         this.dispatcher = Executors.newFixedThreadPool(
                 DISPATCHER_THREADS, namedDaemonFactory("grayskull-hook-dispatcher-"));
 
-        // fixed-delay (not fixed-rate): next tick starts N seconds AFTER the previous finishes.
+        // initialDelay 0 runs the first poll as soon as the poller thread starts 
         int intervalSeconds = grayskullClientConfiguration.getPollingIntervalSeconds();
         this.poller.scheduleWithFixedDelay(
-                this::pollOnce, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+                this::pollOnce, 0, intervalSeconds, TimeUnit.SECONDS);
     }
 
     /**
@@ -261,24 +263,59 @@ public final class GrayskullClientImpl implements GrayskullClient {
                 return;
             }
 
-            BatchGetSecretsRequest request = new BatchGetSecretsRequest(entries);
-            String body = objectMapper.writeValueAsString(request);
             String url = buildUrl("v1", "secrets", "batch");
+            int totalSecrets = entries.size();
+            boolean pollFailed = false;
+            boolean anySecretUpdated = false;
 
-            log.debug("[RequestId:{}] Polling batch refresh for {} secret(s)", requestId, entries.size());
-            HttpResponse httpResponse = httpClient.doPostWithRetry(url, body);
-            statusCode = httpResponse.getStatusCode();
+            for (int from = 0; from < entries.size(); from += MAX_BATCH_SECRETS) {
+                int to = Math.min(from + MAX_BATCH_SECRETS, entries.size());
+                List<SecretVersionEntry> chunk = entries.subList(from, to);
 
-            Response<BatchGetSecretsResponse> parsed =
-                    objectMapper.readValue(httpResponse.getBody(), BATCH_RESPONSE_TYPE_REFERENCE);
-            BatchGetSecretsResponse payload = parsed.getData();
-            if (payload == null || payload.getUpdatedSecrets() == null || payload.getUpdatedSecrets().isEmpty()) {
-                log.debug("[RequestId:{}] No secret versions advanced this cycle", requestId);
-                return;
+                try {
+                    BatchGetSecretsRequest request = new BatchGetSecretsRequest(chunk);
+                    String body = objectMapper.writeValueAsString(request);
+
+                    if (totalSecrets > MAX_BATCH_SECRETS) {
+                        log.debug("[RequestId:{}] Polling batch refresh chunk {}-{} of {} secret(s)",
+                                requestId, from + 1, to, totalSecrets);
+                    } else {
+                        log.debug("[RequestId:{}] Polling batch refresh for {} secret(s)",
+                                requestId, totalSecrets);
+                    }
+
+                    HttpResponse httpResponse = httpClient.doPostWithRetry(url, body);
+                    if (!pollFailed) {
+                        statusCode = httpResponse.getStatusCode();
+                    }
+
+                    Response<BatchGetSecretsResponse> parsed =
+                            objectMapper.readValue(httpResponse.getBody(), BATCH_RESPONSE_TYPE_REFERENCE);
+                    BatchGetSecretsResponse payload = parsed.getData();
+                    if (payload == null || payload.getUpdatedSecrets() == null
+                            || payload.getUpdatedSecrets().isEmpty()) {
+                        continue;
+                    }
+
+                    for (BatchSecretItem item : payload.getUpdatedSecrets()) {
+                        handleUpdatedSecret(item);
+                        anySecretUpdated = true;
+                    }
+                } catch (GrayskullException ex) {
+                    pollFailed = true;
+                    statusCode = ex.getStatusCode();
+                    log.warn("[RequestId:{}] Batch refresh failed for secrets {}..{}: {}",
+                            requestId, from + 1, to, ex.getMessage(), ex);
+                } catch (Exception ex) {
+                    pollFailed = true;
+                    statusCode = 500;
+                    log.warn("[RequestId:{}] Batch refresh failed for secrets {}..{}: {}",
+                            requestId, from + 1, to, ex.getMessage(), ex);
+                }
             }
 
-            for (BatchSecretItem item : payload.getUpdatedSecrets()) {
-                handleUpdatedSecret(item);
+            if (!pollFailed && !anySecretUpdated) {
+                log.debug("[RequestId:{}] No secret versions advanced this cycle", requestId);
             }
         } catch (GrayskullException ex) {
             statusCode = ex.getStatusCode();
@@ -328,6 +365,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
         }
     }
 
+    /**
+     * Invokes every hook registered for this secret, in {@link SecretState#hooks registration order}.
+     */
     private void deliverToHooks(String secretRef, SecretState state, SecretValue value) {
         for (SecretRefreshHook hook : state.hooks) {
             long startTime = System.nanoTime();
