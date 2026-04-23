@@ -516,6 +516,53 @@ class GrayskullClientImplTest {
     }
 
     @Test
+    void testPollOnce_hookThrows_swallowsAndContinues() throws Exception {
+        // Given - first hook throws, second hook must still run.
+        CountDownLatch latch = new CountDownLatch(1);
+        client.registerRefreshHook("acme:throws", v -> {
+            throw new RuntimeException("consumer bug");
+        });
+        client.registerRefreshHook("acme:throws", v -> latch.countDown());
+
+        UpdatedSecret item = new UpdatedSecret("acme", "throws", 7, "p", "q");
+        HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
+
+        // When
+        pollOnce();
+
+        // Then - the well-behaved hook still fires, proving the poller is fault-isolated.
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "second hook should run after first throws");
+    }
+
+    @Test
+    void testRegisterRefreshHook_twoHooksSameSecret_unregisterOne_otherSurvives() throws Exception {
+        // Given - covers the "remove hook but keep state" branch in HookRefreshPoller.unregister.
+        CountDownLatch latch = new CountDownLatch(1);
+        RefreshHandlerRef h1 = client.registerRefreshHook("acme:two", v -> {});
+        RefreshHandlerRef h2 = client.registerRefreshHook("acme:two", v -> latch.countDown());
+
+        // When - unregister only the first hook; the other must still fire on the next poll.
+        h1.unRegister();
+
+        UpdatedSecret item = new UpdatedSecret("acme", "two", 4, "p", "q");
+        HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
+        pollOnce();
+
+        // Then
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertFalse(h1.isActive());
+        assertTrue(h2.isActive());
+    }
+
+    @Test
+    void testRegisterRefreshHook_invalidFormat_throwsBeforeRegistering() {
+        assertThrows(IllegalArgumentException.class,
+                () -> client.registerRefreshHook("no-colon", v -> {}));
+    }
+
+    @Test
     void testClose_cleansUpResources() {
         // When
         client.close();

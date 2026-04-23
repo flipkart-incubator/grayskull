@@ -154,7 +154,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
     private static String[] parseSecretRef(String secretRef) {
         String[] parts = secretRef.split(":", 2);
-        if (parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
+        if (parts[0].isEmpty() || parts[1].isEmpty()) {
             throw new IllegalArgumentException(
                     "Invalid secretRef format. Expected 'projectId:secretName', got: " + secretRef);
         }
