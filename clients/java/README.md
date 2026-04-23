@@ -12,6 +12,7 @@ Java client library for interacting with the Grayskull secret management service
 - [Public APIs](#public-apis)
   - [GrayskullClient](#grayskullclient)
 - [Configuration](#configuration)
+  - [Grayskull-Workload header](#grayskull-workload-header)
 - [Authentication](#authentication)
 - [Metrics](#metrics)
 - [Logging & Observability](#logging--observability)
@@ -196,6 +197,10 @@ All configuration properties with their defaults and constraints.
 | `maxRetries` | `int` | `3` | 1-10 | Number of retry attempts for transient failures |
 | `minRetryDelay` | `int` | `100` | ≥ 50 ms | Base delay between retries (exponential backoff) |
 | `metricsEnabled` | `boolean` | `true` | true/false | Enable/disable metrics collection |
+
+### Grayskull-Workload header
+
+On each request the client may send a **`Grayskull-Workload`** HTTP header with a **workload identity** (by default, the local hostname, resolved when `GrayskullClientImpl` is constructed). Override via `GrayskullClientConfiguration` (`WorkloadIdentityResolver` / `addDefaultHeader`) if you need a different value. The header can be **absent** in some environments; servers or gateways that care about this metadata can treat that case explicitly.
 
 ## Authentication
 
