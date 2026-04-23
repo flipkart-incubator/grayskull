@@ -41,7 +41,7 @@ Java client library for interacting with the Grayskull secret management service
     <dependency>
         <groupId>com.flipkart.grayskull</groupId>
         <artifactId>client-impl</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>0.2.0</version>
     </dependency>
 
     <!-- Optional: Micrometer for advanced metrics -->
@@ -58,7 +58,7 @@ Java client library for interacting with the Grayskull secret management service
 
 ```gradle
 dependencies {
-    implementation 'com.flipkart.grayskull:client-impl:0.0.1-SNAPSHOT'
+    implementation 'com.flipkart.grayskull:client-impl:0.2.0'
     
     // Optional: Micrometer for advanced metrics
     implementation 'io.micrometer:micrometer-core:1.12.7'
@@ -456,8 +456,8 @@ The client automatically retries transient failures using exponential backoff wi
 
 | Artifact | Version        | 
 |----------|----------------|
-| `client-api` | 0.0.1-SNAPSHOT | 
-| `client-impl` | 0.0.1-SNAPSHOT | 
+| `client-api` | 0.2.0 |
+| `client-impl` | 0.2.0 |
 
 ### Dependency Requirements
 
