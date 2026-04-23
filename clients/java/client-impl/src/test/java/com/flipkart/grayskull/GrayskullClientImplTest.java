@@ -1,6 +1,5 @@
 package com.flipkart.grayskull;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.constants.GrayskullHeaders;
@@ -8,7 +7,7 @@ import com.flipkart.grayskull.workload.WorkloadIdentityResolver;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.flipkart.grayskull.models.response.BatchGetSecretsResponse;
-import com.flipkart.grayskull.models.response.BatchSecretItem;
+import com.flipkart.grayskull.models.response.BatchGetSecretsResponse.UpdatedSecret;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
@@ -53,6 +52,7 @@ class GrayskullClientImplTest {
 
     private GrayskullClientConfiguration grayskullClientConfiguration;
     private GrayskullClientImpl client;
+    private HookRefreshPoller refreshPoller;
     private ObjectMapper objectMapper;
 
     @BeforeEach
@@ -61,14 +61,26 @@ class GrayskullClientImplTest {
         grayskullClientConfiguration.setHost("https://test.grayskull.com");
         grayskullClientConfiguration.setConnectionTimeout(5000);
         grayskullClientConfiguration.setReadTimeout(10000);
-        
+
         client = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);
         objectMapper = new ObjectMapper();
-        
-        // Inject mock HTTP client using reflection
+
+        // Inject mock HTTP client into the client (used by getSecret) and the poller (used by pollOnce).
         Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
         httpClientField.setAccessible(true);
         httpClientField.set(client, mockHttpClient);
+
+        Field refreshPollerField = GrayskullClientImpl.class.getDeclaredField("refreshPoller");
+        refreshPollerField.setAccessible(true);
+        refreshPoller = (HookRefreshPoller) refreshPollerField.get(client);
+
+        Field pollerHttpClientField = HookRefreshPoller.class.getDeclaredField("httpClient");
+        pollerHttpClientField.setAccessible(true);
+        pollerHttpClientField.set(refreshPoller, mockHttpClient);
+    }
+
+    private void pollOnce() {
+        refreshPoller.pollOnce();
     }
 
     @AfterEach
@@ -339,7 +351,7 @@ class GrayskullClientImplTest {
 
     @Test
     void testPollOnce_noRegisteredSecrets_doesNotPost() {
-        client.pollOnce();
+        pollOnce();
 
         verify(mockHttpClient, never()).doPostWithRetry(anyString(), anyString());
     }
@@ -352,7 +364,7 @@ class GrayskullClientImplTest {
         HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
 
-        client.pollOnce();
+        pollOnce();
 
         ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
         verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
@@ -369,7 +381,7 @@ class GrayskullClientImplTest {
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(new HttpResponse(200, json, "application/json", "http/1.1"));
 
-        client.pollOnce();
+        pollOnce();
 
         verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
     }
@@ -382,7 +394,7 @@ class GrayskullClientImplTest {
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(new HttpResponse(200, json, "application/json", "http/1.1"));
 
-        client.pollOnce();
+        pollOnce();
 
         verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
     }
@@ -396,7 +408,7 @@ class GrayskullClientImplTest {
         HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
 
-        client.pollOnce();
+        pollOnce();
 
         ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
         verify(mockHttpClient, times(2)).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
@@ -416,7 +428,7 @@ class GrayskullClientImplTest {
                 .thenThrow(new GrayskullException(503, "batch unavailable"))
                 .thenReturn(emptyBatch);
 
-        client.pollOnce();
+        pollOnce();
 
         verify(mockHttpClient, times(2)).doPostWithRetry(eq(BATCH_URL), anyString());
     }
@@ -428,7 +440,7 @@ class GrayskullClientImplTest {
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenThrow(new GrayskullException(401, "unauthorized"));
 
-        assertDoesNotThrow(() -> client.pollOnce());
+        assertDoesNotThrow(() -> pollOnce());
 
         verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
     }
@@ -440,7 +452,7 @@ class GrayskullClientImplTest {
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(new HttpResponse(200, "{not-json", "application/json", "http/1.1"));
 
-        assertDoesNotThrow(() -> client.pollOnce());
+        assertDoesNotThrow(() -> pollOnce());
 
         verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
     }
@@ -454,11 +466,11 @@ class GrayskullClientImplTest {
         };
         client.registerRefreshHook("acme:db", hook);
 
-        BatchSecretItem item = new BatchSecretItem("acme", "db", 3, "pub", "priv");
+        UpdatedSecret item = new UpdatedSecret("acme", "db", 3, "pub", "priv");
         HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
 
-        client.pollOnce();
+        pollOnce();
 
         assertTrue(latch.await(5, TimeUnit.SECONDS), "hook should run on dispatcher thread");
     }
@@ -470,7 +482,7 @@ class GrayskullClientImplTest {
         HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
 
-        client.pollOnce();
+        pollOnce();
 
         ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
         verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
@@ -493,11 +505,11 @@ class GrayskullClientImplTest {
             latch.countDown();
         });
 
-        BatchSecretItem item = new BatchSecretItem("acme", "ordered", 9, "a", "b");
+        UpdatedSecret item = new UpdatedSecret("acme", "ordered", 9, "a", "b");
         HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
 
-        client.pollOnce();
+        pollOnce();
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
         assertEquals(Arrays.asList(1, 2), order);

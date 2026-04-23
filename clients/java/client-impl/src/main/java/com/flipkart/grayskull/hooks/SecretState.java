@@ -12,8 +12,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * Per-secret runtime state in the hook registry.
  */
 public final class SecretState {
+    public final String projectId;
+    public final String secretName;
     public final AtomicInteger lastKnownVersion = new AtomicInteger(0);
     public final List<SecretRefreshHook> hooks = new CopyOnWriteArrayList<>();
     public final AtomicBoolean isExecuting = new AtomicBoolean(false);
     public final AtomicReference<SecretValue> pendingUpdate = new AtomicReference<>();
+
+    public SecretState(String projectId, String secretName) {
+        this.projectId = projectId;
+        this.secretName = secretName;
+    }
 }

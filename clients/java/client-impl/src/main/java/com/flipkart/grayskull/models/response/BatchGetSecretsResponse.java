@@ -9,10 +9,6 @@ import java.util.List;
 
 /**
  * Response body for the {@code POST /v1/secrets/batch} endpoint.
- * <p>
- * Contains only those secrets whose server-side version is ahead of the
- * caller's {@code lastKnownVersion}.
- * </p>
  */
 @Getter
 @AllArgsConstructor(onConstructor = @__(@JsonCreator))
@@ -20,5 +16,16 @@ import java.util.List;
 public final class BatchGetSecretsResponse {
 
     private final int updatedCount;
-    private final List<BatchSecretItem> updatedSecrets;
+    private final List<UpdatedSecret> updatedSecrets;
+
+    @Getter
+    @AllArgsConstructor(onConstructor = @__(@JsonCreator))
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class UpdatedSecret {
+        private final String projectId;
+        private final String secretName;
+        private final int dataVersion;
+        private final String publicPart;
+        private final String privatePart;
+    }
 }
