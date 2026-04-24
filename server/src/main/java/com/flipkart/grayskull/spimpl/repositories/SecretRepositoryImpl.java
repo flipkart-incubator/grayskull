@@ -10,6 +10,8 @@ import lombok.AllArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -63,25 +65,50 @@ public class SecretRepositoryImpl implements SecretRepository {
 
     @Override
     public List<Secret> findActiveByProjectAndNames(Map<String, List<String>> projectToNames) {
-        if (projectToNames.isEmpty()) {
+        Query query = buildActiveSecretsQuery(projectToNames);
+        if (query == null) {
             return List.of();
         }
-
-        List<String> allProjectIds = new ArrayList<>(projectToNames.keySet());
-        List<String> allNames = new ArrayList<>();
-        for (List<String> names : projectToNames.values()) {
-            allNames.addAll(names);
-        }
-
-        List<SecretEntity> results = mongoRepository.findByProjectIdInAndNameInAndState(allProjectIds, allNames, LifecycleState.ACTIVE);
-        
-        return results.stream()
-                .filter(entity -> {
-                    List<String> requestedNames = projectToNames.get(entity.getProjectId());
-                    return requestedNames != null && requestedNames.contains(entity.getName());
-                })
+        return mongoTemplate.find(query, SecretEntity.class).stream()
                 .map(Secret.class::cast)
                 .toList();
+    }
+
+    /**
+     * Builds {@code state = ACTIVE AND ((projectId = p1 AND name IN (...)) OR ...)} so the database
+     * returns only requested (project, name) pairs
+     *
+     * @return {@code null} when there is nothing to query (empty map or only empty name lists).
+     */
+    private static Query buildActiveSecretsQuery(Map<String, List<String>> projectToNames) {
+        if (projectToNames == null || projectToNames.isEmpty()) {
+            return null;
+        }
+
+        List<Criteria> projectBranches = new ArrayList<>();
+        for (Map.Entry<String, List<String>> entry : projectToNames.entrySet()) {
+            String projectId = entry.getKey();
+            List<String> names = entry.getValue();
+            if (projectId == null || names == null || names.isEmpty()) {
+                continue;
+            }
+            projectBranches.add(
+                    new Criteria().andOperator(
+                            Criteria.where("projectId").is(projectId),
+                            Criteria.where("name").in(names)));
+        }
+
+        if (projectBranches.isEmpty()) {
+            return null;
+        }
+
+        Criteria stateAndProjects = new Criteria().andOperator(
+                Criteria.where("state").is(LifecycleState.ACTIVE),
+                projectBranches.size() == 1
+                        ? projectBranches.get(0)
+                        : new Criteria().orOperator(projectBranches.toArray(Criteria[]::new)));
+
+        return new Query(stateAndProjects);
     }
 
     @Override

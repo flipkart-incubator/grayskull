@@ -20,6 +20,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -52,6 +55,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
         // Resolve workload identity once and pin it as a default header.
         String identity = grayskullClientConfiguration.getWorkloadIdentityResolver().resolve();
         grayskullClientConfiguration.addDefaultHeader(GrayskullHeaders.WORKLOAD, identity);
+
+        String sdkVersion = resolveSdkVersion(GrayskullClientImpl.class.getClassLoader());
+        String userAgent = "grayskull-java/" + sdkVersion + " (" + identity + ")";
+        grayskullClientConfiguration.addDefaultHeader(GrayskullHeaders.USER_AGENT, userAgent);
 
         this.baseUrl = grayskullClientConfiguration.getHost();
         this.httpClient = new GrayskullHttpClient(authHeaderProvider, grayskullClientConfiguration);
@@ -154,10 +161,30 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
     private static String[] parseSecretRef(String secretRef) {
         String[] parts = secretRef.split(":", 2);
-        if (parts[0].isEmpty() || parts[1].isEmpty()) {
+        if (parts.length < 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
             throw new IllegalArgumentException(
                     "Invalid secretRef format. Expected 'projectId:secretName', got: " + secretRef);
         }
         return parts;
+    }
+
+    /**
+     * Reads {@code grayskull-client.properties} from the given class loader (Maven-filtered at build time).
+     */
+    static String resolveSdkVersion(ClassLoader classLoader) {
+        try (InputStream in = classLoader.getResourceAsStream("grayskull-client.properties")) {
+            if (in == null) {
+                return "unknown";
+            }
+            Properties props = new Properties();
+            props.load(in);
+            String v = props.getProperty("version");
+            if (v != null && !v.trim().isEmpty() && !v.trim().startsWith("${")) {
+                return v.trim();
+            }
+        } catch (IOException e) {
+            log.warn("Could not read SDK version from classpath; using 'unknown'.", e);
+        }
+        return "unknown";
     }
 }

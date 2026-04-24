@@ -11,6 +11,11 @@ public final class GrayskullHeaders {
      */
     public static final String WORKLOAD = "Grayskull-Workload";
 
+    /**
+     * SDK identity; value is set by {@code GrayskullClientImpl} at construction.
+     */
+    public static final String USER_AGENT = "User-Agent";
+
     private GrayskullHeaders() {
         throw new AssertionError("Cannot instantiate constants class");
     }
