@@ -28,12 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for GrayskullHttpClient.
- * <p>
- * Uses MockWebServer for integration-style testing of HTTP behavior.
- * </p>
- */
+/** Unit tests for {@link GrayskullHttpClient}. */
 @ExtendWith(MockitoExtension.class)
 class GrayskullHttpClientTest {
 

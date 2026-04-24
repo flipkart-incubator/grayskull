@@ -106,17 +106,11 @@ public final class GrayskullClientConfiguration {
     private boolean metricsEnabled = true;
 
     /**
-     * Resolver for the workload identity advertised via the {@code Grayskull-Workload} header.
-     * <p>
-     * Defaults to {@link DefaultWorkloadIdentityResolver} (hostname). Downstream distributions
-     * may override with a richer implementation.
-     * </p>
+     * Resolver for {@code Grayskull-Workload}; defaults to {@link DefaultWorkloadIdentityResolver}.
      */
     private WorkloadIdentityResolver workloadIdentityResolver = new DefaultWorkloadIdentityResolver();
 
-    /**
-     * Static HTTP headers appended to every outbound request. Populated at client construction.
-     */
+    /** Default headers added to every request (filled when the client is built). */
     private final Map<String, String> defaultHeaders = new HashMap<>();
 
     public void setWorkloadIdentityResolver(WorkloadIdentityResolver resolver) {

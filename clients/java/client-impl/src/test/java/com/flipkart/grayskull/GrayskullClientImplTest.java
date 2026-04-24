@@ -406,7 +406,7 @@ class GrayskullClientImplTest {
     }
 
     @Test
-    void testConstructor_populatesUserAgent_withGrayskullProductAndWorkload() {
+    void testConstructor_populatesUserAgent_sdkProductAndVersionOnly() {
         GrayskullClientConfiguration config = new GrayskullClientConfiguration();
         config.setHost("https://test.grayskull.com");
         config.setWorkloadIdentityResolver(() -> "wl-fixed");
@@ -415,19 +415,58 @@ class GrayskullClientImplTest {
         String ua = config.getDefaultHeaders().get(GrayskullHeaders.USER_AGENT);
 
         assertNotNull(ua);
-        assertTrue(ua.matches("^grayskull-java/[^ ]+ \\(wl-fixed\\)$"), ua);
+        // UA is strictly grayskull-java/<version>; no workload comment, no spaces.
+        assertTrue(ua.matches("^grayskull-java/\\S+$"), ua);
         c.close();
     }
 
     @Test
-    void testConstructor_userAgent_includesWorkloadIdentityFromCustomResolver() {
+    void testConstructor_userAgent_doesNotLeakWorkloadIdentity() {
+        // Regression guard: identity must not be embedded in User-Agent. UA is for
+        // SDK telemetry only; caller identity belongs solely in Grayskull-Workload.
         GrayskullClientConfiguration config = new GrayskullClientConfiguration();
         config.setHost("https://test.grayskull.com");
         config.setWorkloadIdentityResolver(() -> "wl-abc");
 
         GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
-        assertTrue(config.getDefaultHeaders().get(GrayskullHeaders.USER_AGENT).endsWith(" (wl-abc)"));
+        String ua = config.getDefaultHeaders().get(GrayskullHeaders.USER_AGENT);
+
+        assertNotNull(ua);
+        assertFalse(ua.contains("wl-abc"), ua);
+        assertFalse(ua.contains("("), ua);
+        assertFalse(ua.contains(")"), ua);
         c.close();
+    }
+
+    @Test
+    void testConstructor_userAgent_isStableAcrossIdentityShapes() {
+        // Regression guard for identity rotation / shape evolution: even if the
+        // resolved identity contains characters that would previously have broken
+        // UA parsing (spaces, parens, SPIFFE-style URIs), UA must remain a clean
+        // grayskull-java/<version> string.
+        String[] exoticIdentities = new String[] {
+                "spiffe://flipkart/ns/payments/sa/checkout",
+                "pod-with (parens) and spaces",
+                "identity\nwith\nnewlines-sanitized-upstream",
+                ""
+        };
+        for (String id : exoticIdentities) {
+            GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+            config.setHost("https://test.grayskull.com");
+            config.setWorkloadIdentityResolver(() -> id);
+
+            GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+            String ua = config.getDefaultHeaders().get(GrayskullHeaders.USER_AGENT);
+
+            assertNotNull(ua, "UA must be present for identity: " + id);
+            assertTrue(ua.matches("^grayskull-java/\\S+$"),
+                    "UA must be grayskull-java/<version> regardless of identity shape; got: " + ua + " for id: " + id);
+            if (!id.isEmpty()) {
+                assertFalse(ua.contains(id),
+                        "UA must not embed workload identity; got: " + ua + " for id: " + id);
+            }
+            c.close();
+        }
     }
 
     @Test
@@ -476,14 +515,24 @@ class GrayskullClientImplTest {
                     .setBody(objectMapper.writeValueAsString(resp))
                     .addHeader("Content-Type", "application/json"));
 
+            cfg.setWorkloadIdentityResolver(() -> "wire-test-workload");
             GrayskullClientImpl c = new GrayskullClientImpl(() -> "Bearer tok", cfg);
             c.getSecret("p:s");
 
             RecordedRequest req = server.takeRequest(2, TimeUnit.SECONDS);
             assertNotNull(req);
+
+            // User-Agent: one value, SDK shape only (no workload string).
             assertEquals(1, req.getHeaders().values("User-Agent").size());
-            assertNotNull(req.getHeader("User-Agent"));
-            assertTrue(req.getHeader("User-Agent").startsWith("grayskull-java/"));
+            String ua = req.getHeader("User-Agent");
+            assertNotNull(ua);
+            assertTrue(ua.matches("^grayskull-java/\\S+$"), ua);
+            assertFalse(ua.contains("wire-test-workload"), ua);
+
+            // Grayskull-Workload: one value from resolver.
+            assertEquals(1, req.getHeaders().values(GrayskullHeaders.WORKLOAD).size());
+            assertEquals("wire-test-workload", req.getHeader(GrayskullHeaders.WORKLOAD));
+
             c.close();
         } finally {
             server.shutdown();

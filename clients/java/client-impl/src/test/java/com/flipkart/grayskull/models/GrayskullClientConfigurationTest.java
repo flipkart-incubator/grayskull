@@ -8,13 +8,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Unit tests for GrayskullClientConfiguration.
- * <p>
- * Focuses on the workload-identity and default-header extension points
- * introduced alongside the Grayskull-Workload header.
- * </p>
- */
+/** Unit tests for {@link GrayskullClientConfiguration}. */
 class GrayskullClientConfigurationTest {
 
     @Test

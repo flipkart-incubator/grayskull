@@ -6,12 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.util.concurrent.Callable;
 
-/**
- * Default {@link WorkloadIdentityResolver} that resolves to the local hostname.
- * <p>
- * The hostname is resolved once in the constructor and cached; {@link #resolve()} is a field read.
- * </p>
- */
+/** Default {@link WorkloadIdentityResolver}: local hostname, resolved once in the constructor. */
 public class DefaultWorkloadIdentityResolver implements WorkloadIdentityResolver {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultWorkloadIdentityResolver.class);
