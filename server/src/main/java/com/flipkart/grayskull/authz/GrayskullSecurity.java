@@ -1,7 +1,9 @@
 package com.flipkart.grayskull.authz;
 
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.Project;
+import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
@@ -12,6 +14,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 import static com.flipkart.grayskull.service.utils.SecretProviderConstants.PROVIDER_SELF;
 
@@ -112,6 +116,27 @@ public class GrayskullSecurity {
     public boolean hasPermission(String action) {
         GrayskullAuthentication authentication = (GrayskullAuthentication) SecurityContextHolder.getContext().getAuthentication();
         return authorizationProvider.isAuthorized(authentication, action);
+    }
+
+    /**
+     * Batch authorization for a list of (projectId, secretName) pairs.
+     *
+     * @param entries List of entries each containing a projectId and secretName.
+     * @param action  The action to authorize.
+     * @return {@code true} if authorized for all entries, {@code false} on first denial.
+     */
+    public boolean hasPermissionForSecrets(List<SecretVersionEntry> entries, String action) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        List<AuthorizationContext> contexts = entries.stream()
+                .map(entry -> AuthorizationContext.forSecret(
+                        authentication,
+                        Project.builder().id(entry.getProjectId()).build(),
+                        Secret.builder()
+                                .projectId(entry.getProjectId())
+                                .name(entry.getSecretName())
+                                .build()))
+                .toList();
+        return authorizationProvider.bulkAuthorize(contexts, action);
     }
 
     /**

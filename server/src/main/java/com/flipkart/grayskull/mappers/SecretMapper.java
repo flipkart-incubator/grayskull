@@ -6,6 +6,7 @@ import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
+import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
@@ -107,6 +108,15 @@ public interface SecretMapper {
     @InheritConfiguration(name = "toSecretDataResponse")
     @Mapping(target = "state", source = "secret.state")
     SecretDataVersionResponse secretDataToSecretDataVersionResponse(Secret secret, SecretData secretData);
+
+    /**
+     * Maps a {@link Secret} and its {@link SecretData} to a {@link BatchSecretItem}.
+     * Inherits all {@link SecretDataResponse} mappings and only adds the secret identity.
+     */
+    @InheritConfiguration(name = "toSecretDataResponse")
+    @Mapping(target = "projectId", source = "secret.projectId")
+    @Mapping(target = "secretName", source = "secret.name")
+    BatchSecretItem toBatchSecretItem(Secret secret, SecretData secretData);
 
     /**
      * Converts a {@link LifecycleState} enum to its string representation.

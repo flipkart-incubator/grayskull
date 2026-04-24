@@ -1,7 +1,9 @@
 package com.flipkart.grayskull.service.interfaces;
 
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
+import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -10,6 +12,7 @@ import com.flipkart.grayskull.models.dto.response.SecretMetadata;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface SecretService {
@@ -81,6 +84,14 @@ public interface SecretService {
      * @param secretName The name of the secret to delete
      */
     void destroySecret(String projectId, String secretName);
+
+    /**
+     * Batch gets secrets that have changed since their last known versions.
+     *
+     * @param entries The list of secrets and their last known versions.
+     * @return A {@link BatchGetSecretsResponse} containing the updated secrets.
+     */
+    BatchGetSecretsResponse batchGetSecrets(List<SecretVersionEntry> entries);
 
     /**
      * Retrieves a specific version of a secret's data. Its an Admin API.

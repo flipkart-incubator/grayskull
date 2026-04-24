@@ -30,4 +30,9 @@ public enum AuditAction {
      * Represents the hard deletion of a secret.
      */
     DESTROY_SECRET,
+
+    /**
+     * Represents a secret value read via the batch endpoint.
+     */
+    BATCH_GET_SECRETS,
 }

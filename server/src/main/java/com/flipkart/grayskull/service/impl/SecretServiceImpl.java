@@ -7,11 +7,14 @@ import com.flipkart.grayskull.entities.ProjectEntity;
 import com.flipkart.grayskull.exception.BadRequestException;
 import com.flipkart.grayskull.exception.NotFoundException;
 import com.flipkart.grayskull.mappers.SecretMapper;
+import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.SecretData;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
+import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
+import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.ListSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
@@ -32,8 +35,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -135,6 +142,63 @@ public class SecretServiceImpl implements SecretService {
         secretEncryptionUtil.decryptSecretData(secretData);
 
         return secretMapper.toSecretDataResponse(secret, secretData);
+    }
+
+    @Override
+    public BatchGetSecretsResponse batchGetSecrets(List<SecretVersionEntry> entries) {
+   
+        Map<String, List<String>> projectToNames = entries.stream()
+                .collect(Collectors.groupingBy(
+                        SecretVersionEntry::getProjectId,
+                        Collectors.mapping(SecretVersionEntry::getSecretName, Collectors.toList())));
+
+        Map<String, Secret> secretMap = new HashMap<>();
+        secretRepository.findActiveByProjectAndNames(projectToNames)
+                .forEach(s -> secretMap.put(secretKey(s.getProjectId(), s.getName()), s));
+
+        
+        if (secretMap.size() < entries.size()) {
+            String missing = entries.stream()
+                    .map(e -> secretKey(e.getProjectId(), e.getSecretName()))
+                    .filter(key -> !secretMap.containsKey(key))
+                    .findFirst()
+                    .orElse("<unknown>");
+            throw new NotFoundException("Active secret not found for " + missing);
+        }
+
+     
+        List<Secret> changed = new ArrayList<>();
+        for (SecretVersionEntry entry : entries) {
+            Secret secret = secretMap.get(secretKey(entry.getProjectId(), entry.getSecretName()));
+            Integer lastKnown = entry.getLastKnownVersion();
+            if (lastKnown == null || secret.getCurrentDataVersion() > lastKnown) {
+                changed.add(secret);
+            }
+        }
+
+        List<BatchSecretItem> items = new ArrayList<>(changed.size());
+        for (Secret secret : changed) {
+     
+            SecretData secretData = secretDataRepository
+                    .getBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
+                    .orElseThrow(() -> new NotFoundException(
+                            "Secret data not found for secret: " + secret.getId()
+                                    + " at version " + secret.getCurrentDataVersion()));
+            secretEncryptionUtil.decryptSecretData(secretData);
+            items.add(secretMapper.toBatchSecretItem(secret, secretData));
+        }
+
+        return BatchGetSecretsResponse.builder()
+                .updatedCount(items.size())
+                .updatedSecrets(items)
+                .build();
+    }
+
+    /**
+     * Uses a non-printable separator so it cannot collide with legal projectId/secretName
+     */
+    private static String secretKey(String projectId, String secretName) {
+        return projectId + '\u0000' + secretName;
     }
 
     /**

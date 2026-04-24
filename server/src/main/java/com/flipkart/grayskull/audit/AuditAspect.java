@@ -2,14 +2,12 @@ package com.flipkart.grayskull.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
-import com.flipkart.grayskull.spi.AuditMetadataEnhancer;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -44,8 +42,6 @@ public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
     private final RequestUtils requestUtils;
-    private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
-    private final HttpServletRequest request;
 
     /**
      * Advice that runs after an audited method returns successfully.
@@ -79,11 +75,7 @@ public class AuditAspect {
             String resourceName = extractResourceName(result, arguments);
             Integer resourceVersion = extractResourceVersion(audit.action(), result);
 
-            Map<String, String> metadata = new HashMap<>();
-            auditMetadataEnhancers.stream()
-                    .map(enhancer -> enhancer.getAdditionalMetadata(request))
-                    .filter(Objects::nonNull)
-                    .forEach(metadata::putAll);
+            Map<String, String> metadata = new HashMap<>(requestUtils.getAdditionalMetadata());
             metadata.putAll(buildMetadata(arguments, result));
 
             AuditEntryEntity entry = AuditEntryEntity.builder()

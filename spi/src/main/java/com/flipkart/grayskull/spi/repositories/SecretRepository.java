@@ -4,6 +4,7 @@ import com.flipkart.grayskull.spi.models.Secret;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -61,6 +62,15 @@ public interface SecretRepository {
      * @return An Optional containing the secret if found.
      */
     Optional<Secret> findByProjectIdAndNameAndState(String projectId, String name, LifecycleState state);
+
+    /**
+     * Finds all active secrets matching the given (projectId, name) combinations
+     * in a single cross-project operation.
+     *
+     * @param projectToNames Map of projectId to list of secret names to find.
+     * @return A list of matching active secrets.
+     */
+    List<Secret> findActiveByProjectAndNames(Map<String, List<String>> projectToNames);
 
     /**
      * Deletes a secret.
