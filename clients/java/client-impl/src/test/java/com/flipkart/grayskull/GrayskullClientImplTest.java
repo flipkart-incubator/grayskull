@@ -12,6 +12,9 @@ import com.flipkart.grayskull.models.exceptions.GrayskullException;
 import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.models.response.Response;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +22,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Field;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -393,6 +401,146 @@ class GrayskullClientImplTest {
         assertEquals("once", config.getDefaultHeaders().get(GrayskullHeaders.WORKLOAD));
 
         c.close();
+    }
+
+    @Test
+    void testConstructor_populatesUserAgent_withGrayskullProductAndWorkload() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        config.setWorkloadIdentityResolver(() -> "wl-fixed");
+
+        GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+        String ua = config.getDefaultHeaders().get(GrayskullHeaders.USER_AGENT);
+
+        assertNotNull(ua);
+        assertTrue(ua.matches("^grayskull-java/[^ ]+ \\(wl-fixed\\)$"), ua);
+        c.close();
+    }
+
+    @Test
+    void testConstructor_userAgent_includesWorkloadIdentityFromCustomResolver() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        config.setWorkloadIdentityResolver(() -> "wl-abc");
+
+        GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+        assertTrue(config.getDefaultHeaders().get(GrayskullHeaders.USER_AGENT).endsWith(" (wl-abc)"));
+        c.close();
+    }
+
+    @Test
+    void testConstructor_userAgent_sdkValueWinsOverUserSeededUserAgent() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        config.addDefaultHeader(GrayskullHeaders.USER_AGENT, "curl/1.0");
+
+        GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+        String ua = config.getDefaultHeaders().get(GrayskullHeaders.USER_AGENT);
+        assertNotNull(ua);
+        assertTrue(ua.startsWith("grayskull-java/"), ua);
+        assertFalse(ua.contains("curl"));
+        c.close();
+    }
+
+    @Test
+    void testConstructor_sdkWorkloadWinsOverUserSeededWorkloadHeader() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://test.grayskull.com");
+        config.setWorkloadIdentityResolver(() -> "sdk-workload");
+        config.addDefaultHeader(GrayskullHeaders.WORKLOAD, "spoof");
+
+        GrayskullClientImpl c = new GrayskullClientImpl(mockAuthProvider, config);
+        assertEquals("sdk-workload", config.getDefaultHeaders().get(GrayskullHeaders.WORKLOAD));
+        c.close();
+    }
+
+    @Test
+    void testGetSecret_emitsSingleUserAgentHeaderOnWire() throws Exception {
+        MockWebServer server = new MockWebServer();
+        server.start();
+        try {
+            GrayskullClientConfiguration cfg = new GrayskullClientConfiguration();
+            cfg.setHost(server.url("/").toString().replaceAll("/$", ""));
+            cfg.setConnectionTimeout(5000);
+            cfg.setReadTimeout(5000);
+            cfg.setMaxRetries(2);
+            cfg.setMinRetryDelay(50);
+            cfg.setMetricsEnabled(false);
+
+            SecretValue sv = new SecretValue(1, "a", "b");
+            Response<SecretValue> resp = new Response<>(sv, "Success");
+            server.enqueue(new MockResponse()
+                    .setResponseCode(200)
+                    .setBody(objectMapper.writeValueAsString(resp))
+                    .addHeader("Content-Type", "application/json"));
+
+            GrayskullClientImpl c = new GrayskullClientImpl(() -> "Bearer tok", cfg);
+            c.getSecret("p:s");
+
+            RecordedRequest req = server.takeRequest(2, TimeUnit.SECONDS);
+            assertNotNull(req);
+            assertEquals(1, req.getHeaders().values("User-Agent").size());
+            assertNotNull(req.getHeader("User-Agent"));
+            assertTrue(req.getHeader("User-Agent").startsWith("grayskull-java/"));
+            c.close();
+        } finally {
+            server.shutdown();
+        }
+    }
+
+    @Test
+    void testResolveSdkVersion_returnsUnknownWhenResourceMissing() {
+        ClassLoader cl = new ClassLoader(ClassLoader.getSystemClassLoader()) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                if ("grayskull-client.properties".equals(name)) {
+                    return null;
+                }
+                return super.getResourceAsStream(name);
+            }
+        };
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
+    }
+
+    @Test
+    void testResolveSdkVersion_returnsUnknownWhenLoadThrowsIOException() {
+        ClassLoader cl = new ClassLoader(ClassLoader.getSystemClassLoader()) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                if ("grayskull-client.properties".equals(name)) {
+                    return new InputStream() {
+                        @Override
+                        public int read() throws IOException {
+                            throw new IOException("fail");
+                        }
+                    };
+                }
+                return super.getResourceAsStream(name);
+            }
+        };
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
+    }
+
+    @Test
+    void testResolveSdkVersion_returnsUnknownWhenVersionIsMavenPlaceholder() {
+        byte[] props = "version=${project.version}\n".getBytes(StandardCharsets.UTF_8);
+        ClassLoader cl = new ClassLoader(ClassLoader.getSystemClassLoader()) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                if ("grayskull-client.properties".equals(name)) {
+                    return new ByteArrayInputStream(props);
+                }
+                return super.getResourceAsStream(name);
+            }
+        };
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
+    }
+
+    @Test
+    void testResolveSdkVersion_readsVersionFromClasspathWhenFiltered() {
+        String v = GrayskullClientImpl.resolveSdkVersion(GrayskullClientImpl.class.getClassLoader());
+        assertNotEquals("unknown", v);
+        assertFalse(v.startsWith("${"));
     }
 
     private HttpResponse createHttpResponse(SecretValue secretValue) throws Exception {
