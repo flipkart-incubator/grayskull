@@ -1,5 +1,6 @@
 package com.flipkart.grayskull;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
@@ -71,6 +72,7 @@ class GrayskullClientImplTest {
         if (client != null) {
             client.close();
         }
+        reset(mockHttpClient);
     }
 
     @Test
@@ -541,6 +543,85 @@ class GrayskullClientImplTest {
         String v = GrayskullClientImpl.resolveSdkVersion(GrayskullClientImpl.class.getClassLoader());
         assertNotEquals("unknown", v);
         assertFalse(v.startsWith("${"));
+    }
+
+    @Test
+    void testGetSecret_malformedJson_throwsGrayskullException() throws Exception {
+        HttpResponse httpResponse = new HttpResponse(200, "{not-json", "application/json", "http/1.1");
+        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(httpResponse);
+
+        GrayskullException ex = assertThrows(GrayskullException.class,
+                () -> client.getSecret("project:secret"));
+        assertTrue(ex.getMessage().contains("Failed to parse response"));
+        assertTrue(ex.getCause() instanceof JsonProcessingException);
+    }
+
+    @Test
+    void testGetSecret_invalidBaseUrl_throwsIllegalStateException() throws Exception {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("http://%%:bad");
+        GrayskullClientImpl badHostClient = new GrayskullClientImpl(mockAuthProvider, config);
+        Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
+        httpClientField.setAccessible(true);
+        httpClientField.set(badHostClient, mockHttpClient);
+
+        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(
+                new HttpResponse(200, "{}", "application/json", "http/1.1"));
+
+        assertThrows(IllegalStateException.class, () -> badHostClient.getSecret("p:s"));
+        badHostClient.close();
+    }
+
+    @Test
+    void testResolveSdkVersion_unknownWhenVersionKeyMissing() {
+        byte[] props = "other=x\n".getBytes(StandardCharsets.UTF_8);
+        ClassLoader cl = new ClassLoader(ClassLoader.getSystemClassLoader()) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                if ("grayskull-client.properties".equals(name)) {
+                    return new ByteArrayInputStream(props);
+                }
+                return super.getResourceAsStream(name);
+            }
+        };
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
+    }
+
+    @Test
+    void testResolveSdkVersion_unknownWhenVersionWhitespaceOnly() {
+        byte[] props = "version=   \n".getBytes(StandardCharsets.UTF_8);
+        ClassLoader cl = new ClassLoader(ClassLoader.getSystemClassLoader()) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                if ("grayskull-client.properties".equals(name)) {
+                    return new ByteArrayInputStream(props);
+                }
+                return super.getResourceAsStream(name);
+            }
+        };
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
+    }
+
+    @Test
+    void testResolveSdkVersion_unknownWhenStreamCloseFailsAfterSuccessfulLoad() throws Exception {
+        byte[] props = "version=9.9.9\n".getBytes(StandardCharsets.UTF_8);
+        InputStream in = new ByteArrayInputStream(props) {
+            @Override
+            public void close() throws IOException {
+                super.close();
+                throw new IOException("close failed");
+            }
+        };
+        ClassLoader cl = new ClassLoader(ClassLoader.getSystemClassLoader()) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                if ("grayskull-client.properties".equals(name)) {
+                    return in;
+                }
+                return super.getResourceAsStream(name);
+            }
+        };
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
     }
 
     private HttpResponse createHttpResponse(SecretValue secretValue) throws Exception {

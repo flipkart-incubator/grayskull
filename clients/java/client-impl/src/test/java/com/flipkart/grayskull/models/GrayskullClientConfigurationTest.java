@@ -202,4 +202,88 @@ class GrayskullClientConfigurationTest {
         // Then - the unmodifiable view is live; snapshotting is the caller's concern
         assertEquals("added", config.getDefaultHeaders().get("X-Later"));
     }
+
+    @Test
+    void testSetHost_null_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setHost(null));
+    }
+
+    @Test
+    void testSetHost_empty_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setHost(""));
+    }
+
+    @Test
+    void testSetHost_blank_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setHost("   "));
+    }
+
+    @Test
+    void testSetHost_stripsTrailingSlash() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://example.com/path/");
+        assertEquals("https://example.com/path", config.getHost());
+    }
+
+    @Test
+    void testSetHost_noTrailingSlash_unchanged() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://example.com/path");
+        assertEquals("https://example.com/path", config.getHost());
+    }
+
+    @Test
+    void testSetConnectionTimeout_nonPositive_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setConnectionTimeout(0));
+        assertThrows(IllegalArgumentException.class, () -> config.setConnectionTimeout(-1));
+    }
+
+    @Test
+    void testSetReadTimeout_nonPositive_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setReadTimeout(0));
+    }
+
+    @Test
+    void testSetMaxConnections_nonPositive_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setMaxConnections(0));
+    }
+
+    @Test
+    void testSetMaxRetries_outOfRange_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setMaxRetries(0));
+        assertThrows(IllegalArgumentException.class, () -> config.setMaxRetries(11));
+    }
+
+    @Test
+    void testSetMinRetryDelay_belowMinimum_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertThrows(IllegalArgumentException.class, () -> config.setMinRetryDelay(49));
+    }
+
+    @Test
+    void testSettersAndGetters_roundTrip() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        config.setHost("https://h.example");
+        config.setConnectionTimeout(2000);
+        config.setReadTimeout(4000);
+        config.setMaxConnections(5);
+        config.setMaxRetries(5);
+        config.setMinRetryDelay(100);
+        config.setMetricsEnabled(false);
+
+        assertEquals("https://h.example", config.getHost());
+        assertEquals(2000, config.getConnectionTimeout());
+        assertEquals(4000, config.getReadTimeout());
+        assertEquals(5, config.getMaxConnections());
+        assertEquals(5, config.getMaxRetries());
+        assertEquals(100, config.getMinRetryDelay());
+        assertFalse(config.isMetricsEnabled());
+    }
 }
