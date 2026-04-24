@@ -171,6 +171,24 @@ class SecretServiceImplTest {
         }
 
         @Test
+        @DisplayName("Should fail-fast when duplicate entries shrink the map below request size")
+        void shouldThrowNotFound_whenDuplicateEntriesLeaveFewerUniqueSecretsThanRequests() {
+            Secret secret = Secret.builder()
+                    .id("s1").projectId("proj").name("same").currentDataVersion(1).build();
+            when(secretRepository.findActiveByProjectAndNames(Map.of("proj", List.of("same", "same"))))
+                    .thenReturn(List.of(secret));
+
+            assertThatThrownBy(() -> secretService.batchGetSecrets(List.of(
+                    new SecretVersionEntry("proj", "same", 1),
+                    new SecretVersionEntry("proj", "same", 1)
+            )))
+                    .isInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("<unknown>");
+
+            verify(secretDataRepository, never()).getBySecretIdAndDataVersion(any(), anyLong());
+        }
+
+        @Test
         @DisplayName("Should fail-fast with NotFoundException when secret data is missing for a changed secret")
         void shouldThrowNotFound_whenSecretDataMissing() {
             Secret secret = Secret.builder()

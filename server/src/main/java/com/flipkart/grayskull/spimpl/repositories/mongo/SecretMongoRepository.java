@@ -19,7 +19,5 @@ public interface SecretMongoRepository extends MongoRepository<SecretEntity, Str
     Optional<SecretEntity> findByProjectIdAndName(String projectId, String name);
 
     Optional<SecretEntity> findByProjectIdAndNameAndState(String projectId, String name, LifecycleState state);
-
-    List<SecretEntity> findByProjectIdInAndNameInAndState(List<String> projectIds, List<String> names, LifecycleState state);
 }
 
