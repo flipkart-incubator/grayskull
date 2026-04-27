@@ -11,6 +11,9 @@
 
     <artifactId>derby-async-audit</artifactId>
 
+    <name>Grayskull Derby Async Audit</name>
+    <description>Asynchronous audit logging module for Grayskull backed by Apache Derby</description>
+
     <licenses>
         <license>
             <name>Apache-2.0</name>

@@ -10,6 +10,9 @@
 
     <artifactId>spi</artifactId>
 
+    <name>Grayskull SPI</name>
+    <description>Service Provider Interfaces for Grayskull authentication and authorization extensions</description>
+
     <licenses>
         <license>
             <name>Apache-2.0</name>

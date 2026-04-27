@@ -9,8 +9,8 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>server</artifactId>
-    <name>grayskull</name>
-    <description>grayskull</description>
+    <name>Grayskull Server</name>
+    <description>Grayskull secret management server</description>
 
     <licenses>
         <license>
