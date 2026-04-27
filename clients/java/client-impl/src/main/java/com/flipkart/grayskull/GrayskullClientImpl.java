@@ -28,8 +28,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Implementation of the Grayskull client. Fetches secrets on demand and delegates
- * refresh-hook registration and background polling to {@link HookRefreshPoller}.
+ * Implementation of the Grayskull client.
+ * <p>
+ * This class provides the main functionality for interacting with the Grayskull
+ * secret management service, including fetching secrets and managing refresh hooks.
+ * </p>
  */
 public final class GrayskullClientImpl implements GrayskullClient {
     private static final Logger log = LoggerFactory.getLogger(GrayskullClientImpl.class);
