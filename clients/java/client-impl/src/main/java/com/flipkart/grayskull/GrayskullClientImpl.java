@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
+import com.flipkart.grayskull.constants.GrayskullHeaders;
 import com.flipkart.grayskull.constants.MDCKeys;
 import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
@@ -20,6 +21,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -56,7 +60,16 @@ public final class GrayskullClientImpl implements GrayskullClient {
         if (grayskullClientConfiguration == null) {
             throw new IllegalArgumentException("grayskullClientConfiguration cannot be null");
         }
-        
+
+        // Grayskull-Workload: identity from resolver (once).
+        String identity = grayskullClientConfiguration.getWorkloadIdentityResolver().resolve();
+        grayskullClientConfiguration.addDefaultHeader(GrayskullHeaders.WORKLOAD, identity);
+
+        // User-Agent: SDK product/version only.
+        String sdkVersion = resolveSdkVersion(GrayskullClientImpl.class.getClassLoader());
+        String userAgent = "grayskull-java/" + sdkVersion;
+        grayskullClientConfiguration.addDefaultHeader(GrayskullHeaders.USER_AGENT, userAgent);
+
         this.baseUrl = grayskullClientConfiguration.getHost();
         this.authHeaderProvider = authHeaderProvider;
         this.grayskullClientConfiguration = grayskullClientConfiguration;
@@ -217,5 +230,25 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
     private String generateRequestId() {
         return UUID.randomUUID().toString();
+    }
+
+    /**
+     * Reads {@code grayskull-client.properties} from the given class loader (Maven-filtered at build time).
+     */
+    static String resolveSdkVersion(ClassLoader classLoader) {
+        try (InputStream in = classLoader.getResourceAsStream("grayskull-client.properties")) {
+            if (in == null) {
+                return "unknown";
+            }
+            Properties props = new Properties();
+            props.load(in);
+            String v = props.getProperty("version");
+            if (v != null && !v.trim().isEmpty() && !v.trim().startsWith("${")) {
+                return v.trim();
+            }
+        } catch (IOException e) {
+            log.warn("Could not read SDK version from classpath; using 'unknown'.", e);
+        }
+        return "unknown";
     }
 }

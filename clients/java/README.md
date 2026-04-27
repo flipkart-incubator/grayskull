@@ -12,6 +12,7 @@ Java client library for interacting with the Grayskull secret management service
 - [Public APIs](#public-apis)
   - [GrayskullClient](#grayskullclient)
 - [Configuration](#configuration)
+  - [Client identity headers](#client-identity-headers)
 - [Authentication](#authentication)
 - [Metrics](#metrics)
 - [Logging & Observability](#logging--observability)
@@ -196,6 +197,15 @@ All configuration properties with their defaults and constraints.
 | `maxRetries` | `int` | `3` | 1-10 | Number of retry attempts for transient failures |
 | `minRetryDelay` | `int` | `100` | ≥ 50 ms | Base delay between retries (exponential backoff) |
 | `metricsEnabled` | `boolean` | `true` | true/false | Enable/disable metrics collection |
+
+### Client identity headers
+
+At construction, `GrayskullClientImpl` pins two headers on every outbound request:
+
+- **`Grayskull-Workload`** — canonical workload identity (default: local hostname from `DefaultWorkloadIdentityResolver`). Override with `GrayskullClientConfiguration#setWorkloadIdentityResolver` before creating the client. This is the authoritative source of caller identity for all server-side consumers.
+- **`User-Agent`** — `grayskull-java/<version>`, where `<version>` comes from the Maven-filtered `grayskull-client.properties` on the classpath (falls back to `unknown` if missing or unfiltered). Intended for SDK telemetry only; its format is not a stable contract and must not be parsed for caller identity — use `Grayskull-Workload` instead.
+
+If you call `addDefaultHeader` for the same names before constructing the client, the SDK values above replace yours (single value per name on the wire). `Authorization` and `X-Request-Id` are also applied after configured default headers so the SDK always supplies the active auth token and per-call request id from MDC.
 
 ## Authentication
 

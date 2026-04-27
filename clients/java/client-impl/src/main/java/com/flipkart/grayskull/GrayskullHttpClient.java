@@ -22,12 +22,14 @@ class GrayskullHttpClient {
 
     private final OkHttpClient httpClient;
     private final GrayskullAuthHeaderProvider authHeaderProvider;
+    private final GrayskullClientConfiguration clientConfiguration;
     private final RetryUtil retryUtil;
 
 
     GrayskullHttpClient(GrayskullAuthHeaderProvider authHeaderProvider, GrayskullClientConfiguration clientConfiguration) {
         this.authHeaderProvider = authHeaderProvider;
-        
+        this.clientConfiguration = clientConfiguration;
+
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(clientConfiguration.getConnectionTimeout(), TimeUnit.MILLISECONDS)
                 .readTimeout(clientConfiguration.getReadTimeout(), TimeUnit.MILLISECONDS)
@@ -92,15 +94,17 @@ class GrayskullHttpClient {
     private Request.Builder buildRequest(String url) {
         Request.Builder requestBuilder = new Request.Builder().url(url);
 
+        clientConfiguration.getDefaultHeaders().forEach(requestBuilder::header);
+
         String authHeader = authHeaderProvider.getAuthHeader();
         if (authHeader == null || authHeader.trim().isEmpty()) {
             throw new IllegalStateException("Auth header cannot be null or empty");
         }
-        requestBuilder.addHeader("Authorization", authHeader);
+        requestBuilder.header("Authorization", authHeader);
 
         String requestId = MDC.get(MDCKeys.GRAYSKULL_REQUEST_ID);
         if (requestId != null && !requestId.isEmpty()) {
-            requestBuilder.addHeader("X-Request-Id", requestId);
+            requestBuilder.header("X-Request-Id", requestId);
         }
 
         return requestBuilder;

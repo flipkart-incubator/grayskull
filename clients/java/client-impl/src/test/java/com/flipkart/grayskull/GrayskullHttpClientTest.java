@@ -2,15 +2,19 @@ package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
+import com.flipkart.grayskull.constants.GrayskullHeaders;
+import com.flipkart.grayskull.constants.MDCKeys;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
+import com.flipkart.grayskull.models.exceptions.RetryableException;
 import com.flipkart.grayskull.models.response.Response;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
+import org.slf4j.MDC;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,12 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for GrayskullHttpClient.
- * <p>
- * Uses MockWebServer for integration-style testing of HTTP behavior.
- * </p>
- */
+/** Unit tests for {@link GrayskullHttpClient}. */
 @ExtendWith(MockitoExtension.class)
 class GrayskullHttpClientTest {
 
@@ -62,6 +61,7 @@ class GrayskullHttpClientTest {
 
     @AfterEach
     void tearDown() throws IOException {
+        MDC.clear();
         if (httpClient != null) {
             httpClient.close();
         }
@@ -304,6 +304,236 @@ class GrayskullHttpClientTest {
 
         assertEquals(401, exception.getStatusCode());
         assertEquals(1, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    void testDoGetWithRetry_emitsDefaultHeaders() throws InterruptedException {
+        // Given
+        config = new GrayskullClientConfiguration();
+        config.setHost(mockWebServer.url("/").toString().replaceAll("/$", ""));
+        config.setMetricsEnabled(false);
+        config.addDefaultHeader(GrayskullHeaders.WORKLOAD, "v1::c::n::w::p");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        // When
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        // Then
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertEquals("v1::c::n::w::p", request.getHeader(GrayskullHeaders.WORKLOAD));
+    }
+
+    @Test
+    void testDoGetWithRetry_emitsMultipleDefaultHeaders() throws InterruptedException {
+        // Given
+        config = new GrayskullClientConfiguration();
+        config.setHost(mockWebServer.url("/").toString().replaceAll("/$", ""));
+        config.setMetricsEnabled(false);
+        config.addDefaultHeader(GrayskullHeaders.WORKLOAD, "workload-1");
+        config.addDefaultHeader("Grayskull-Trace", "trace-abc");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        // When
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        // Then
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertEquals("workload-1", request.getHeader(GrayskullHeaders.WORKLOAD));
+        assertEquals("trace-abc", request.getHeader("Grayskull-Trace"));
+    }
+
+    @Test
+    void testDoGetWithRetry_noDefaultHeaders_doesNotEmitAny() throws InterruptedException {
+        // Given - empty map, forEach is a no-op
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        // When
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        // Then
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertNull(request.getHeader(GrayskullHeaders.WORKLOAD));
+    }
+
+    @Test
+    void testDoGetWithRetry_defaultHeadersEmittedOnEveryRetry() throws InterruptedException {
+        // Given
+        config = new GrayskullClientConfiguration();
+        config.setHost(mockWebServer.url("/").toString().replaceAll("/$", ""));
+        config.setMaxRetries(3);
+        config.setMinRetryDelay(50);
+        config.setMetricsEnabled(false);
+        config.addDefaultHeader(GrayskullHeaders.WORKLOAD, "retried-id");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        // Fail twice then succeed; header must be present on every request
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500).setBody("err"));
+        mockWebServer.enqueue(new MockResponse().setResponseCode(503).setBody("err"));
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        // When
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        // Then
+        assertEquals(3, mockWebServer.getRequestCount());
+        for (int i = 0; i < 3; i++) {
+            RecordedRequest r = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+            assertNotNull(r);
+            assertEquals("retried-id", r.getHeader(GrayskullHeaders.WORKLOAD),
+                    "attempt " + (i + 1) + " missing workload header");
+        }
+    }
+
+    @Test
+    void testDoGetWithRetry_sdkAuthorizationWinsOverUserDefault() throws InterruptedException {
+        config = new GrayskullClientConfiguration();
+        config.setHost(mockWebServer.url("/").toString().replaceAll("/$", ""));
+        config.setMetricsEnabled(false);
+        config.addDefaultHeader("Authorization", "Bearer spoof");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertEquals("Bearer test-token", request.getHeader("Authorization"));
+        assertEquals(1, request.getHeaders().values("Authorization").size());
+    }
+
+    @Test
+    void testDoGetWithRetry_sdkRequestIdWinsOverUserDefault() throws InterruptedException {
+        config = new GrayskullClientConfiguration();
+        config.setHost(mockWebServer.url("/").toString().replaceAll("/$", ""));
+        config.setMetricsEnabled(false);
+        config.addDefaultHeader("X-Request-Id", "user-bad");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, "sdk-good");
+
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertEquals("sdk-good", request.getHeader("X-Request-Id"));
+        assertEquals(1, request.getHeaders().values("X-Request-Id").size());
+    }
+
+    @Test
+    void testDoGetWithRetry_customHeader_singleValueOnWire() throws InterruptedException {
+        config = new GrayskullClientConfiguration();
+        config.setHost(mockWebServer.url("/").toString().replaceAll("/$", ""));
+        config.setMetricsEnabled(false);
+        config.addDefaultHeader("X-App-Name", "my-service");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertEquals("my-service", request.getHeader("X-App-Name"));
+        assertEquals(1, request.getHeaders().values("X-App-Name").size());
+    }
+
+    @Test
+    void testDoGetWithRetry_wrapsUnexpectedRuntimeExceptionFromRequestPath() {
+        when(mockAuthProvider.getAuthHeader()).thenThrow(new RuntimeException("unexpected"));
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        GrayskullException ex = assertThrows(GrayskullException.class,
+                () -> httpClient.doGetWithRetry(mockWebServer.url("/test").toString()));
+        assertTrue(ex.getMessage().contains("Unexpected error during HTTP request"));
+        assertNotNull(ex.getCause());
+    }
+
+    @Test
+    void testDoGetWithRetry_readTimeout_eventuallyGrayskullExceptionWithTimeoutCause() {
+        config.setReadTimeout(300);
+        config.setMaxRetries(1);
+        config.setMinRetryDelay(50);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        String bigBody = "{\"x\":\"" + new String(new char[64 * 1024]).replace('\0', 'y') + "\"}";
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .throttleBody(1024, 5, TimeUnit.SECONDS)
+                .setBody(bigBody));
+
+        GrayskullException ex = assertThrows(GrayskullException.class,
+                () -> httpClient.doGetWithRetry(mockWebServer.url("/slow").toString()));
+        assertTrue(ex.getMessage().contains("Failed after"));
+        Throwable cause = ex.getCause();
+        assertTrue(cause instanceof RetryableException);
+        assertTrue(((RetryableException) cause).getMessage().toLowerCase().contains("timeout"));
+    }
+
+    @Test
+    void testDoGetWithRetry_http600_notRetryable_singleAttempt() {
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        mockWebServer.enqueue(new MockResponse().setResponseCode(600).setBody("custom"));
+
+        GrayskullException ex = assertThrows(GrayskullException.class,
+                () -> httpClient.doGetWithRetry(mockWebServer.url("/600").toString()));
+        assertEquals(600, ex.getStatusCode());
+        assertEquals(1, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    void testDoGetWithRetry_mdcEmptyRequestId_skipsHeader() throws InterruptedException {
+        MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, "");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertNull(request.getHeader("X-Request-Id"));
     }
 
     private String toJson(Object obj) {
