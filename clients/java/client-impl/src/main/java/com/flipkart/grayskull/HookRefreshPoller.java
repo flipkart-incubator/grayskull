@@ -252,6 +252,9 @@ final class HookRefreshPoller {
                 log.warn("{} did not terminate cleanly within {}s; forcing shutdown",
                         name, SHUTDOWN_AWAIT_SECONDS);
                 executor.shutdownNow();
+                if (!executor.awaitTermination(SHUTDOWN_AWAIT_SECONDS, TimeUnit.SECONDS)) {
+                    log.warn("{} still has running tasks after force-shutdown", name);
+                }
             }
         } catch (InterruptedException e) {
             executor.shutdownNow();
