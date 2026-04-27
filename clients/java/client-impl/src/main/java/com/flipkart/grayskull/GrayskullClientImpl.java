@@ -43,6 +43,13 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
+    /**
+     * Creates a new Grayskull client implementation.
+     *
+     * @param authHeaderProvider provider for authentication headers (must not be null)
+     * @param grayskullClientConfiguration configuration properties (must not be null)
+     * @throws IllegalArgumentException if authHeaderProvider or grayskullClientConfiguration is null
+     */
     public GrayskullClientImpl(GrayskullAuthHeaderProvider authHeaderProvider,
                                GrayskullClientConfiguration grayskullClientConfiguration) {
         if (authHeaderProvider == null) {
@@ -67,6 +74,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new ParameterNamesModule());
 
+        // Configure metrics based on client configuration
         MetricsPublisher.configure(grayskullClientConfiguration.isMetricsEnabled());
 
         this.refreshPoller = new HookRefreshPoller(
@@ -74,6 +82,18 @@ public final class GrayskullClientImpl implements GrayskullClient {
                 grayskullClientConfiguration.getPollingIntervalSeconds());
     }
 
+    /**
+     * Retrieves a secret from the Grayskull server.
+     * <p>
+     * The secretRef should be in the format: "projectId:secretName"
+     * For example: "my-project:database-password"
+     * </p>
+     *
+     * @param secretRef the secret reference in format "projectId:secretName"
+     * @return the secret value
+     * @throws IllegalArgumentException if secretRef format is invalid
+     * @throws RuntimeException if the secret cannot be retrieved
+     */
     @Override
     public SecretValue getSecret(String secretRef) {
         String requestId = generateRequestId();
@@ -94,9 +114,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
             MDC.put(MDCKeys.PROJECT_ID, projectId);
             MDC.put(MDCKeys.SECRET_NAME, secretName);
 
-            log.debug("Fetching secret for secretRef:{}", secretRef);
+            log.debug("[RequestId:{}] Fetching secret for secretRef: {}", requestId, secretRef);
 
             String url = buildUrl("v1", "projects", projectId, "secrets", secretName, "data");
+            // Fetch the secret with automatic retry logic
             HttpResponse httpResponse = httpClient.doGetWithRetry(url);
             statusCode = httpResponse.getStatusCode();
 
@@ -107,6 +128,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             }
             return secretValue;
         } catch (JsonProcessingException e) {
+            // JSON parsing errors are not retryable - they indicate a permanent problem
             throw new GrayskullException("Failed to parse response: ", e);
         } catch (GrayskullException e) {
             statusCode = e.getStatusCode();
@@ -120,6 +142,19 @@ public final class GrayskullClientImpl implements GrayskullClient {
         }
     }
 
+    /**
+     * Registers a refresh hook for a secret.
+     * <p>
+     * The hook is invoked by a background dispatcher whenever the server reports a
+     * newer version of {@code secretRef} during the periodic batch poll. Multiple
+     * hooks may be registered for the same secret; each is delivered sequentially
+     * with the latest known value. 
+     * </p>
+     *
+     * @param secretRef the secret reference to monitor, in {@code projectId:secretName} form
+     * @param hook the hook to invoke when a newer version of the secret is observed
+     * @return a handle that can be used to unregister the hook when no longer needed
+     */
     @Override
     public RefreshHandlerRef registerRefreshHook(String secretRef, SecretRefreshHook hook) {
         if (secretRef == null || secretRef.isEmpty()) {
@@ -132,6 +167,13 @@ public final class GrayskullClientImpl implements GrayskullClient {
         return refreshPoller.register(parts[0], parts[1], hook);
     }
 
+    /**
+     * Closes the client and releases resources.
+     * <p>
+     * This method should be called when the client is no longer needed to properly
+     * clean up HTTP connections and other resources.
+     * </p>
+     */
     @Override
     public void close() {
         if (!closed.compareAndSet(false, true)) {

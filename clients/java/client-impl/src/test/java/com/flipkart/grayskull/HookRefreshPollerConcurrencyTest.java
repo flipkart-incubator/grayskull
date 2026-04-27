@@ -1,6 +1,7 @@
 package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.hooks.SecretRefreshHook;
 import com.flipkart.grayskull.hooks.SecretState;
@@ -62,6 +63,7 @@ class HookRefreshPollerConcurrencyTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new ParameterNamesModule());
         // Default benign response so the scheduled auto-tick (which we cannot prevent)
         // is harmless even if it fires before close().
         try {
@@ -131,7 +133,9 @@ class HookRefreshPollerConcurrencyTest {
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
     void parallelRegisterUnregister_finalStateConsistent() throws Exception {
         final int pairs = 200;
-        ExecutorService pool = Executors.newFixedThreadPool(16);
+        // Pool size must be >= number of parties on the barrier; otherwise workers
+        // queued behind a full pool never reach await() and the barrier deadlocks.
+        ExecutorService pool = Executors.newFixedThreadPool(pairs * 2);
         CyclicBarrier startGate = new CyclicBarrier(pairs * 2);
         CountDownLatch done = new CountDownLatch(pairs * 2);
         ConcurrentLinkedQueue<RefreshHandlerRef> handles = new ConcurrentLinkedQueue<>();

@@ -848,19 +848,12 @@ class GrayskullClientImplTest {
     }
 
     @Test
-    void testGetSecret_invalidBaseUrl_throwsIllegalStateException() throws Exception {
+    void testGetSecret_invalidBaseUrl_throwsIllegalStateException() {
         GrayskullClientConfiguration config = new GrayskullClientConfiguration();
         config.setHost("http://%%:bad");
-        GrayskullClientImpl badHostClient = new GrayskullClientImpl(mockAuthProvider, config);
-        Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
-        httpClientField.setAccessible(true);
-        httpClientField.set(badHostClient, mockHttpClient);
-
-        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(
-                new HttpResponse(200, "{}", "application/json", "http/1.1"));
-
-        assertThrows(IllegalStateException.class, () -> badHostClient.getSecret("p:s"));
-        badHostClient.close();
+        // The poller validates baseUrl during construction, so the failure surfaces there.
+        assertThrows(IllegalStateException.class,
+                () -> new GrayskullClientImpl(mockAuthProvider, config));
     }
 
     @Test
