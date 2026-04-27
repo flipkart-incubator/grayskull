@@ -582,6 +582,17 @@ class GrayskullClientImplTest {
     }
 
     @Test
+    void testClose_calledTwice_isIdempotent() {
+        // First close performs the cleanup; second close must short-circuit
+        // via the closed.compareAndSet(false, true) guard and not re-invoke
+        // the underlying httpClient.close().
+        client.close();
+        client.close();
+
+        verify(mockHttpClient, times(1)).close();
+    }
+
+    @Test
     void testClose_handlesNullHttpClient() throws Exception {
         // Given - create client with null http client
         GrayskullClientImpl clientWithNullHttp = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);
