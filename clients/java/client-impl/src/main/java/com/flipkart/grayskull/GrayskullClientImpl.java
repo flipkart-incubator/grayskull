@@ -52,12 +52,13 @@ public final class GrayskullClientImpl implements GrayskullClient {
             throw new IllegalArgumentException("grayskullClientConfiguration cannot be null");
         }
 
-        // Resolve workload identity once and pin it as a default header.
+        // Grayskull-Workload: identity from resolver (once).
         String identity = grayskullClientConfiguration.getWorkloadIdentityResolver().resolve();
         grayskullClientConfiguration.addDefaultHeader(GrayskullHeaders.WORKLOAD, identity);
 
+        // User-Agent: SDK product/version only.
         String sdkVersion = resolveSdkVersion(GrayskullClientImpl.class.getClassLoader());
-        String userAgent = "grayskull-java/" + sdkVersion + " (" + identity + ")";
+        String userAgent = "grayskull-java/" + sdkVersion;
         grayskullClientConfiguration.addDefaultHeader(GrayskullHeaders.USER_AGENT, userAgent);
 
         this.baseUrl = grayskullClientConfiguration.getHost();

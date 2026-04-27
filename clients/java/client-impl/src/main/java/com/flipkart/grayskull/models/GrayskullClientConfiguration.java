@@ -122,9 +122,7 @@ public final class GrayskullClientConfiguration {
      */
     private WorkloadIdentityResolver workloadIdentityResolver = new DefaultWorkloadIdentityResolver();
 
-    /**
-     * Static HTTP headers appended to every outbound request. Populated at client construction.
-     */
+    /** Default headers added to every request (filled when the client is built). */
     private final Map<String, String> defaultHeaders = new HashMap<>();
 
     public void setWorkloadIdentityResolver(WorkloadIdentityResolver resolver) {

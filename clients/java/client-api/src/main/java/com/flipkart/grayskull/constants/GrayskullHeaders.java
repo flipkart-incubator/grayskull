@@ -6,13 +6,14 @@ package com.flipkart.grayskull.constants;
 public final class GrayskullHeaders {
 
     /**
-     * Identity of the workload running the Grayskull client, populated from
-     * the configured {@code WorkloadIdentityResolver}.
+     * Workload identity ({@code Grayskull-Workload}), resolved at client construction.
+     * Use for caller identity; not {@link #USER_AGENT}.
      */
     public static final String WORKLOAD = "Grayskull-Workload";
 
     /**
-     * SDK identity; value is set by {@code GrayskullClientImpl} at construction.
+     * SDK product/version ({@code grayskull-java/<version>}), set at client construction.
+     * Telemetry only; not for identity.
      */
     public static final String USER_AGENT = "User-Agent";
 

@@ -8,6 +8,7 @@ import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
+import com.flipkart.grayskull.models.exceptions.RetryableException;
 import com.flipkart.grayskull.models.response.Response;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -27,12 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for GrayskullHttpClient.
- * <p>
- * Uses MockWebServer for integration-style testing of HTTP behavior.
- * </p>
- */
+/** Unit tests for {@link GrayskullHttpClient}. */
 @ExtendWith(MockitoExtension.class)
 class GrayskullHttpClientTest {
 
@@ -565,6 +561,66 @@ class GrayskullHttpClientTest {
         assertNotNull(request);
         assertEquals("my-service", request.getHeader("X-App-Name"));
         assertEquals(1, request.getHeaders().values("X-App-Name").size());
+    }
+
+    @Test
+    void testDoGetWithRetry_wrapsUnexpectedRuntimeExceptionFromRequestPath() {
+        when(mockAuthProvider.getAuthHeader()).thenThrow(new RuntimeException("unexpected"));
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+
+        GrayskullException ex = assertThrows(GrayskullException.class,
+                () -> httpClient.doGetWithRetry(mockWebServer.url("/test").toString()));
+        assertTrue(ex.getMessage().contains("Unexpected error during HTTP request"));
+        assertNotNull(ex.getCause());
+    }
+
+    @Test
+    void testDoGetWithRetry_readTimeout_eventuallyGrayskullExceptionWithTimeoutCause() {
+        config.setReadTimeout(300);
+        config.setMaxRetries(1);
+        config.setMinRetryDelay(50);
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        String bigBody = "{\"x\":\"" + new String(new char[64 * 1024]).replace('\0', 'y') + "\"}";
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .throttleBody(1024, 5, TimeUnit.SECONDS)
+                .setBody(bigBody));
+
+        GrayskullException ex = assertThrows(GrayskullException.class,
+                () -> httpClient.doGetWithRetry(mockWebServer.url("/slow").toString()));
+        assertTrue(ex.getMessage().contains("Failed after"));
+        Throwable cause = ex.getCause();
+        assertTrue(cause instanceof RetryableException);
+        assertTrue(((RetryableException) cause).getMessage().toLowerCase().contains("timeout"));
+    }
+
+    @Test
+    void testDoGetWithRetry_http600_notRetryable_singleAttempt() {
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        mockWebServer.enqueue(new MockResponse().setResponseCode(600).setBody("custom"));
+
+        GrayskullException ex = assertThrows(GrayskullException.class,
+                () -> httpClient.doGetWithRetry(mockWebServer.url("/600").toString()));
+        assertEquals(600, ex.getStatusCode());
+        assertEquals(1, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    void testDoGetWithRetry_mdcEmptyRequestId_skipsHeader() throws InterruptedException {
+        MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, "");
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        Response<SecretValue> response = new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertNull(request.getHeader("X-Request-Id"));
     }
 
     private String toJson(Object obj) {
