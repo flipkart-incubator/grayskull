@@ -71,7 +71,6 @@ final class HookRefreshPoller {
 
     RefreshHandlerRef register(String projectId, String secretName, SecretRefreshHook hook) {
         String secretRef = projectId + ":" + secretName;
-        // compute() is atomic per-key: keeps register/unregister from interleaving.
         SecretState state = registry.compute(secretRef, (k, existing) -> {
             SecretState s = existing != null ? existing : new SecretState(projectId, secretName);
             s.hooks.add(hook);
@@ -103,7 +102,6 @@ final class HookRefreshPoller {
         int statusCode = 0;
 
         try {
-            // Snapshot the registry so concurrent register/unregister can't tear the request.
             List<BatchGetSecretsRequest.Entry> entries = new ArrayList<>(registry.size());
             for (SecretState state : registry.values()) {
                 entries.add(new BatchGetSecretsRequest.Entry(
@@ -117,7 +115,6 @@ final class HookRefreshPoller {
             boolean pollFailed = false;
             boolean anySecretUpdated = false;
 
-            // Cap per-request payload size; server contract caps batch at MAX_BATCH_SECRETS.
             for (int from = 0; from < entries.size(); from += MAX_BATCH_SECRETS) {
                 int to = Math.min(from + MAX_BATCH_SECRETS, entries.size());
                 List<BatchGetSecretsRequest.Entry> chunk = entries.subList(from, to);
@@ -150,12 +147,11 @@ final class HookRefreshPoller {
                 } catch (GrayskullException ex) {
                     pollFailed = true;
                     statusCode = ex.getStatusCode();
-                    log.warn("Batch refresh failed for secrets {}..{}: {}", from + 1, to, ex.getMessage(), ex);
+                    log.error("Batch refresh failed for secrets {}..{}: {}", from + 1, to, ex.getMessage(), ex);
                 } catch (Exception ex) {
-                    // Swallow: the scheduled executor must survive transient failures.
                     pollFailed = true;
                     statusCode = 500;
-                    log.warn("Batch refresh failed for secrets {}..{}: {}", from + 1, to, ex.getMessage(), ex);
+                    log.error("Batch refresh failed for secrets {}..{}: {}", from + 1, to, ex.getMessage(), ex);
                 }
             }
 
@@ -173,9 +169,8 @@ final class HookRefreshPoller {
         String secretRef = item.getProjectId() + ":" + item.getSecretName();
         SecretState state = registry.get(secretRef);
         if (state == null) {
-            return; // unregistered while the request was in flight
+            return;
         }
-        // Latest-wins: an in-flight dispatch task will pick this value up before exiting.
         state.pendingUpdate.set(new SecretValue(
                 item.getDataVersion(), item.getPublicPart(), item.getPrivatePart()));
         dispatcher.submit(() -> runHooksFor(secretRef, state));
@@ -197,7 +192,6 @@ final class HookRefreshPoller {
             }
         } finally {
             state.isExecuting.set(false);
-            // Catch the update that slipped in between getAndSet(null) and isExecuting=false.
             if (state.pendingUpdate.get() != null) {
                 dispatcher.submit(() -> runHooksFor(secretRef, state));
             }
