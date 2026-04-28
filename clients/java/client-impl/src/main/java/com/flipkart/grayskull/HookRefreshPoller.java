@@ -36,14 +36,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <h2>High-level flow</h2>
  * <ol>
- *   <li>Callers invoke
- *       {@link #register(String, String, SecretRefreshHook, int)} to attach a
+ *   <li>Callers invoke {@link #register(String, String, SecretRefreshHook)} to attach a
  *       {@link SecretRefreshHook} for a {@code projectId:secretName}. State is kept in
- *       {@link #registry}, keyed by {@code secretRef}. The supplied
- *       {@code initialKnownVersion} (typically the version observed by a prior
- *       {@code getSecret} call on the same client) seeds {@link SecretState#lastKnownVersion}
- *       so the first batch poll does not redeliver a version the application has already
- *       received synchronously.</li>
+ *       {@link #registry}, keyed by {@code secretRef}. {@link SecretState#lastKnownVersion}
+ *       starts at 0, so the first batch poll unconditionally delivers the current server
+ *       version to the hook.</li>
  *   <li>A single-threaded {@link #scheduler} runs {@link #pollOnce()} every
  *       {@code intervalSeconds} (fixed-delay: the next tick starts only after the
  *       previous tick finishes). The first tick is delayed by {@code intervalSeconds}
@@ -63,19 +60,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>{@link #runHooksFor} is non-reentrant per-secret (guarded by
  *       {@link SecretState#isExecuting}). It drains the pending update, advances
  *       {@link SecretState#lastKnownVersion} <em>first</em> (at-most-once delivery —
- *       see method Javadoc for rationale; uses {@code Math.max} so a concurrent
- *       {@link #advanceLastKnownVersionIfPresent} call from {@code getSecret} cannot be
- *       regressed), then invokes every registered hook sequentially via
+ *       see method Javadoc for rationale), then invokes every registered hook sequentially via
  *       {@link #deliverToHooks}. Hook exceptions are caught per-hook so one broken
  *       consumer cannot block delivery to the others.</li>
  * </ol>
- *
- * <p>{@link #advanceLastKnownVersionIfPresent} is the bridge between the synchronous
- * {@code getSecret} path (which observes a version directly from the server) and the
- * background hook delivery path: when the application reads a version synchronously
- * the poller's per-secret high-water mark is moved forward, suppressing redundant
- * first-poll deliveries for any hooks that were registered <em>before</em> that
- * {@code getSecret} call.</p>
  *
  * <h2>Thread-safety contract</h2>
  * The registry is a {@link ConcurrentHashMap} and per-secret hook lists are
@@ -123,36 +111,21 @@ final class HookRefreshPoller {
                 this::pollOnce, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
     }
 
+    /**
+     * Registers {@code hook} for {@code projectId:secretName}.
+     * {@link SecretState#lastKnownVersion} is always left at 0 for newly created state
+     * so the first batch poll delivers the current server version unconditionally.
+     */
     RefreshHandlerRef register(String projectId, String secretName, SecretRefreshHook hook) {
-        return register(projectId, secretName, hook, 0);
-    }
-
-    RefreshHandlerRef register(String projectId, String secretName,
-                               SecretRefreshHook hook, int initialKnownVersion) {
         String secretRef = projectId + ":" + secretName;
         SecretState state = registry.compute(secretRef, (k, existing) -> {
             SecretState s = existing != null ? existing : new SecretState(projectId, secretName);
             s.hooks.add(hook);
-            // Never go backwards: if a prior getSecret advanced the version higher, keep that.
-            s.lastKnownVersion.updateAndGet(curr -> Math.max(curr, initialKnownVersion));
             return s;
         });
-        log.debug("Registered refresh hook for secretRef:{} (totalHooks:{}, initialKnownVersion:{})",
-                secretRef, state.hooks.size(), state.lastKnownVersion.get());
+        log.debug("Registered refresh hook for secretRef:{} (totalHooks:{})",
+                secretRef, state.hooks.size());
         return new DefaultRefreshHandlerRef(secretRef, () -> unregister(secretRef, hook));
-    }
-
-    /**
-     * Advances {@link SecretState#lastKnownVersion} for {@code secretRef} if a hook is registered;
-     * no-op otherwise. Called by {@code GrayskullClientImpl.getSecret} so a synchronously-observed
-     * version suppresses the otherwise-redundant first-poll delivery to hooks for the same secret.
-     * Monotonic via {@code Math.max}.
-     */
-    void advanceLastKnownVersionIfPresent(String secretRef, int dataVersion) {
-        SecretState state = registry.get(secretRef);
-        if (state != null) {
-            state.lastKnownVersion.updateAndGet(curr -> Math.max(curr, dataVersion));
-        }
     }
 
     private void unregister(String secretRef, SecretRefreshHook hook) {
@@ -275,11 +248,9 @@ final class HookRefreshPoller {
      * </p>
      * <p>
      * <strong>At-most-once delivery:</strong> {@link SecretState#lastKnownVersion} is
-     * advanced <em>before</em> the hook runs (using {@code Math.max}, so it never
-     * regresses even if {@link #advanceLastKnownVersionIfPresent} ran concurrently).
-     * A hook that throws skips that version — the next bump from the server will still
-     * be delivered; this avoids duplicate deliveries when hook execution outlasts the
-     * polling interval.
+     * advanced <em>before</em> the hook runs. A hook that throws skips that version —
+     * the next bump from the server will still be delivered; this avoids duplicate
+     * deliveries when hook execution outlasts the polling interval.
      * </p>
      */
     private void runHooksFor(String secretRef, SecretState state) {
@@ -289,12 +260,8 @@ final class HookRefreshPoller {
         try {
             SecretValue value;
             while ((value = state.pendingUpdate.getAndSet(null)) != null) {
-                // Final alias for lambda capture (loop variable is not effectively final).
-                final SecretValue pending = value;
-                // Math.max so a concurrent advanceLastKnownVersionIfPresent (from getSecret)
-                // cannot be regressed by us writing a stale, lower version here.
-                state.lastKnownVersion.updateAndGet(curr -> Math.max(curr, pending.getDataVersion()));
-                deliverToHooks(secretRef, state, pending);
+                state.lastKnownVersion.set(value.getDataVersion());
+                deliverToHooks(secretRef, state, value);
             }
         } finally {
             state.isExecuting.set(false);

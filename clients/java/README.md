@@ -241,7 +241,9 @@ The server accepts at most **50** secrets per batch call. If you register more t
 
 You **do not** need to call `getSecret` before `registerRefreshHook`. For each registered secret the poller starts with **`lastKnownVersion` 0** and sends that in batch requests until a delivery updates it. The server returns a row whenever its version is **greater** than the last known value you sent, so the **first successful poll** after registration may invoke your hooks with the **current** secret (any `dataVersion > 0`)—that is expected and gives you an initial materialized value without a separate `getSecret` call.
 
-Calling `getSecret` is still useful when you want to **read once synchronously** on startup (before or regardless of the background poller), or to prime application state before hooks take over ongoing rotation handling. As an optimization, every successful `getSecret(secretRef)` call records the observed `dataVersion` on the client; a subsequent `registerRefreshHook(secretRef, ...)` (in either order) seeds the poller's `lastKnownVersion` from this record, so the first poll does **not** redeliver a version your application has already received synchronously.
+You **do not** need to call `getSecret` before `registerRefreshHook`. The poller starts with `lastKnownVersion = 0` for each registered secret and sends that in batch requests until a delivery updates it. The server returns a row whenever its version is **greater** than the last known value you sent, so the **first successful poll** after registration will invoke your hook with the current secret — giving you an initial materialized value without a separate `getSecret` call.
+
+Calling `getSecret` is still useful when you need to read the secret value **synchronously** at startup before the first poll fires.
 
 ## Configuration
 
