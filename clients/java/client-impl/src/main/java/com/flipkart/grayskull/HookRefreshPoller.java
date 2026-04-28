@@ -31,8 +31,47 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Owns the refresh-hook registry and the background poller/dispatcher pair
- * that drives server-driven hook delivery.
+ * Owns the refresh-hook registry and the background poller/dispatcher pair that
+ * drives server-driven hook delivery for the Java SDK.
+ *
+ * <h2>High-level flow</h2>
+ * <ol>
+ *   <li>Callers invoke {@link #register(String, String, SecretRefreshHook)} to attach a
+ *       {@link SecretRefreshHook} for a {@code projectId:secretName}. State is kept in
+ *       {@link #registry}, keyed by {@code secretRef}.</li>
+ *   <li>A single-threaded {@link #scheduler} runs {@link #pollOnce()} every
+ *       {@code intervalSeconds} (fixed-delay: the next tick starts only after the
+ *       previous tick finishes). The first tick is also delayed by {@code intervalSeconds}
+ *       so the cadence is uniform from construction time; callers that need an immediate
+ *       materialized value should call {@code getSecret()} explicitly.</li>
+ *   <li>{@link #pollOnce()} snapshots the current registry, builds a
+ *       {@link BatchGetSecretsRequest} (chunked into requests of at most
+ *       {@link #MAX_BATCH_SECRETS} secrets), and POSTs each chunk via
+ *       {@link GrayskullHttpClient}. Each entry tells the server the
+ *       caller's last-known version; the server replies with rows whose version is
+ *       strictly greater.</li>
+ *   <li>Each updated row is handed to {@link #handleUpdatedSecret} which stages the new
+ *       value in {@link SecretState#pendingUpdate} and submits {@link #runHooksFor} to
+ *       the {@link #dispatcher} thread pool.</li>
+ *   <li>{@link #runHooksFor} is non-reentrant per-secret (guarded by
+ *       {@link SecretState#isExecuting}). It drains the pending update, advances
+ *       {@link SecretState#lastKnownVersion} <em>first</em> (at-most-once delivery —
+ *       see method Javadoc for rationale), then invokes every registered hook
+ *       sequentially via {@link #deliverToHooks}. Hook exceptions are caught per-hook
+ *       so one broken consumer cannot block delivery to the others.</li>
+ * </ol>
+ *
+ * <h2>Thread-safety contract</h2>
+ * The registry is a {@link ConcurrentHashMap} and per-secret hook lists are
+ * {@link java.util.concurrent.CopyOnWriteArrayList}, so registration / unregistration
+ * is safe to interleave with polling. {@link #close()} stops both executors and waits
+ * up to {@link #SHUTDOWN_AWAIT_SECONDS} for in-flight work to finish.
+ *
+ * <h2>Failure isolation</h2>
+ * The body of {@link #pollOnce()} is wrapped in a top-level {@code try/catch (Throwable)}
+ * so a stray runtime exception (or an {@link Error}) cannot escape the runnable and
+ * cause {@link ScheduledExecutorService#scheduleWithFixedDelay} to silently cancel
+ * future polls.
  */
 final class HookRefreshPoller {
     private static final Logger log = LoggerFactory.getLogger(HookRefreshPoller.class);
@@ -41,7 +80,6 @@ final class HookRefreshPoller {
 
     private static final int DISPATCHER_THREADS = 5;
     private static final long SHUTDOWN_AWAIT_SECONDS = 10L;
-    private static final long INITIAL_DELAY_SECONDS = 1L;
     private static final int MAX_BATCH_SECRETS = 50;
 
     private final ConcurrentHashMap<String, SecretState> registry = new ConcurrentHashMap<>();
@@ -64,9 +102,9 @@ final class HookRefreshPoller {
         this.dispatcher = Executors.newFixedThreadPool(
                 DISPATCHER_THREADS, daemonFactory("grayskull-hook-dispatcher-"));
 
-        // fixed-delay (not fixed-rate): next tick starts N seconds AFTER the previous finishes.
+        // fixed-delay (not fixed-rate): next tick starts intervalSeconds AFTER the previous finishes.
         this.scheduler.scheduleWithFixedDelay(
-                this::pollOnce, INITIAL_DELAY_SECONDS, intervalSeconds, TimeUnit.SECONDS);
+                this::pollOnce, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
     }
 
     RefreshHandlerRef register(String projectId, String secretName, SecretRefreshHook hook) {
@@ -90,6 +128,16 @@ final class HookRefreshPoller {
         });
     }
 
+    /**
+     * One scheduled poll cycle. Runs on the single-threaded {@link #scheduler}.
+     *
+     * <p>The entire body is wrapped in a top-level {@code try/catch (Throwable)} so any
+     * unexpected exception (or {@link Error}) is logged and swallowed instead of
+     * propagating out of the {@link Runnable}. {@link ScheduledExecutorService#scheduleWithFixedDelay}
+     * cancels the recurring task as soon as a {@link Throwable} escapes — without this
+     * guard, a single stray exception would silently kill secret refresh for the
+     * lifetime of the JVM.</p>
+     */
     void pollOnce() {
         if (registry.isEmpty()) {
             return;
@@ -158,6 +206,9 @@ final class HookRefreshPoller {
             if (!pollFailed && !anySecretUpdated) {
                 log.debug("No secret versions advanced this cycle");
             }
+        } catch (Throwable t) {
+            log.error("Unhandled error in refresh poll cycle; suppressing to keep poller alive", t);
+            statusCode = 500;
         } finally {
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
             MetricsPublisher.getInstance().recordRequest("batchGetSecrets", statusCode, durationMs);
@@ -165,6 +216,16 @@ final class HookRefreshPoller {
         }
     }
 
+    /**
+     * Stages a server-reported update for delivery and submits the per-secret runner.
+     * <p>
+     * Coalescing: {@link SecretState#pendingUpdate} holds at most one pending value;
+     * if a newer update arrives before the previous one is drained, it overwrites the
+     * pending slot. Subscribers therefore see the latest version, never an obsolete
+     * intermediate one. If the registry no longer contains an entry for this secret
+     * (the hook was unregistered between request and response), the update is dropped.
+     * </p>
+     */
     private void handleUpdatedSecret(BatchGetSecretsResponse.UpdatedSecret item) {
         String secretRef = item.getProjectId() + ":" + item.getSecretName();
         SecretState state = registry.get(secretRef);
@@ -178,7 +239,21 @@ final class HookRefreshPoller {
 
     /**
      * Drains {@link SecretState#pendingUpdate} and invokes every hook, sequentially.
-     * Non-reentrant per-secret: if another task is already draining, returns immediately.
+     * <p>
+     * Non-reentrant per-secret: {@link SecretState#isExecuting} acts as a mutex so two
+     * dispatcher threads cannot deliver to the same secret concurrently. If another task
+     * is already draining, this call returns immediately and the staged update will be
+     * picked up by the in-flight runner's loop (or by a fresh runner re-submitted from
+     * the {@code finally} block to cover the post-release race window).
+     * </p>
+     * <p>
+     * Delivery is <strong>at-most-once</strong>: {@link SecretState#lastKnownVersion} is
+     * advanced <em>before</em> the hook is invoked. If a hook throws, that version is
+     * logged and skipped — the next legitimate version bump from the server will still
+     * be delivered. This avoids duplicate deliveries when hooks run longer than the
+     * polling interval (otherwise the server would keep returning the same un-acknowledged
+     * version on each poll).
+     * </p>
      */
     private void runHooksFor(String secretRef, SecretState state) {
         if (!state.isExecuting.compareAndSet(false, true)) {
@@ -187,8 +262,8 @@ final class HookRefreshPoller {
         try {
             SecretValue value;
             while ((value = state.pendingUpdate.getAndSet(null)) != null) {
-                deliverToHooks(secretRef, state, value);
                 state.lastKnownVersion.set(value.getDataVersion());
+                deliverToHooks(secretRef, state, value);
             }
         } finally {
             state.isExecuting.set(false);
@@ -201,16 +276,16 @@ final class HookRefreshPoller {
     private void deliverToHooks(String secretRef, SecretState state, SecretValue value) {
         for (SecretRefreshHook hook : state.hooks) {
             long startTime = System.nanoTime();
-            int status = 200;
+            boolean success = true;
             try {
                 hook.onUpdate(value);
             } catch (Exception e) {
-                status = 500;
+                success = false;
                 log.error("Consumer hook failed for {}", secretRef, e);
             } finally {
                 long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
                 MetricsPublisher.getInstance().recordRequest(
-                        "hook.execute." + secretRef, status, durationMs);
+                        "hook.execute." + secretRef, success ? 200 : 500, durationMs);
             }
         }
     }

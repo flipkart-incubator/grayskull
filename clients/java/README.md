@@ -229,7 +229,7 @@ try (GrayskullClient client = new GrayskullClientImpl(authProvider, config)) {
 
 ### Threading and performance
 
-- **Poller:** a single scheduled thread runs batch polls. The **first** poll is scheduled **immediately** after the client is constructed; each subsequent run starts **`pollingIntervalSeconds` after the previous poll finished** (`scheduleWithFixedDelay` semantics).
+- **Poller:** a single scheduled thread runs batch polls. The **first** poll fires **`pollingIntervalSeconds` after the client is constructed**; each subsequent run starts **`pollingIntervalSeconds` after the previous poll finished** (`scheduleWithFixedDelay` semantics). Callers that need an immediate materialized value at startup should call `getSecret()` explicitly — this also keeps the `getSecret.*` and `hook.execute.*` metrics meaningfully separate.
 - **Hooks:** callbacks run on a **small shared** worker pool (several threads for all secrets). Keep hook bodies **short**; offload heavy work to your own executor if needed. Slow hooks delay other secrets sharing the same pool.
 - **Hook errors:** uncaught exceptions from a hook are logged and recorded in metrics; other hooks for the same secret still run.
 
@@ -242,15 +242,6 @@ The server accepts at most **50** secrets per batch call. If you register more t
 You **do not** need to call `getSecret` before `registerRefreshHook`. For each registered secret the poller starts with **`lastKnownVersion` 0** and sends that in batch requests until a delivery updates it. The server returns a row whenever its version is **greater** than the last known value you sent, so the **first successful poll** after registration may invoke your hooks with the **current** secret (any `dataVersion > 0`)—that is expected and gives you an initial materialized value without a separate `getSecret` call.
 
 Calling `getSecret` is still useful when you want to **read once synchronously** on startup (before or regardless of the background poller), or to prime application state before hooks take over ongoing rotation handling.
-
-### Metrics
-
-In addition to `getSecret.*`, the client records:
-
-- **`batchGetSecrets`** — one sample per poll cycle (latency and overall status for that cycle).
-- **`hook.execute.{secretRef}`** — per hook invocation (latency and success vs failure).
-
-High cardinality on `secretRef` in metric names can be costly in some backends; prefer stable, bounded secret identifiers where possible.
 
 ## Configuration
 
@@ -267,7 +258,7 @@ All configuration properties with their defaults and constraints.
 | `maxRetries` | `int` | `3` | 1-10 | Number of retry attempts for transient failures |
 | `minRetryDelay` | `int` | `100` | ≥ 50 ms | Base delay between retries (exponential backoff) |
 | `metricsEnabled` | `boolean` | `true` | true/false | Enable/disable metrics collection |
-| `pollingIntervalSeconds` | `int` | `60` | > 0 (set via `setPollingIntervalSeconds`) | Seconds **between** completed batch polls (first poll runs immediately; see [Refresh hooks](#refresh-hooks)) |
+| `pollingIntervalSeconds` | `int` | `60` | > 0 (set via `setPollingIntervalSeconds`) | Seconds **between** completed batch polls (also used as the initial delay before the first poll; see [Refresh hooks](#refresh-hooks)) |
 
 ### Client identity headers
 
@@ -315,6 +306,16 @@ Implement `GrayskullAuthHeaderProvider` for custom auth schemes (JWT, API keys, 
 The SDK provides comprehensive observability with automatic metric library detection:
 - **Micrometer** (if on classpath) - Advanced metrics with percentiles
 - **JMX** (fallback) - Basic metrics, zero dependencies
+
+### Emitted method names
+
+The `{method}` token in the metric formats below takes one of:
+
+- **`getSecret.{secretRef}`** — one sample per `getSecret` call (latency and HTTP status).
+- **`batchGetSecrets`** — one sample per background poll cycle (latency and overall status). Not labelled by `secretRef` because a single cycle covers many secrets.
+- **`hook.execute.{secretRef}`** — one sample per refresh-hook invocation (latency and `200` for success / `500` for failure).
+
+> **Cardinality note:** `secretRef` is embedded in the metric name for `getSecret.*` and `hook.execute.*`. Backends like Prometheus do not handle unbounded label cardinality well, so keep the number of distinct registered `secretRef` values bounded (typically tens to low hundreds per process).
 
 ### Micrometer Metrics
 

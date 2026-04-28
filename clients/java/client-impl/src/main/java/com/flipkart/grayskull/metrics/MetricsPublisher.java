@@ -62,7 +62,7 @@ public final class MetricsPublisher {
         }
         recorder.recordRequest(name, statusCode, durationMs);
     }
-    
+
     /**
      * Record a retry event.
      * If metrics are disabled through configuration, this method will be a no-op.

@@ -151,15 +151,20 @@ public final class GrayskullClientImpl implements GrayskullClient {
      * The hook is invoked by a background dispatcher whenever the server reports a
      * newer version of {@code secretRef} during the periodic batch poll. Multiple
      * hooks may be registered for the same secret; each is delivered sequentially
-     * with the latest known value. 
+     * with the latest known value.
      * </p>
      *
      * @param secretRef the secret reference to monitor, in {@code projectId:secretName} form
      * @param hook the hook to invoke when a newer version of the secret is observed
      * @return a handle that can be used to unregister the hook when no longer needed
+     * @throws IllegalStateException if the client has already been closed; otherwise the returned
+     *                               handle would never fire (poller is shut down) — fail fast instead.
      */
     @Override
     public RefreshHandlerRef registerRefreshHook(String secretRef, SecretRefreshHook hook) {
+        if (closed.get()) {
+            throw new IllegalStateException("GrayskullClient has been closed; cannot register new refresh hooks");
+        }
         if (secretRef == null || secretRef.isEmpty()) {
             throw new IllegalArgumentException("secretRef cannot be null or empty");
         }

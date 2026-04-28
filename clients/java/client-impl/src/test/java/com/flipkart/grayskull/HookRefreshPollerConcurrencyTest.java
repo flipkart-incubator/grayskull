@@ -50,8 +50,9 @@ import static org.mockito.Mockito.when;
 class HookRefreshPollerConcurrencyTest {
 
     private static final String BATCH_URL = "https://test.grayskull.com/v1/secrets/batch";
-    /** A long interval so the scheduler's auto-tick (after the 1s initial delay)
-     *  will not interfere with our explicit {@link HookRefreshPoller#pollOnce()} calls. */
+    /** A long interval (used for both initial delay and recurring delay) so the
+     *  scheduler's auto-tick will not interfere with our explicit
+     *  {@link HookRefreshPoller#pollOnce()} calls. */
     private static final int LONG_INTERVAL_SECONDS = 3600;
 
     @Mock
