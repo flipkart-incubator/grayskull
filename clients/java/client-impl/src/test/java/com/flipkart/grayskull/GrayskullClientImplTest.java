@@ -593,6 +593,25 @@ class GrayskullClientImplTest {
     }
 
     @Test
+    void testGetSecret_baseUrlMutatedToInvalid_buildUrlThrows() throws Exception {
+        // Given - construct with a valid baseUrl (poller URL is built eagerly),
+        // then mutate the baseUrl field to an unparseable value so that
+        // HttpUrl.parse() returns null inside buildUrl() during getSecret().
+        // This exercises the `throw new IllegalStateException("Invalid baseUrl: ...")`
+        // guard in GrayskullClientImpl#buildUrl that the constructor-level
+        // failure path cannot reach.
+        Field baseUrlField = GrayskullClientImpl.class.getDeclaredField("baseUrl");
+        baseUrlField.setAccessible(true);
+        baseUrlField.set(client, "::not a url::");
+
+        // When/Then
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> client.getSecret("project:secret"));
+        assertTrue(ex.getMessage().startsWith("Invalid baseUrl:"),
+                "exception message must reference the invalid baseUrl: " + ex.getMessage());
+    }
+
+    @Test
     void testClose_handlesNullHttpClient() throws Exception {
         // Given - create client with null http client
         GrayskullClientImpl clientWithNullHttp = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);

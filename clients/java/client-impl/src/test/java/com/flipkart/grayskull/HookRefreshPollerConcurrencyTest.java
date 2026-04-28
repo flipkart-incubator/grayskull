@@ -464,39 +464,44 @@ class HookRefreshPollerConcurrencyTest {
 
     // ---------------------------------------------------------------------
     // 9. pollOnce() with an effectively-empty entries list must short-circuit
-    //    without invoking the HTTP client (covers `entries.isEmpty()` branch).
-    //    This branch is reachable when the registry is concurrently drained
-    //    between registry.isEmpty() and the values()-iteration. We simulate it
-    //    by clearing the registry via reflection while keeping a stale
-    //    "registry was non-empty" view: register, then drop the entries before
-    //    pollOnce reads them.
-    //
-    //    Practically, the simpler way to exercise the branch is to make the
-    //    registry observe-non-empty-but-iterate-empty by clearing immediately
-    //    after register on the SAME thread before pollOnce builds entries.
-    //    Since registry.isEmpty() is checked first, we need a non-empty marker.
-    //    We use a probe: a registered+then-cleared map where ConcurrentHashMap
-    //    can transiently report size>0 while values() returns nothing. A
-    //    deterministic alternative is invoking with a ConcurrentHashMap whose
-    //    contents we removed via reflection AFTER the isEmpty() check; we do
-    //    that by overriding registry mid-call from another thread.
+    //    without invoking the HTTP client (covers the `entries.isEmpty()`
+    //    `return;` branch). This branch is reachable when the registry is
+    //    concurrently drained between registry.isEmpty() and the values()-
+    //    iteration. We simulate it deterministically by replacing the registry
+    //    field with a custom ConcurrentHashMap whose isEmpty() returns false
+    //    but values() returns an empty collection -- mimicking exactly the
+    //    transient state visible across a concurrent removal.
     // ---------------------------------------------------------------------
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void pollOnce_emptyEntries_shortCircuits() throws Exception {
-        // Register a hook so registry.isEmpty() is false at the top of pollOnce.
-        // Then clear the registry *before* pollOnce iterates values(): on the
-        // same thread we cannot interleave, so we instead stage the registry
-        // such that registry.isEmpty() returns false but iteration yields
-        // nothing. We achieve this by inserting a sentinel that we then remove
-        // via a thread that races with pollOnce. Even if the race is missed,
-        // this test still asserts pollOnce does not throw and no HTTP call is
-        // made when there is nothing to refresh.
-        ConcurrentHashMap<String, SecretState> registry = registryOf(poller);
-        // Empty registry path is already covered elsewhere; here we just verify
-        // that with an empty registry pollOnce performs no HTTP work.
-        registry.clear();
+    void pollOnce_emptyEntriesAfterIsEmptyCheck_shortCircuits() throws Exception {
+        // Custom registry: reports non-empty for the gate check at the top of
+        // pollOnce, but yields no values when iterated. This is the exact
+        // scenario the `entries.isEmpty() -> return;` guard exists to handle.
+        ConcurrentHashMap<String, SecretState> fakeRegistry = new ConcurrentHashMap<String, SecretState>() {
+            @Override
+            public boolean isEmpty() {
+                return false;
+            }
+
+            @Override
+            public java.util.Collection<SecretState> values() {
+                return Collections.emptyList();
+            }
+
+            @Override
+            public int size() {
+                return 0;
+            }
+        };
+
+        Field registryField = HookRefreshPoller.class.getDeclaredField("registry");
+        registryField.setAccessible(true);
+        registryField.set(poller, fakeRegistry);
+
         poller.pollOnce();
+
+        // No HTTP work must have been issued because entries was empty.
         org.mockito.Mockito.verify(mockHttpClient, org.mockito.Mockito.never())
                 .doPostWithRetry(eq(BATCH_URL), anyString());
     }
@@ -507,80 +512,100 @@ class HookRefreshPollerConcurrencyTest {
     //     the finally block must resubmit a follow-up dispatch so the late
     //     update is not lost. This is the
     //     `if (state.pendingUpdate.get() != null) dispatcher.submit(...)` path.
+    //
+    //     The race window is microseconds. We make the test reliable by:
+    //       (a) calling runHooksFor directly via reflection (so the test thread
+    //           drives the drain loop -- no dispatcher latency), and
+    //       (b) running a tight side-thread that *waits for the drain loop to
+    //           exit* (state.pendingUpdate observed null after a non-null
+    //           snapshot) and then stages a new value, hoping to land before
+    //           isExecuting flips false. With many iterations this hits the
+    //           target branch with probability ~1.
+    //     We additionally wrap `dispatcher` in an instrumented executor so we
+    //     can assert the resubmit submission was issued from the finally block.
     // ---------------------------------------------------------------------
     @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
     void runHooksFor_lateUpdateAfterDrain_isResubmittedFromFinally() throws Exception {
         final ConcurrentLinkedQueue<Integer> seen = new ConcurrentLinkedQueue<>();
-        final CountDownLatch firstDelivered = new CountDownLatch(1);
 
-        SecretRefreshHook hook = v -> {
-            seen.add(v.getDataVersion());
-            if (v.getDataVersion() == 1) {
-                firstDelivered.countDown();
+        SecretRefreshHook hook = v -> seen.add(v.getDataVersion());
+        poller.register("acme", "late", hook);
+        SecretState state = lookup(poller, "acme:late");
+
+        // Wrap the dispatcher to count submissions issued WHILE the test is
+        // driving runHooksFor on the test thread. Any submission seen here
+        // came from the finally-branch resubmit (handleUpdatedSecret is not
+        // exercised in this test).
+        Field dispatcherField = HookRefreshPoller.class.getDeclaredField("dispatcher");
+        dispatcherField.setAccessible(true);
+        ExecutorService originalDispatcher = (ExecutorService) dispatcherField.get(poller);
+        AtomicInteger resubmitCount = new AtomicInteger(0);
+        ExecutorService countingDispatcher = new java.util.concurrent.AbstractExecutorService() {
+            @Override public void shutdown() { originalDispatcher.shutdown(); }
+            @Override public java.util.List<Runnable> shutdownNow() { return originalDispatcher.shutdownNow(); }
+            @Override public boolean isShutdown() { return originalDispatcher.isShutdown(); }
+            @Override public boolean isTerminated() { return originalDispatcher.isTerminated(); }
+            @Override public boolean awaitTermination(long t, TimeUnit u) throws InterruptedException {
+                return originalDispatcher.awaitTermination(t, u);
+            }
+            @Override public void execute(Runnable command) {
+                resubmitCount.incrementAndGet();
+                originalDispatcher.execute(command);
             }
         };
-        poller.register("acme", "late", hook);
+        dispatcherField.set(poller, countingDispatcher);
 
-        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
-                .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
-                        Collections.singletonList(new UpdatedSecret("acme", "late", 1, "p", "q")))));
-
-        poller.pollOnce();
-        assertTrue(firstDelivered.await(5, TimeUnit.SECONDS));
-
-        // Now drive a tight loop that repeatedly invokes runHooksFor while
-        // staging a late update directly on SecretState.pendingUpdate. Because
-        // runHooksFor's drain loop reads pendingUpdate atomically, in some
-        // iterations the value will be staged AFTER the loop exits but BEFORE
-        // isExecuting flips false; the finally branch must resubmit.
-        SecretState state = lookup(poller, "acme:late");
         java.lang.reflect.Method runHooksFor = HookRefreshPoller.class.getDeclaredMethod(
                 "runHooksFor", String.class, SecretState.class);
         runHooksFor.setAccessible(true);
 
-        for (int v = 2; v <= 25; v++) {
-            final int version = v;
-            // Stage the value, then invoke runHooksFor. Because nothing else
-            // contends for isExecuting here, runHooksFor will drain and deliver.
-            state.pendingUpdate.set(new SecretValue(version, "p", "q"));
-            runHooksFor.invoke(poller, "acme:late", state);
-        }
+        // Drive the race in a tight loop. The "racer" thread waits until
+        // state.isExecuting is observed true (drain in progress) and then
+        // stages a fresh pendingUpdate; with many iterations it eventually
+        // lands AFTER the while loop exits and BEFORE the if-check, hitting
+        // the resubmit branch.
+        final java.util.concurrent.atomic.AtomicBoolean stop =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        AtomicInteger raceVersion = new AtomicInteger(1_000_000);
 
-        // Concurrent staging from a side thread to also exercise the finally
-        // re-submit path probabilistically.
         ExecutorService racer = Executors.newSingleThreadExecutor();
         try {
-            CountDownLatch go = new CountDownLatch(1);
             racer.submit(() -> {
-                try {
-                    go.await();
-                    for (int v = 100; v < 200; v++) {
-                        state.pendingUpdate.set(new SecretValue(v, "p", "q"));
-                        // brief pause so the drain loop has a chance to exit
-                        // before we stage the next value.
-                        Thread.yield();
+                while (!stop.get()) {
+                    if (state.isExecuting.get()) {
+                        // Stage a value while a drain is in progress. Many of
+                        // these are caught by the while loop and consumed
+                        // benignly; some land in the post-drain pre-release
+                        // window we are targeting.
+                        state.pendingUpdate.set(new SecretValue(
+                                raceVersion.incrementAndGet(), "p", "q"));
                     }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                    Thread.yield();
                 }
             });
-            go.countDown();
-            for (int i = 0; i < 50; i++) {
+
+            // Drive many runHooksFor invocations from the test thread.
+            for (int i = 0; i < 5_000 && resubmitCount.get() == 0; i++) {
+                state.pendingUpdate.set(new SecretValue(i, "p", "q"));
                 runHooksFor.invoke(poller, "acme:late", state);
-                Thread.yield();
+                if ((i & 0xff) == 0xff) {
+                    Thread.yield();
+                }
             }
         } finally {
+            stop.set(true);
             racer.shutdownNow();
             racer.awaitTermination(2, TimeUnit.SECONDS);
+            // Drain anything residual so we don't leak state across tests.
+            state.pendingUpdate.set(null);
+            // Restore the original dispatcher before tearDown closes the poller.
+            dispatcherField.set(poller, originalDispatcher);
         }
 
-        // Final invocation drains anything remaining.
-        runHooksFor.invoke(poller, "acme:late", state);
-
-        assertTrue(seen.contains(1), "v=1 from poll must have been delivered: " + seen);
-        assertTrue(seen.size() >= 2,
-                "at least one staged late-update must have been delivered: " + seen);
+        assertTrue(resubmitCount.get() >= 1,
+                "finally-branch resubmit must have fired at least once across the race; "
+                        + "delivered=" + seen.size() + ", resubmits=" + resubmitCount.get());
     }
 
     // ---------------------------------------------------------------------
@@ -694,6 +719,100 @@ class HookRefreshPollerConcurrencyTest {
                 Thread.interrupted();
             }
         } finally {
+            try { localPoller.close(); } catch (Exception ignored) { }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // 13. close() second-await branch: even shutdownNow() does not stop a
+    //     dispatcher task that swallows interrupts. shutdownExecutor must
+    //     await once more and emit the "still has running tasks after
+    //     force-shutdown" warning. Covers the inner
+    //     `if (!awaitTermination(...)) log.warn(...)` line.
+    // ---------------------------------------------------------------------
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    void close_logsWarning_whenForceShutdownAlsoTimesOut() throws Exception {
+        // To exercise the inner await-and-warn branch we need a task that
+        // refuses to honor interruption. We hold the dispatcher thread in a
+        // tight CAS-spin until our test releases it AFTER both await windows
+        // have elapsed. We then verify, via a captured logback ListAppender,
+        // that the warning line was emitted.
+        ch.qos.logback.classic.Logger pollerLogger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(HookRefreshPoller.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        pollerLogger.addAppender(appender);
+
+        HookRefreshPoller localPoller = new HookRefreshPoller(
+                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS);
+
+        final java.util.concurrent.atomic.AtomicBoolean release =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        final CountDownLatch entered = new CountDownLatch(1);
+
+        try {
+            SecretRefreshHook unkillable = v -> {
+                entered.countDown();
+                // Spin loop that ignores interrupts. The interrupt flag will be
+                // set by shutdownNow(); we explicitly clear it and keep
+                // spinning until the test signals release.
+                while (!release.get()) {
+                    if (Thread.interrupted()) {
+                        // Swallow the interrupt -- this is exactly what causes
+                        // the inner awaitTermination to time out.
+                    }
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException ignored) {
+                        // Swallow and keep going.
+                    }
+                }
+            };
+            localPoller.register("acme", "unkillable", unkillable);
+
+            when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
+                    .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
+                            Collections.singletonList(new UpdatedSecret(
+                                    "acme", "unkillable", 1, "p", "q")))));
+
+            localPoller.pollOnce();
+            assertTrue(entered.await(5, TimeUnit.SECONDS),
+                    "unkillable hook must have started before close()");
+
+            // Run close() on a side thread because it will block for ~20s
+            // (two SHUTDOWN_AWAIT_SECONDS=10s windows for the dispatcher).
+            ExecutorService closer = Executors.newSingleThreadExecutor();
+            try {
+                java.util.concurrent.Future<?> f = closer.submit(localPoller::close);
+                // Wait long enough for both await windows to elapse on the
+                // dispatcher executor (10s + 10s + slack). The scheduler shuts
+                // down quickly so its windows do not contribute.
+                try {
+                    f.get(45, TimeUnit.SECONDS);
+                } catch (java.util.concurrent.TimeoutException te) {
+                    // Should not happen; if it does, release the hook to free
+                    // resources before failing.
+                    release.set(true);
+                    throw te;
+                }
+            } finally {
+                release.set(true);
+                closer.shutdownNow();
+                closer.awaitTermination(5, TimeUnit.SECONDS);
+            }
+
+            boolean warnEmitted = appender.list.stream().anyMatch(e ->
+                    e.getLevel() == ch.qos.logback.classic.Level.WARN
+                            && e.getFormattedMessage() != null
+                            && e.getFormattedMessage().contains("still has running tasks after force-shutdown"));
+            assertTrue(warnEmitted,
+                    "expected the 'still has running tasks after force-shutdown' warning; events="
+                            + appender.list);
+        } finally {
+            release.set(true);
+            pollerLogger.detachAppender(appender);
             try { localPoller.close(); } catch (Exception ignored) { }
         }
     }
