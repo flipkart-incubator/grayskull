@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -43,6 +44,14 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final HookRefreshPoller refreshPoller;
+
+    /**
+     * Per-{@code secretRef} record of the latest {@code dataVersion} returned by a successful
+     * {@link #getSecret(String)} call. Used by {@link #registerRefreshHook} to seed the poller's
+     * initial {@code lastKnownVersion} so the first batch poll does not redeliver a version the
+     * application has already received synchronously. Scoped to this client instance.
+     */
+    private final ConcurrentHashMap<String, Integer> lastSeenVersions = new ConcurrentHashMap<>();
 
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -120,7 +129,6 @@ public final class GrayskullClientImpl implements GrayskullClient {
             log.debug("[RequestId:{}] Fetching secret for secretRef: {}", requestId, secretRef);
 
             String url = buildUrl("v1", "projects", projectId, "secrets", secretName, "data");
-            // Fetch the secret with automatic retry logic
             HttpResponse httpResponse = httpClient.doGetWithRetry(url);
             statusCode = httpResponse.getStatusCode();
 
@@ -129,9 +137,12 @@ public final class GrayskullClientImpl implements GrayskullClient {
             if (secretValue == null) {
                 throw new GrayskullException(500, "No data in response");
             }
+            // Record the version we just observed so a future registerRefreshHook uses this ref
+            int dataVersion = secretValue.getDataVersion();
+            lastSeenVersions.merge(secretRef, dataVersion, Math::max);
+            refreshPoller.advanceLastKnownVersionIfPresent(secretRef, dataVersion);
             return secretValue;
         } catch (JsonProcessingException e) {
-            // JSON parsing errors are not retryable - they indicate a permanent problem
             throw new GrayskullException("Failed to parse response: ", e);
         } catch (GrayskullException e) {
             statusCode = e.getStatusCode();
@@ -157,8 +168,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
      * @param secretRef the secret reference to monitor, in {@code projectId:secretName} form
      * @param hook the hook to invoke when a newer version of the secret is observed
      * @return a handle that can be used to unregister the hook when no longer needed
-     * @throws IllegalStateException if the client has already been closed; otherwise the returned
-     *                               handle would never fire (poller is shut down) — fail fast instead.
+     * @throws IllegalStateException if the client has already been closed;
      */
     @Override
     public RefreshHandlerRef registerRefreshHook(String secretRef, SecretRefreshHook hook) {
@@ -172,7 +182,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
             throw new IllegalArgumentException("hook cannot be null");
         }
         String[] parts = parseSecretRef(secretRef);
-        return refreshPoller.register(parts[0], parts[1], hook);
+        // Seed the poller's lastKnownVersion from any prior getSecret for this ref. If the app
+        // has not called getSecret yet, seed is 0
+        int seed = lastSeenVersions.getOrDefault(secretRef, 0);
+        return refreshPoller.register(parts[0], parts[1], hook, seed);
     }
 
     /**

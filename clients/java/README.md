@@ -229,7 +229,7 @@ try (GrayskullClient client = new GrayskullClientImpl(authProvider, config)) {
 
 ### Threading and performance
 
-- **Poller:** a single scheduled thread runs batch polls. The **first** poll fires **`pollingIntervalSeconds` after the client is constructed**; each subsequent run starts **`pollingIntervalSeconds` after the previous poll finished** (`scheduleWithFixedDelay` semantics). Callers that need an immediate materialized value at startup should call `getSecret()` explicitly — this also keeps the `getSecret.*` and `hook.execute.*` metrics meaningfully separate.
+- **Poller:** a single scheduled thread runs batch polls. The **first** poll fires **`pollingIntervalSeconds` after the client is constructed**; each subsequent run starts **`pollingIntervalSeconds` after the previous poll finished** (`scheduleWithFixedDelay` semantics). When no hooks are registered the poll returns immediately as a no-op. Callers that need an immediate materialized value at startup should call `getSecret()` explicitly — this also keeps the `getSecret.*` and `hook.execute.*` metrics meaningfully separate.
 - **Hooks:** callbacks run on a **small shared** worker pool (several threads for all secrets). Keep hook bodies **short**; offload heavy work to your own executor if needed. Slow hooks delay other secrets sharing the same pool.
 - **Hook errors:** uncaught exceptions from a hook are logged and recorded in metrics; other hooks for the same secret still run.
 
@@ -241,7 +241,7 @@ The server accepts at most **50** secrets per batch call. If you register more t
 
 You **do not** need to call `getSecret` before `registerRefreshHook`. For each registered secret the poller starts with **`lastKnownVersion` 0** and sends that in batch requests until a delivery updates it. The server returns a row whenever its version is **greater** than the last known value you sent, so the **first successful poll** after registration may invoke your hooks with the **current** secret (any `dataVersion > 0`)—that is expected and gives you an initial materialized value without a separate `getSecret` call.
 
-Calling `getSecret` is still useful when you want to **read once synchronously** on startup (before or regardless of the background poller), or to prime application state before hooks take over ongoing rotation handling.
+Calling `getSecret` is still useful when you want to **read once synchronously** on startup (before or regardless of the background poller), or to prime application state before hooks take over ongoing rotation handling. As an optimization, every successful `getSecret(secretRef)` call records the observed `dataVersion` on the client; a subsequent `registerRefreshHook(secretRef, ...)` (in either order) seeds the poller's `lastKnownVersion` from this record, so the first poll does **not** redeliver a version your application has already received synchronously.
 
 ## Configuration
 
