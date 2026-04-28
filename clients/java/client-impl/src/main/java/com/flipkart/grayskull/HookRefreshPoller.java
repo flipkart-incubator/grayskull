@@ -68,10 +68,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * up to {@link #SHUTDOWN_AWAIT_SECONDS} for in-flight work to finish.
  *
  * <h2>Failure isolation</h2>
- * The body of {@link #pollOnce()} is wrapped in a top-level {@code try/catch (Throwable)}
- * so a stray runtime exception (or an {@link Error}) cannot escape the runnable and
- * cause {@link ScheduledExecutorService#scheduleWithFixedDelay} to silently cancel
- * future polls.
+ * Nothing thrown inside {@link #pollOnce()} escapes the runnable, so the recurring
+ * schedule cannot be cancelled by a stray exception.
  */
 final class HookRefreshPoller {
     private static final Logger log = LoggerFactory.getLogger(HookRefreshPoller.class);
@@ -130,13 +128,6 @@ final class HookRefreshPoller {
 
     /**
      * One scheduled poll cycle. Runs on the single-threaded {@link #scheduler}.
-     *
-     * <p>The entire body is wrapped in a top-level {@code try/catch (Throwable)} so any
-     * unexpected exception (or {@link Error}) is logged and swallowed instead of
-     * propagating out of the {@link Runnable}. {@link ScheduledExecutorService#scheduleWithFixedDelay}
-     * cancels the recurring task as soon as a {@link Throwable} escapes — without this
-     * guard, a single stray exception would silently kill secret refresh for the
-     * lifetime of the JVM.</p>
      */
     void pollOnce() {
         if (registry.isEmpty()) {
@@ -222,8 +213,7 @@ final class HookRefreshPoller {
      * Coalescing: {@link SecretState#pendingUpdate} holds at most one pending value;
      * if a newer update arrives before the previous one is drained, it overwrites the
      * pending slot. Subscribers therefore see the latest version, never an obsolete
-     * intermediate one. If the registry no longer contains an entry for this secret
-     * (the hook was unregistered between request and response), the update is dropped.
+     * intermediate one.
      * </p>
      */
     private void handleUpdatedSecret(BatchGetSecretsResponse.UpdatedSecret item) {
@@ -240,19 +230,15 @@ final class HookRefreshPoller {
     /**
      * Drains {@link SecretState#pendingUpdate} and invokes every hook, sequentially.
      * <p>
-     * Non-reentrant per-secret: {@link SecretState#isExecuting} acts as a mutex so two
-     * dispatcher threads cannot deliver to the same secret concurrently. If another task
-     * is already draining, this call returns immediately and the staged update will be
-     * picked up by the in-flight runner's loop (or by a fresh runner re-submitted from
-     * the {@code finally} block to cover the post-release race window).
+     * Non-reentrant per-secret via {@link SecretState#isExecuting}: only one runner per
+     * secret at a time. The {@code finally} block re-submits if a new update arrived
+     * during the post-release window, so updates are not lost.
      * </p>
      * <p>
-     * Delivery is <strong>at-most-once</strong>: {@link SecretState#lastKnownVersion} is
-     * advanced <em>before</em> the hook is invoked. If a hook throws, that version is
-     * logged and skipped — the next legitimate version bump from the server will still
-     * be delivered. This avoids duplicate deliveries when hooks run longer than the
-     * polling interval (otherwise the server would keep returning the same un-acknowledged
-     * version on each poll).
+     * <strong>At-most-once delivery:</strong> {@link SecretState#lastKnownVersion} is
+     * advanced <em>before</em> the hook runs. A hook that throws skips that version
+     * (the next bump will still be delivered); this avoids duplicate deliveries when
+     * hook execution outlasts the polling interval.
      * </p>
      */
     private void runHooksFor(String secretRef, SecretState state) {
