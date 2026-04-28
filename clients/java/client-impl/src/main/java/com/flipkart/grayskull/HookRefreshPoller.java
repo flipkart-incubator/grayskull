@@ -289,10 +289,12 @@ final class HookRefreshPoller {
         try {
             SecretValue value;
             while ((value = state.pendingUpdate.getAndSet(null)) != null) {
+                // Final alias for lambda capture (loop variable is not effectively final).
+                final SecretValue pending = value;
                 // Math.max so a concurrent advanceLastKnownVersionIfPresent (from getSecret)
                 // cannot be regressed by us writing a stale, lower version here.
-                state.lastKnownVersion.updateAndGet(curr -> Math.max(curr, value.getDataVersion()));
-                deliverToHooks(secretRef, state, value);
+                state.lastKnownVersion.updateAndGet(curr -> Math.max(curr, pending.getDataVersion()));
+                deliverToHooks(secretRef, state, pending);
             }
         } finally {
             state.isExecuting.set(false);
