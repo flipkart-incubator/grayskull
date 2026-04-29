@@ -101,8 +101,8 @@ class HookRefreshPollerTest {
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
                 "http://localhost:9999", 60);
 
-        // Register a hook then immediately remove it
-        poller.register("proj", "sec", value -> {}, 0).remove();
+        // Register a hook then immediately unregister it
+        poller.register("proj", "sec", value -> {}, 0).unRegister();
 
         poller.pollOnce();
 
