@@ -11,6 +11,7 @@ Java client library for interacting with the Grayskull secret management service
 - [Quick Start](#quick-start)
 - [Public APIs](#public-apis)
   - [GrayskullClient](#grayskullclient)
+- [Refresh hooks](#refresh-hooks)
 - [Configuration](#configuration)
   - [Client identity headers](#client-identity-headers)
 - [Authentication](#authentication)
@@ -24,6 +25,7 @@ Java client library for interacting with the Grayskull secret management service
 ## Features
 
 ✅ **Simple API** - Clean, intuitive interface for retrieving secrets  
+✅ **Refresh hooks** - Background batch polling and callbacks when secret versions change  
 ✅ **Automatic Retries** - Exponential backoff with jitter for transient failures  
 ✅ **Flexible Metrics** - Micrometer or JMX, automatically detected  
 ✅ **Thread-Safe** - Concurrent request handling with connection pooling  
@@ -70,35 +72,44 @@ dependencies {
 import com.flipkart.grayskull.GrayskullClient;
 import com.flipkart.grayskull.GrayskullClientImpl;
 import com.flipkart.grayskull.auth.BasicAuthHeaderProvider;
+import com.flipkart.grayskull.hooks.RefreshHandlerRef;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.SecretValue;
 
 public class Example {
-    public static void main(String[] args) {
+
+    /**
+     * Called by the SDK when the secret’s data version advances on the server.
+     * Use a named method (or {@code this::yourMethod}) when the refresh logic does not fit in a small lambda.
+     */
+    private static void updateHikariCreds(SecretValue updated) throws Exception {
+        // Example: map public part to username, private part to password — keep work fast or hand off async.
+        // hikariConfig.setUsername(updated.getPublicPart());
+        // hikariConfig.setPassword(updated.getPrivatePart());
+        System.out.println("Rotated DB creds, version " + updated.getDataVersion());
+    }
+
+    public static void main(String[] args) throws Exception {
         // 1. Configure the client
         GrayskullClientConfiguration config = new GrayskullClientConfiguration();
         config.setHost("https://grayskull.example.com");
-        
+
         // 2. Create authentication provider
-        BasicAuthHeaderProvider authProvider = 
-            new BasicAuthHeaderProvider("username", "password");
-        
+        BasicAuthHeaderProvider authProvider =
+                new BasicAuthHeaderProvider("username", "password");
+
         // 3. Initialize and use the client
         GrayskullClient grayskullClient = new GrayskullClientImpl(authProvider, config);
         SecretValue secret = grayskullClient.getSecret("my-project:secret-1");
         System.out.println(secret.getPublicPart());
 
-
-        HikariConfig hikariConfig;
-        HikariDataSource dataSource = new HikariDataSource(hikariConfig);
-        RefreshHandlerRef handle = grayskullClient.registerRefreshHook("my-project:secret-1", (secret) -> {
-            System.out.println(secret.getPublicPart());
-            hikariConfig.setUsername(secret.getPublicPart());
-            hikariConfig.setPassword(secret.getPrivatePart());
-        });
+        // 4. Optional: refresh hook — pass a method reference or a lambda (see [Refresh hooks](#refresh-hooks))
+        RefreshHandlerRef handle = grayskullClient.registerRefreshHook(
+                "my-project:secret-1",
+                Example::updateHikariCreds);
 
         handle.unRegister();
-
+        grayskullClient.close();
     }
 }
 ```
@@ -143,26 +154,22 @@ int version = secret.getDataVersion();       // e.g., 5
 
 #### `registerRefreshHook(String secretRef, SecretRefreshHook hook)`
 
-Registers a callback to be invoked when a secret is updated.
+Registers a callback that runs when the monitored secret’s **data version** advances on the server. Behaviour, threading, and limits are described in **[Refresh hooks](#refresh-hooks)**.
 
 **Parameters:**
-- `secretRef` - Secret reference to monitor
-- `hook` - Callback function to execute on updates
+- `secretRef` - Secret reference to monitor (`"projectId:secretName"`, same format as `getSecret`)
+- `hook` - `SecretRefreshHook` invoked with the new `SecretValue` (may throw; failures are logged and metered)
 
 **Returns:**
-- `RefreshHandlerRef` - Handle for managing the hook lifecycle
+- `RefreshHandlerRef` - Live handle (`getSecretRef()`, `isActive()`, idempotent `unRegister()`)
 
-**Note:** ⚠️ This is a placeholder implementation. Hooks can be registered but won't be invoked until server-sent events support is added in a future release. Including this code now ensures forward compatibility.
-
-**Example:**
+**Example (lambda or method reference):**
 ```java
 RefreshHandlerRef handle = client.registerRefreshHook(
     "my-project:api-key",
-    (updatedSecret) -> {
-        System.out.println("Secret updated! New version: " + updatedSecret.getDataVersion());
-        updateCache(updatedSecret);
-    }
-);
+    MyService::onApiKeyRotated);
+
+// or: (updated) -> updateCache(updated)
 
 // Later: unregister the hook
 handle.unRegister();
@@ -182,6 +189,62 @@ try (GrayskullClient client = new GrayskullClientImpl(auth, config)) {
 } // Automatically closed
 ```
 
+## Refresh hooks
+
+The implementation polls the server’s **`POST /v1/secrets/batch`** endpoint on a fixed schedule, sends each registered secret together with the client’s **last known data version**, and invokes your hooks only when the server reports a newer version. Updates are **coalesced** (if several rotations happen between polls, you typically receive the latest value once per delivery cycle).
+
+### How to use
+
+1. Create `GrayskullClientImpl` (or any `GrayskullClient`) and keep it open while you care about updates.
+2. Call `registerRefreshHook(secretRef, hook)` for each secret you want to watch. The same `secretRef` string can have **multiple** hooks; each registration returns its own `RefreshHandlerRef`.
+3. Call `unRegister()` on the handle when you no longer need that callback (safe to call twice).
+4. Call `close()` on the client when shutting down; this stops the poller and the hook **dispatcher** thread pool.
+
+**Passing the hook:** `SecretRefreshHook` is a `@FunctionalInterface` — you can pass a **lambda** (`(v) -> { ... }`), a **method reference** (`Example::updateHikariCreds` or `this::onSecretRotated` inside an instance), or any object that implements `void onUpdate(SecretValue secret) throws Exception`.
+
+**Multiple hooks on the same `secretRef`:** callbacks run in **registration order** (first registered runs first, then the next, for each delivered update).
+
+```java
+import com.flipkart.grayskull.GrayskullClient;
+import com.flipkart.grayskull.GrayskullClientImpl;
+import com.flipkart.grayskull.hooks.RefreshHandlerRef;
+import com.flipkart.grayskull.models.GrayskullClientConfiguration;
+import com.flipkart.grayskull.models.SecretValue;
+
+GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+config.setHost("https://grayskull.example.com");
+// Optional: how often to poll when hooks are registered (seconds, must be > 0)
+config.setPollingIntervalSeconds(60);
+
+try (GrayskullClient client = new GrayskullClientImpl(authProvider, config)) {
+    RefreshHandlerRef ref = client.registerRefreshHook(
+            "my-project:database-password",
+            (SecretValue latest) -> { /* or: YourClass::onDatabasePassword */ });
+
+    // ... application runs ...
+
+    ref.unRegister();
+}
+```
+
+### Threading and performance
+
+- **Poller:** a single scheduled thread runs batch polls. The **first** poll fires **`pollingIntervalSeconds` after the client is constructed**; each subsequent run starts **`pollingIntervalSeconds` after the previous poll finished** (`scheduleWithFixedDelay` semantics). When no hooks are registered the poll returns immediately as a no-op. Callers that need an immediate materialized value at startup should call `getSecret()` explicitly — this also keeps the `getSecret.*` and `hook.execute.*` metrics meaningfully separate.
+- **Hooks:** callbacks run on a **small shared** worker pool (several threads for all secrets). Keep hook bodies **short**; offload heavy work to your own executor if needed. Slow hooks delay other secrets sharing the same pool.
+- **Hook errors:** uncaught exceptions from a hook are logged and recorded in metrics; other hooks for the same secret still run.
+
+### Batch size (50 secrets per request)
+
+The server accepts at most **50** secrets per batch call. If you register more than 50 distinct `secretRef` values, the client **automatically splits** them into multiple batch requests within the same poll cycle.
+
+### Version tracking and `getSecret`
+
+You **do not** need to call `getSecret` before `registerRefreshHook`. For each registered secret the poller starts with **`lastKnownVersion` 0** and sends that in batch requests until a delivery updates it. The server returns a row whenever its version is **greater** than the last known value you sent, so the **first successful poll** after registration may invoke your hooks with the **current** secret (any `dataVersion > 0`)—that is expected and gives you an initial materialized value without a separate `getSecret` call.
+
+You **do not** need to call `getSecret` before `registerRefreshHook`. The poller starts with `lastKnownVersion = 0` for each registered secret and sends that in batch requests until a delivery updates it. The server returns a row whenever its version is **greater** than the last known value you sent, so the **first successful poll** after registration will invoke your hook with the current secret — giving you an initial materialized value without a separate `getSecret` call.
+
+Calling `getSecret` is still useful when you need to read the secret value **synchronously** at startup before the first poll fires.
+
 ## Configuration
 
 ### GrayskullClientConfiguration
@@ -197,6 +260,16 @@ All configuration properties with their defaults and constraints.
 | `maxRetries` | `int` | `3` | 1-10 | Number of retry attempts for transient failures |
 | `minRetryDelay` | `int` | `100` | ≥ 50 ms | Base delay between retries (exponential backoff) |
 | `metricsEnabled` | `boolean` | `true` | true/false | Enable/disable metrics collection |
+| `pollingIntervalSeconds` | `int` | `60` | > 0 (set via `setPollingIntervalSeconds`) | Seconds **between** completed batch polls (also used as the initial delay before the first poll; see [Refresh hooks](#refresh-hooks)) |
+
+### Client identity headers
+
+At construction, `GrayskullClientImpl` pins two headers on every outbound request:
+
+- **`Grayskull-Workload`** — canonical workload identity (default: local hostname from `DefaultWorkloadIdentityResolver`). Override with `GrayskullClientConfiguration#setWorkloadIdentityResolver` before creating the client. This is the authoritative source of caller identity for all server-side consumers.
+- **`User-Agent`** — `grayskull-java/<version>`, where `<version>` comes from the Maven-filtered `grayskull-client.properties` on the classpath (falls back to `unknown` if missing or unfiltered). Intended for SDK telemetry only; its format is not a stable contract and must not be parsed for caller identity — use `Grayskull-Workload` instead.
+
+If you call `addDefaultHeader` for the same names before constructing the client, the SDK values above replace yours (single value per name on the wire). `Authorization` and `X-Request-Id` are also applied after configured default headers so the SDK always supplies the active auth token and per-call request id from MDC.
 
 ### Client identity headers
 
@@ -235,6 +308,16 @@ Implement `GrayskullAuthHeaderProvider` for custom auth schemes (JWT, API keys, 
 The SDK provides comprehensive observability with automatic metric library detection:
 - **Micrometer** (if on classpath) - Advanced metrics with percentiles
 - **JMX** (fallback) - Basic metrics, zero dependencies
+
+### Emitted method names
+
+The `{method}` token in the metric formats below takes one of:
+
+- **`getSecret.{secretRef}`** — one sample per `getSecret` call (latency and HTTP status).
+- **`batchGetSecrets`** — one sample per background poll cycle (latency and overall status). Not labelled by `secretRef` because a single cycle covers many secrets.
+- **`hook.execute.{secretRef}`** — one sample per refresh-hook invocation (latency and `200` for success / `500` for failure).
+
+> **Cardinality note:** `secretRef` is embedded in the metric name for `getSecret.*` and `hook.execute.*`. Backends like Prometheus do not handle unbounded label cardinality well, so keep the number of distinct registered `secretRef` values bounded (typically tens to low hundreds per process).
 
 ### Micrometer Metrics
 
@@ -397,6 +480,7 @@ The client automatically retries transient failures using exponential backoff wi
 |----------|----------------|
 | `client-api` | 0.2.0 | 
 | `client-impl` | 0.2.0 | 
+
 
 ### Dependency Requirements
 
