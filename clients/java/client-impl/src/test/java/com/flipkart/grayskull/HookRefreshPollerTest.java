@@ -102,8 +102,7 @@ class HookRefreshPollerTest {
                 "http://localhost:9999", 60);
 
         // Register a hook then immediately remove it
-        var ref = poller.register("proj", "sec", value -> {}, 0);
-        ref.remove();
+        poller.register("proj", "sec", value -> {}, 0).remove();
 
         poller.pollOnce();
 
