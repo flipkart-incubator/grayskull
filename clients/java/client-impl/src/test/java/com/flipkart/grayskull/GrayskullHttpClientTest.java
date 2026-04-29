@@ -623,6 +623,101 @@ class GrayskullHttpClientTest {
         assertNull(request.getHeader("X-Request-Id"));
     }
 
+    // -----------------------------------------------------------------------
+    // Tests for null-safe bodyLength computation in doGet() and doPost()
+    // -----------------------------------------------------------------------
+
+    /**
+     * Covers: {@code int bodyLength = body != null ? body.length() : 0;}  (doGet)
+     * <p>
+     * When the server returns a 200 with a non-empty body the non-null branch is
+     * taken and bodyLength equals the actual character count.  The important thing
+     * here is that neither the ternary nor the surrounding log statement throws.
+     */
+    @Test
+    void testDoGet_nonEmptyResponseBody_bodyLengthComputedWithoutNPE() {
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        String jsonBody = "{\"value\":\"hello\"}";
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(jsonBody)
+                .addHeader("Content-Type", "application/json"));
+
+        HttpResponse result = httpClient.doGetWithRetry(mockWebServer.url("/test").toString());
+
+        assertNotNull(result);
+        assertEquals(200, result.getStatusCode());
+        assertEquals(jsonBody, result.getBody());
+        // bodyLength = jsonBody.length() > 0  →  no NPE, correct result returned
+    }
+
+    /**
+     * Covers: {@code int bodyLength = body != null ? body.length() : 0;}  (doGet)
+     * <p>
+     * When the server sends a 200 with an empty body, {@code body} is {@code ""}
+     * (not {@code null}), so {@code body.length()} returns 0.  Verifies the
+     * logging line executes without NPE for the zero-length case.
+     */
+    @Test
+    void testDoGet_emptyResponseBody_bodyLengthIsZeroNoNPE() {
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(""));
+
+        HttpResponse result = httpClient.doGetWithRetry(mockWebServer.url("/empty").toString());
+
+        assertNotNull(result);
+        assertEquals(200, result.getStatusCode());
+        // body == "" → bodyLength = 0, no NPE
+        assertEquals("", result.getBody());
+    }
+
+    /**
+     * Covers: {@code int bodyLength = responseBody != null ? responseBody.length() : 0;}  (doPost)
+     * <p>
+     * When the server returns a non-empty body for a POST the non-null branch is
+     * taken and bodyLength equals the actual character count.
+     */
+    @Test
+    void testDoPost_nonEmptyResponseBody_bodyLengthComputedWithoutNPE() {
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        String jsonResponse = "{\"status\":\"ok\"}";
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(jsonResponse)
+                .addHeader("Content-Type", "application/json"));
+
+        HttpResponse result = httpClient.doPostWithRetry(
+                mockWebServer.url("/batch").toString(), "{\"secrets\":[]}");
+
+        assertNotNull(result);
+        assertEquals(200, result.getStatusCode());
+        assertEquals(jsonResponse, result.getBody());
+    }
+
+    /**
+     * Covers: {@code int bodyLength = responseBody != null ? responseBody.length() : 0;}  (doPost)
+     * <p>
+     * When the server sends a 200 with an empty body, {@code responseBody} is
+     * {@code ""} so {@code responseBody.length()} returns 0.  Verifies no NPE
+     * for the zero-length case in the POST response logging path.
+     */
+    @Test
+    void testDoPost_emptyResponseBody_bodyLengthIsZeroNoNPE() {
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(""));
+
+        HttpResponse result = httpClient.doPostWithRetry(
+                mockWebServer.url("/empty").toString(), "{\"secrets\":[]}");
+
+        assertNotNull(result);
+        assertEquals(200, result.getStatusCode());
+        assertEquals("", result.getBody());
+    }
+
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
