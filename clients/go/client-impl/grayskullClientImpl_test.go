@@ -38,6 +38,11 @@ func (m *MockGrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockGrayskullHTTPClient) DoPostWithRetry(ctx context.Context, url string, body []byte, result any) (int, error) {
+	args := m.Called(ctx, url, body, result)
+	return args.Int(0), args.Error(1)
+}
+
 func (m *MockGrayskullHTTPClient) Close() error {
 	args := m.Called()
 	return args.Error(0)

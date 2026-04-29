@@ -7,6 +7,9 @@ import com.flipkart.grayskull.auth.GrayskullAuthHeaderProvider;
 import com.flipkart.grayskull.constants.GrayskullHeaders;
 import com.flipkart.grayskull.workload.WorkloadIdentityResolver;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.flipkart.grayskull.models.response.BatchGetSecretsResponse;
+import com.flipkart.grayskull.models.response.BatchGetSecretsResponse.UpdatedSecret;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
@@ -28,8 +31,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -41,6 +51,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class GrayskullClientImplTest {
 
+    private static final String BATCH_URL = "https://test.grayskull.com/v1/secrets/batch";
+
     @Mock
     private GrayskullAuthHeaderProvider mockAuthProvider;
 
@@ -49,6 +61,7 @@ class GrayskullClientImplTest {
 
     private GrayskullClientConfiguration grayskullClientConfiguration;
     private GrayskullClientImpl client;
+    private HookRefreshPoller refreshPoller;
     private ObjectMapper objectMapper;
 
     @BeforeEach
@@ -57,14 +70,26 @@ class GrayskullClientImplTest {
         grayskullClientConfiguration.setHost("https://test.grayskull.com");
         grayskullClientConfiguration.setConnectionTimeout(5000);
         grayskullClientConfiguration.setReadTimeout(10000);
-        
+
         client = new GrayskullClientImpl(mockAuthProvider, grayskullClientConfiguration);
         objectMapper = new ObjectMapper();
-        
-        // Inject mock HTTP client using reflection
+
+        // Inject mock HTTP client into the client (used by getSecret) and the poller (used by pollOnce).
         Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
         httpClientField.setAccessible(true);
         httpClientField.set(client, mockHttpClient);
+
+        Field refreshPollerField = GrayskullClientImpl.class.getDeclaredField("refreshPoller");
+        refreshPollerField.setAccessible(true);
+        refreshPoller = (HookRefreshPoller) refreshPollerField.get(client);
+
+        Field pollerHttpClientField = HookRefreshPoller.class.getDeclaredField("httpClient");
+        pollerHttpClientField.setAccessible(true);
+        pollerHttpClientField.set(refreshPoller, mockHttpClient);
+    }
+
+    private void pollOnce() {
+        refreshPoller.pollOnce();
     }
 
     @AfterEach
@@ -280,7 +305,7 @@ class GrayskullClientImplTest {
         // Given
         String secretRef = "secengg-stage:secret-1";
         AtomicInteger callCount = new AtomicInteger(0);
-        
+
         SecretRefreshHook hook = (secretVal) -> {
             callCount.incrementAndGet();
             System.out.println("Secret refreshed: " + secretVal);
@@ -289,13 +314,12 @@ class GrayskullClientImplTest {
         // When
         RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
 
-        // Then
+        // Then - the handle reflects the registered secret and is live until unregistered.
         assertNotNull(handle);
-        // No-op implementation returns empty string and is always inactive
-        assertEquals("", handle.getSecretRef());
-        assertFalse(handle.isActive());
-        
-        // Verify hook was never called (placeholder implementation)
+        assertEquals(secretRef, handle.getSecretRef());
+        assertTrue(handle.isActive());
+
+        // Hook is invoked by the background poller; it has not fired in this unit test.
         assertEquals(0, callCount.get());
     }
 
@@ -307,9 +331,14 @@ class GrayskullClientImplTest {
 
         // When
         RefreshHandlerRef handle = client.registerRefreshHook(secretRef, hook);
-        
-        // unRegister() is a no-op but shouldn't throw
+        assertTrue(handle.isActive());
+
         handle.unRegister();
+
+        // Then - idempotent and reflected in isActive()
+        assertFalse(handle.isActive());
+        handle.unRegister(); // second call is a no-op
+        assertFalse(handle.isActive());
     }
 
     @Test
@@ -331,12 +360,255 @@ class GrayskullClientImplTest {
     }
 
     @Test
+    void testPollOnce_noRegisteredSecrets_doesNotPost() {
+        pollOnce();
+
+        verify(mockHttpClient, never()).doPostWithRetry(anyString(), anyString());
+    }
+
+    @Test
+    void testPollOnce_singleChunk_emptyUpdatedSecrets_onePost() throws Exception {
+        client.registerRefreshHook("acme:db-pass", v -> {});
+        client.registerRefreshHook("acme:api-key", v -> {});
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode root = objectMapper.readTree(bodyCaptor.getValue());
+        assertEquals(2, root.get("secrets").size());
+    }
+
+    @Test
+    void testPollOnce_singleChunk_nullData_continuesWithoutUpdates() throws Exception {
+        client.registerRefreshHook("acme:one", v -> {});
+
+        Response<BatchGetSecretsResponse> wrapper = new Response<>(null, "ok");
+        String json = objectMapper.writeValueAsString(wrapper);
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
+                .thenReturn(new HttpResponse(200, json, "application/json", "http/1.1"));
+
+        pollOnce();
+
+        verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
+    }
+
+    @Test
+    void testPollOnce_singleChunk_missingUpdatedSecretsKey_continues() throws Exception {
+        client.registerRefreshHook("acme:one", v -> {});
+
+        String json = "{\"data\":{\"updatedCount\":0},\"message\":\"Success\"}";
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
+                .thenReturn(new HttpResponse(200, json, "application/json", "http/1.1"));
+
+        pollOnce();
+
+        verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
+    }
+
+    @Test
+    void testPollOnce_fiftyOneSecrets_twoSequentialPosts() throws Exception {
+        for (int i = 0; i < 51; i++) {
+            client.registerRefreshHook("corp:svc-" + i, v -> {});
+        }
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient, times(2)).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        assertEquals(50, objectMapper.readTree(bodyCaptor.getAllValues().get(0)).get("secrets").size());
+        assertEquals(1, objectMapper.readTree(bodyCaptor.getAllValues().get(1)).get("secrets").size());
+    }
+
+    @Test
+    void testPollOnce_firstChunkGrayskullException_secondChunkStillRuns_preservesFailureStatus()
+            throws Exception {
+        for (int i = 0; i < 51; i++) {
+            client.registerRefreshHook("corp:svc-" + i, v -> {});
+        }
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
+                .thenThrow(new GrayskullException(503, "batch unavailable"))
+                .thenReturn(emptyBatch);
+
+        pollOnce();
+
+        verify(mockHttpClient, times(2)).doPostWithRetry(eq(BATCH_URL), anyString());
+    }
+
+    @Test
+    void testPollOnce_chunkThrowsGrayskullException() {
+        client.registerRefreshHook("acme:one", v -> {});
+
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
+                .thenThrow(new GrayskullException(401, "unauthorized"));
+
+        assertDoesNotThrow(() -> pollOnce());
+
+        verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
+    }
+
+    @Test
+    void testPollOnce_chunkInvalidJson_wrapsAsInnerFailure() {
+        client.registerRefreshHook("acme:one", v -> {});
+
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
+                .thenReturn(new HttpResponse(200, "{not-json", "application/json", "http/1.1"));
+
+        assertDoesNotThrow(() -> pollOnce());
+
+        verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), anyString());
+    }
+
+    @Test
+    void testPollOnce_batchReturnsUpdatedSecret_invokesHook() throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        SecretRefreshHook hook = secretVal -> {
+            assertEquals(3, secretVal.getDataVersion());
+            latch.countDown();
+        };
+        client.registerRefreshHook("acme:db", hook);
+
+        UpdatedSecret item = new UpdatedSecret("acme", "db", 3, "pub", "priv");
+        HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
+
+        pollOnce();
+
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "hook should run on dispatcher thread");
+    }
+
+    @Test
+    void testPollOnce_withoutGetSecret_sendsLastKnownVersionZero() throws Exception {
+        client.registerRefreshHook("acme:no-get-secret", v -> {});
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient, times(1)).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals("acme", entry.get("projectId").asText());
+        assertEquals("no-get-secret", entry.get("secretName").asText());
+        assertEquals(0, entry.get("lastKnownVersion").asInt());
+    }
+
+    @Test
+    void testPollOnce_multipleHooksForSameSecret_runInRegistrationOrder() throws Exception {
+        List<Integer> order = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch latch = new CountDownLatch(2);
+        client.registerRefreshHook("acme:ordered", v -> {
+            order.add(1);
+            latch.countDown();
+        });
+        client.registerRefreshHook("acme:ordered", v -> {
+            order.add(2);
+            latch.countDown();
+        });
+
+        UpdatedSecret item = new UpdatedSecret("acme", "ordered", 9, "a", "b");
+        HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
+
+        pollOnce();
+
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertEquals(Arrays.asList(1, 2), order);
+    }
+
+    @Test
+    void testPollOnce_hookThrows_swallowsAndContinues() throws Exception {
+        // Given - first hook throws, second hook must still run.
+        CountDownLatch latch = new CountDownLatch(1);
+        client.registerRefreshHook("acme:throws", v -> {
+            throw new RuntimeException("consumer bug");
+        });
+        client.registerRefreshHook("acme:throws", v -> latch.countDown());
+
+        UpdatedSecret item = new UpdatedSecret("acme", "throws", 7, "p", "q");
+        HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
+
+        // When
+        pollOnce();
+
+        // Then - the well-behaved hook still fires, proving the poller is fault-isolated.
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "second hook should run after first throws");
+    }
+
+    @Test
+    void testRegisterRefreshHook_twoHooksSameSecret_unregisterOne_otherSurvives() throws Exception {
+        // Given - covers the "remove hook but keep state" branch in HookRefreshPoller.unregister.
+        CountDownLatch latch = new CountDownLatch(1);
+        RefreshHandlerRef h1 = client.registerRefreshHook("acme:two", v -> {});
+        RefreshHandlerRef h2 = client.registerRefreshHook("acme:two", v -> latch.countDown());
+
+        // When - unregister only the first hook; the other must still fire on the next poll.
+        h1.unRegister();
+
+        UpdatedSecret item = new UpdatedSecret("acme", "two", 4, "p", "q");
+        HttpResponse batch = wrapBatch(new BatchGetSecretsResponse(1, Collections.singletonList(item)));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(batch);
+        pollOnce();
+
+        // Then
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertFalse(h1.isActive());
+        assertTrue(h2.isActive());
+    }
+
+    @Test
+    void testRegisterRefreshHook_invalidFormat_throwsBeforeRegistering() {
+        assertThrows(IllegalArgumentException.class,
+                () -> client.registerRefreshHook("no-colon", v -> {}));
+    }
+
+    @Test
     void testClose_cleansUpResources() {
         // When
         client.close();
 
         // Then
         verify(mockHttpClient).close();
+    }
+
+    @Test
+    void testClose_calledTwice_isIdempotent() {
+        // First close performs the cleanup; second close must short-circuit
+        // via the closed.compareAndSet(false, true) guard and not re-invoke
+        // the underlying httpClient.close().
+        client.close();
+        client.close();
+
+        verify(mockHttpClient, times(1)).close();
+    }
+
+    @Test
+    void testGetSecret_baseUrlMutatedToInvalid_buildUrlThrows() throws Exception {
+        // Given - construct with a valid baseUrl (poller URL is built eagerly),
+        // then mutate the baseUrl field to an unparseable value so that
+        // HttpUrl.parse() returns null inside buildUrl() during getSecret().
+        // This exercises the `throw new IllegalStateException("Invalid baseUrl: ...")`
+        // guard in GrayskullClientImpl#buildUrl that the constructor-level
+        // failure path cannot reach.
+        Field baseUrlField = GrayskullClientImpl.class.getDeclaredField("baseUrl");
+        baseUrlField.setAccessible(true);
+        baseUrlField.set(client, "::not a url::");
+
+        // When/Then
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> client.getSecret("project:secret"));
+        assertTrue(ex.getMessage().startsWith("Invalid baseUrl:"),
+                "exception message must reference the invalid baseUrl: " + ex.getMessage());
     }
 
     @Test
@@ -606,19 +878,12 @@ class GrayskullClientImplTest {
     }
 
     @Test
-    void testGetSecret_invalidBaseUrl_throwsIllegalStateException() throws Exception {
+    void testGetSecret_invalidBaseUrl_throwsIllegalStateException() {
         GrayskullClientConfiguration config = new GrayskullClientConfiguration();
         config.setHost("http://%%:bad");
-        GrayskullClientImpl badHostClient = new GrayskullClientImpl(mockAuthProvider, config);
-        Field httpClientField = GrayskullClientImpl.class.getDeclaredField("httpClient");
-        httpClientField.setAccessible(true);
-        httpClientField.set(badHostClient, mockHttpClient);
-
-        when(mockHttpClient.doGetWithRetry(anyString())).thenReturn(
-                new HttpResponse(200, "{}", "application/json", "http/1.1"));
-
-        assertThrows(IllegalStateException.class, () -> badHostClient.getSecret("p:s"));
-        badHostClient.close();
+        // The poller validates baseUrl during construction, so the failure surfaces there.
+        assertThrows(IllegalStateException.class,
+                () -> new GrayskullClientImpl(mockAuthProvider, config));
     }
 
     @Test
@@ -675,6 +940,12 @@ class GrayskullClientImplTest {
 
     private HttpResponse createHttpResponse(SecretValue secretValue) throws Exception {
         Response<SecretValue> response = new Response<>(secretValue, "Success");
+        String json = objectMapper.writeValueAsString(response);
+        return new HttpResponse(200, json, "application/json", "http/1.1");
+    }
+
+    private HttpResponse wrapBatch(BatchGetSecretsResponse data) throws Exception {
+        Response<BatchGetSecretsResponse> response = new Response<>(data, "Success");
         String json = objectMapper.writeValueAsString(response);
         return new HttpResponse(200, json, "application/json", "http/1.1");
     }

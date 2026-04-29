@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	apiconstants "github.com/flipkart-incubator/grayskull/clients/go/client-api/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/utils"
@@ -19,23 +21,43 @@ import (
 	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 )
 
-// GrayskullHTTPClientInterface defines the interface for the HTTP client
+// GrayskullHTTPClientInterface defines the interface for the HTTP client used
+// by the Grayskull SDK. It is intentionally minimal: a GET that JSON-decodes
+// the response in place, a POST that does the same with a JSON-encoded body,
+// and a Close that releases pooled connections.
 type GrayskullHTTPClientInterface interface {
+	// DoGetWithRetry executes an HTTP GET against url and JSON-decodes the
+	// response body into result. It returns the final HTTP status code and
+	// any error encountered.
 	DoGetWithRetry(ctx context.Context, url string, result any) (int, error)
+
+	// DoPostWithRetry executes an HTTP POST against url with body as the
+	// JSON-encoded request payload, and JSON-decodes the response body into
+	// result. body may be nil for an empty request body. It returns the final
+	// HTTP status code and any error encountered.
+	DoPostWithRetry(ctx context.Context, url string, body []byte, result any) (int, error)
+
+	// Close releases connection-pool resources owned by the client.
 	Close() error
 }
 
 // GrayskullHTTPClient is a client for making HTTP requests to the Grayskull service
-// with built-in retry and error handling.
+// with built-in retry, default-header injection, and error handling.
+//
+// All exported methods are safe for concurrent use.
 type GrayskullHTTPClient struct {
 	httpClient         *http.Client
 	authHeaderProvider auth.GrayskullAuthHeaderProvider
+	clientConfig       *models.GrayskullClientConfiguration
 	retryConfig        utils.RetryConfig
 	logger             *slog.Logger
 	metricsRecorder    metrics.MetricsRecorder
 }
 
-// NewGrayskullHTTPClient creates a new instance of GrayskullHTTPClient
+// NewGrayskullHTTPClient creates a new instance of GrayskullHTTPClient.
+//
+// The returned client respects the connection / read timeouts and connection-pool
+// knobs in config and applies retry behavior bounded by config.MaxRetries.
 func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, config *models.GrayskullClientConfiguration, logger *slog.Logger, metricsRecorder metrics.MetricsRecorder) GrayskullHTTPClientInterface {
 	if logger == nil {
 		logger = slog.Default().WithGroup("grayskull-http-client")
@@ -43,7 +65,6 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
-			// Connection timeout - how long to wait for the initial connection
 			Timeout:   time.Duration(config.ConnectionTimeout) * time.Millisecond,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
@@ -53,8 +74,9 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 	}
 
 	client := &http.Client{
-		// Total request timeout = ConnectionTimeout + ReadTimeout
-		// This ensures we don't wait forever for a response after connection is established
+		// Total request timeout = ConnectionTimeout + ReadTimeout. This
+		// matches the Java SDK's separate connect / read budgets without
+		// surprising the user with an unbounded read once connected.
 		Timeout:   time.Duration(config.ConnectionTimeout+config.ReadTimeout) * time.Millisecond,
 		Transport: transport,
 	}
@@ -62,7 +84,7 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 	retryConfig := utils.RetryConfig{
 		MaxAttempts:   config.MaxRetries,
 		InitialDelay:  time.Duration(config.MinRetryDelay) * time.Millisecond,
-		MaxRetryDelay: 1 * time.Minute, // Default max retry delay
+		MaxRetryDelay: 1 * time.Minute,
 	}
 
 	if metricsRecorder == nil {
@@ -72,29 +94,50 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 	return &GrayskullHTTPClient{
 		httpClient:         client,
 		authHeaderProvider: authProvider,
+		clientConfig:       config,
 		retryConfig:        retryConfig,
 		logger:             logger,
 		metricsRecorder:    metricsRecorder,
 	}
 }
 
-// httpResponse is an internal struct to hold response data during retry
+// httpResponse is an internal struct to hold response data during retry.
 type httpResponse struct {
 	Body       string
 	StatusCode int
 }
 
-// DoGetWithRetry performs a GET request with retry logic and unmarshals the response into the provided type
-// The result parameter should be a pointer to the target type for unmarshalling
-// Returns the HTTP status code and any error encountered
+// DoGetWithRetry performs a GET request with retry logic and unmarshals the
+// response into the provided result pointer. result may be nil to discard the
+// response body. Returns the HTTP status code and any error encountered.
 func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string, result any) (int, error) {
+	return c.executeWithRetry(ctx, url, result, func(ctx context.Context) (string, int, error) {
+		return c.doRequest(ctx, http.MethodGet, url, nil)
+	})
+}
+
+// DoPostWithRetry performs a POST request with retry logic, sending body as the
+// JSON request payload, and unmarshals the response into the provided result
+// pointer. body may be nil; result may be nil to discard the response body.
+// Returns the HTTP status code and any error encountered.
+func (c *GrayskullHTTPClient) DoPostWithRetry(ctx context.Context, url string, body []byte, result any) (int, error) {
+	return c.executeWithRetry(ctx, url, result, func(ctx context.Context) (string, int, error) {
+		return c.doRequest(ctx, http.MethodPost, url, body)
+	})
+}
+
+// executeWithRetry centralizes the retry envelope used by both GET and POST.
+// It records retry metrics on retried attempts (success or failure) and
+// JSON-decodes a non-empty response body when a non-nil result pointer is
+// provided.
+func (c *GrayskullHTTPClient) executeWithRetry(ctx context.Context, url string, result any, attempt func(ctx context.Context) (string, int, error)) (int, error) {
 	var attemptCount int
 
 	httpResp, err := utils.Retry(ctx, c.retryConfig, func() (httpResponse, error) {
 		attemptCount++
-		body, status, err := c.doGet(ctx, url)
-		if err != nil {
-			return httpResponse{StatusCode: status}, err
+		body, status, attemptErr := attempt(ctx)
+		if attemptErr != nil {
+			return httpResponse{StatusCode: status}, attemptErr
 		}
 		return httpResponse{Body: body, StatusCode: status}, nil
 	})
@@ -104,7 +147,6 @@ func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string, re
 		if errors.As(err, &retryableErr) && attemptCount > 1 {
 			c.metricsRecorder.RecordRetry(url, attemptCount, false)
 		}
-
 		return httpResp.StatusCode, fmt.Errorf("failed after %d attempts: %w", attemptCount, err)
 	}
 
@@ -112,91 +154,113 @@ func (c *GrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string, re
 		c.metricsRecorder.RecordRetry(url, attemptCount, true)
 	}
 
-	// Unmarshal the response body into the provided result type
+	if result == nil || httpResp.Body == "" {
+		return httpResp.StatusCode, nil
+	}
 	if err := json.Unmarshal([]byte(httpResp.Body), result); err != nil {
 		return httpResp.StatusCode, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
-
 	return httpResp.StatusCode, nil
 }
 
-// doGet performs a single GET request without retries
-// Returns the response body, status code, and any error
-func (c *GrayskullHTTPClient) doGet(ctx context.Context, url string) (string, int, error) {
+// doRequest performs a single HTTP request without retries and returns the
+// response body, status code, and any error.
+//
+// For POST requests the body argument is sent as the request payload with
+// Content-Type application/json; charset=utf-8. For GET requests body is
+// expected to be nil and is ignored.
+func (c *GrayskullHTTPClient) doRequest(ctx context.Context, method, url string, body []byte) (string, int, error) {
 	startTime := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add auth header
-	authHeader, err := c.authHeaderProvider.GetAuthHeader()
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to get auth header: %w", err)
-	}
-	if authHeader == "" {
-		return "", 0, errors.New("auth header cannot be empty")
-	}
-	req.Header.Set("Authorization", authHeader)
-
-	// Add request ID from context if available
-	if requestID := ctx.Value(constants.GrayskullRequestID); requestID != nil {
-		req.Header.Set("X-Request-Id", fmt.Sprintf("%v", requestID))
+	if err := c.applyHeaders(ctx, req, body != nil); err != nil {
+		return "", 0, err
 	}
 
 	c.logger.DebugContext(ctx, "Executing HTTP request",
 		"url", url,
-		"method", http.MethodGet,
+		"method", method,
+		"body_length", len(body),
 	)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		// Convert network errors to retryable errors
+		// Network-level errors are transient and worth retrying.
 		return "", 0, grayskullErrors.NewRetryableErrorWithCause("HTTP request failed", err)
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp.StatusCode, grayskullErrors.NewGrayskullErrorWithCause(resp.StatusCode, "failed to read response body", err)
 	}
 
-	// Log response details
 	c.logger.DebugContext(ctx, "Received HTTP response",
 		"url", url,
 		"status_code", resp.StatusCode,
 		"status", resp.Status,
-		"body_length", len(body),
+		"body_length", len(respBody),
 	)
 
-	// Handle error status codes
 	if resp.StatusCode >= 400 {
-		errMsg := fmt.Sprintf("request failed with status %d: %s", resp.StatusCode, string(body))
-		// Record metrics before returning error
-		if c.metricsRecorder != nil {
-			c.metricsRecorder.RecordRequest(url, resp.StatusCode, time.Since(startTime))
-		}
+		errMsg := fmt.Sprintf("request failed with status %d: %s", resp.StatusCode, string(respBody))
+		c.metricsRecorder.RecordRequest(url, resp.StatusCode, time.Since(startTime))
 		if isRetryableStatusCode(resp.StatusCode) {
 			return "", resp.StatusCode, grayskullErrors.NewRetryableErrorWithStatus(resp.StatusCode, errMsg)
 		}
 		return "", resp.StatusCode, grayskullErrors.NewGrayskullError(resp.StatusCode, errMsg)
 	}
 
-	// Record the request metrics
 	c.metricsRecorder.RecordRequest(url, resp.StatusCode, time.Since(startTime))
-
-	return string(body), resp.StatusCode, nil
+	return string(respBody), resp.StatusCode, nil
 }
 
-// isRetryableStatusCode checks if an HTTP status code indicates a retryable error
+// applyHeaders attaches the auth header, the per-request correlation header,
+// the JSON content-type for POSTs, and any default headers configured on the
+// client (e.g., Grayskull-Workload, User-Agent).
+func (c *GrayskullHTTPClient) applyHeaders(ctx context.Context, req *http.Request, hasBody bool) error {
+	for name, value := range c.clientConfig.DefaultHeaders() {
+		req.Header.Set(name, value)
+	}
+
+	authHeader, err := c.authHeaderProvider.GetAuthHeader()
+	if err != nil {
+		return fmt.Errorf("failed to get auth header: %w", err)
+	}
+	if authHeader == "" {
+		return errors.New("auth header cannot be empty")
+	}
+	req.Header.Set(apiconstants.AuthorizationHeader, authHeader)
+
+	if requestID := ctx.Value(constants.GrayskullRequestID); requestID != nil {
+		req.Header.Set(apiconstants.RequestIDHeader, fmt.Sprintf("%v", requestID))
+	}
+
+	if hasBody && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	}
+
+	return nil
+}
+
+// isRetryableStatusCode checks if an HTTP status code indicates a retryable error.
+// Mirrors GrayskullHttpClient.isRetryableStatusCode in the Java SDK.
 func isRetryableStatusCode(statusCode int) bool {
 	return statusCode == http.StatusTooManyRequests || (statusCode >= http.StatusInternalServerError && statusCode < 600)
 }
 
-// Close releases any resources used by the HTTP client
+// Close releases any resources used by the HTTP client (currently, idle
+// keep-alive connections held by the underlying transport).
 func (c *GrayskullHTTPClient) Close() error {
-	// Close idle connections
 	if transport, ok := c.httpClient.Transport.(*http.Transport); ok {
 		transport.CloseIdleConnections()
 	}

@@ -410,6 +410,93 @@ class GrayskullHttpClientTest {
     }
 
     @Test
+    void testDoPostWithRetry_success() throws InterruptedException {
+        // Given
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        Response<SecretValue> response =
+                new Response<>(new SecretValue(1, "pub", "priv"), "Success");
+        String jsonResponse = toJson(response);
+
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(jsonResponse)
+                .addHeader("Content-Type", "application/json"));
+
+        // When
+        HttpResponse result = httpClient.doPostWithRetry(
+                mockWebServer.url("/batch").toString(),
+                "{\"secrets\":[]}");
+
+        // Then
+        assertNotNull(result);
+        assertEquals(200, result.getStatusCode());
+        assertEquals(jsonResponse, result.getBody());
+
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertEquals("POST", request.getMethod());
+        assertEquals("{\"secrets\":[]}", request.getBody().readUtf8());
+        assertEquals("Bearer test-token", request.getHeader("Authorization"));
+        assertTrue(request.getHeader("Content-Type").startsWith("application/json"));
+    }
+
+    @Test
+    void testDoPostWithRetry_nullBody_sendsEmptyPayload() throws InterruptedException {
+        // Given
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody("{\"data\":null,\"message\":\"ok\"}")
+                .addHeader("Content-Type", "application/json"));
+
+        // When
+        HttpResponse result = httpClient.doPostWithRetry(
+                mockWebServer.url("/batch").toString(),
+                null);
+
+        // Then
+        assertEquals(200, result.getStatusCode());
+        RecordedRequest request = mockWebServer.takeRequest(1, TimeUnit.SECONDS);
+        assertNotNull(request);
+        assertEquals("", request.getBody().readUtf8());
+    }
+
+    @Test
+    void testDoPostWithRetry_retriesOn503_thenSucceeds() throws InterruptedException {
+        // Given
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        mockWebServer.enqueue(new MockResponse().setResponseCode(503).setBody("err"));
+        Response<SecretValue> response =
+                new Response<>(new SecretValue(2, "p", "q"), "Success");
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(toJson(response))
+                .addHeader("Content-Type", "application/json"));
+
+        // When
+        HttpResponse result = httpClient.doPostWithRetry(
+                mockWebServer.url("/batch").toString(),
+                "{\"secrets\":[{\"projectId\":\"p\",\"secretName\":\"s\",\"lastKnownVersion\":0}]}");
+
+        // Then - second attempt succeeds
+        assertEquals(200, result.getStatusCode());
+        assertEquals(2, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    void testDoPostWithRetry_exhaustsRetries_throwsGrayskullException() {
+        // Given
+        httpClient = new GrayskullHttpClient(mockAuthProvider, config);
+        for (int i = 0; i < 4; i++) {
+            mockWebServer.enqueue(new MockResponse().setResponseCode(500).setBody("err"));
+        }
+
+        // When/Then
+        assertThrows(GrayskullException.class, () ->
+                httpClient.doPostWithRetry(mockWebServer.url("/batch").toString(), "{}"));
+    }
+
+    @Test
     void testDoGetWithRetry_sdkAuthorizationWinsOverUserDefault() throws InterruptedException {
         config = new GrayskullClientConfiguration();
         config.setHost(mockWebServer.url("/").toString().replaceAll("/$", ""));

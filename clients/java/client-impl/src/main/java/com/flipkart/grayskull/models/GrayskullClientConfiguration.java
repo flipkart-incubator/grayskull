@@ -106,7 +106,19 @@ public final class GrayskullClientConfiguration {
     private boolean metricsEnabled = true;
 
     /**
-     * Resolver for {@code Grayskull-Workload}; defaults to {@link DefaultWorkloadIdentityResolver}.
+     * Interval in seconds between background polls for registered refresh hooks.
+     * <p>
+     * Default: 60 (one minute)
+     * </p>
+     */
+    private int pollingIntervalSeconds = 60;
+
+    /**
+     * Resolver for the workload identity advertised via the {@code Grayskull-Workload} header.
+     * <p>
+     * Defaults to {@link DefaultWorkloadIdentityResolver} (hostname). Downstream distributions
+     * may override with a richer implementation.
+     * </p>
      */
     private WorkloadIdentityResolver workloadIdentityResolver = new DefaultWorkloadIdentityResolver();
 
@@ -213,5 +225,19 @@ public final class GrayskullClientConfiguration {
             throw new IllegalArgumentException("Min retry delay must be at least 50ms, got: " + minRetryDelay);
         }
         this.minRetryDelay = minRetryDelay;
+    }
+
+    /**
+     * Sets the background poller interval in seconds.
+     *
+     * @param pollingIntervalSeconds the polling interval in seconds (must be positive)
+     * @throws IllegalArgumentException if {@code pollingIntervalSeconds} is not positive
+     */
+    public void setPollingIntervalSeconds(int pollingIntervalSeconds) {
+        if (pollingIntervalSeconds <= 0) {
+            throw new IllegalArgumentException(
+                    "Polling interval must be positive, got: " + pollingIntervalSeconds);
+        }
+        this.pollingIntervalSeconds = pollingIntervalSeconds;
     }
 }
