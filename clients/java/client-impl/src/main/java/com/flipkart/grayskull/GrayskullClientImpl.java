@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -44,6 +45,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private final ObjectMapper objectMapper;
     private final HookRefreshPoller refreshPoller;
 
+
+    private final ConcurrentHashMap<String, Integer> lastSeenVersions = new ConcurrentHashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
@@ -128,6 +131,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             if (secretValue == null) {
                 throw new GrayskullException(500, "No data in response");
             }
+            lastSeenVersions.put(secretRef, secretValue.getDataVersion());
             return secretValue;
         } catch (JsonProcessingException e) {
             throw new GrayskullException("Failed to parse response: ", e);
@@ -151,6 +155,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
      * hooks may be registered for the same secret; each is delivered sequentially
      * with the latest known value.
      * </p>
+     * <p>
+     * If {@link #getSecret} has already been called for this {@code secretRef} on this
+     * client instance, the  version observed by those calls is used to seed the poller
+     * </p>
      *
      * @param secretRef the secret reference to monitor, in {@code projectId:secretName} form
      * @param hook the hook to invoke when a newer version of the secret is observed
@@ -169,7 +177,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
             throw new IllegalArgumentException("hook cannot be null");
         }
         String[] parts = parseSecretRef(secretRef);
-        return refreshPoller.register(parts[0], parts[1], hook);
+        int seed = lastSeenVersions.getOrDefault(secretRef, 0);
+        return refreshPoller.register(parts[0], parts[1], hook, seed);
     }
 
     /**

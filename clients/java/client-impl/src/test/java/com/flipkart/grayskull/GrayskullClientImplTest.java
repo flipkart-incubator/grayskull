@@ -359,6 +359,167 @@ class GrayskullClientImplTest {
         assertThrows(IllegalArgumentException.class, () -> client.registerRefreshHook("project:secret", null));
     }
 
+    // -------------------------------------------------------------------------
+    // lastSeenVersions seeding behaviour
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testGetSecret_thenRegisterHook_seedsPollerWithObservedVersion() throws Exception {
+        // Core case: getSecret observed v7 before the hook was registered.
+        // registerRefreshHook must seed lastKnownVersion=7 so the first poll
+        // only asks for strictly newer versions, avoiding a redundant re-delivery.
+        String secretRef = "team:db-pass";
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(createHttpResponse(new SecretValue(7, "user", "pwd")));
+        client.getSecret(secretRef);
+
+        client.registerRefreshHook(secretRef, v -> {});
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals(7, entry.get("lastKnownVersion").asInt(),
+                "lastKnownVersion must be seeded from the version observed by getSecret before registration");
+    }
+
+    @Test
+    void testRegisterHook_withoutPriorGetSecret_startsFromVersionZero() throws Exception {
+        // If getSecret was never called for this secretRef, seed must be 0.
+        // The first poll will deliver whatever the server currently holds.
+        client.registerRefreshHook("team:no-get-secret", v -> {});
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals(0, entry.get("lastKnownVersion").asInt(),
+                "lastKnownVersion must be 0 when no prior getSecret was called for this secretRef");
+    }
+
+    @Test
+    void testGetSecret_multipleCallsSameSecret_seedUsesLastObservedVersion() throws Exception {
+        // Each getSecret call overwrites the recorded version. The seed passed to the poller
+        // at registration time is whatever the most recent getSecret returned.
+        String secretRef = "team:rotating";
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(createHttpResponse(new SecretValue(9, "u", "p")))
+                .thenReturn(createHttpResponse(new SecretValue(11, "u", "p")));
+
+        client.getSecret(secretRef); // observes v9
+        client.getSecret(secretRef); // observes v11 — this is the last call, so seed = 11
+
+        client.registerRefreshHook(secretRef, v -> {});
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals(11, entry.get("lastKnownVersion").asInt(),
+                "seed must be the version from the most recent getSecret call");
+    }
+
+    @Test
+    void testRegisterHook_thenGetSecret_doesNotRetroactivelyUpdatePoller() throws Exception {
+        // Critical race-safety property: getSecret called AFTER registerRefreshHook must NOT
+        // retroactively modify the poller's lastKnownVersion. lastSeenVersions is read only
+        // at registration time; the bulk poll is the sole owner of lastKnownVersion after that.
+        String secretRef = "team:late-get";
+        client.registerRefreshHook(secretRef, v -> {}); // no prior getSecret → seed=0
+
+        // getSecret called after registration (simulates a concurrent or later code path)
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(createHttpResponse(new SecretValue(11, "u", "p")));
+        client.getSecret(secretRef);
+
+        // Poll must still send lastKnownVersion=0, not 11
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals(0, entry.get("lastKnownVersion").asInt(),
+                "getSecret called after registerRefreshHook must not modify the poller's lastKnownVersion");
+    }
+
+    @Test
+    void testGetSecret_differentSecret_doesNotSeedUnrelatedHook() throws Exception {
+        // Versions recorded for one secretRef must not bleed into another.
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(createHttpResponse(new SecretValue(5, "u", "p")));
+        client.getSecret("team:secret-a"); // records v5 for secret-a only
+
+        client.registerRefreshHook("team:secret-b", v -> {}); // different secret, no prior getSecret
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals(0, entry.get("lastKnownVersion").asInt(),
+                "getSecret for a different secretRef must not seed the hook for this one");
+    }
+
+    @Test
+    void testTwoHooksSameSecret_secondRegistrationLeavesVersionIntact() throws Exception {
+        // The first registration seeds lastKnownVersion from lastSeenVersions (v8).
+        // A second hook for the same secret reuses the existing SecretState unchanged —
+        // lastKnownVersion stays at v8 and the bulk poll continues from there.
+        String secretRef = "team:shared";
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenReturn(createHttpResponse(new SecretValue(8, "u", "p")));
+        client.getSecret(secretRef); // records v8
+
+        client.registerRefreshHook(secretRef, v -> {}); // first hook: seeds lastKnownVersion=8
+        client.registerRefreshHook(secretRef, v -> {}); // second hook: state already exists, version untouched
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals(8, entry.get("lastKnownVersion").asInt(),
+                "second registration must leave lastKnownVersion as established by the first");
+    }
+
+    @Test
+    void testGetSecret_failedCall_doesNotRecordVersion() throws Exception {
+        // A failed getSecret call must not write anything to lastSeenVersions.
+        // A subsequent registerRefreshHook must therefore use seed=0.
+        String secretRef = "team:flaky";
+        when(mockHttpClient.doGetWithRetry(anyString()))
+                .thenThrow(new GrayskullException(503, "unavailable"));
+        assertThrows(GrayskullException.class, () -> client.getSecret(secretRef));
+
+        client.registerRefreshHook(secretRef, v -> {});
+
+        HttpResponse emptyBatch = wrapBatch(new BatchGetSecretsResponse(0, Collections.emptyList()));
+        when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString())).thenReturn(emptyBatch);
+        pollOnce();
+
+        ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
+        JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
+        assertEquals(0, entry.get("lastKnownVersion").asInt(),
+                "a failed getSecret must not write to lastSeenVersions; seed must remain 0");
+    }
+
+    // -------------------------------------------------------------------------
 
     @Test
     void testRegisterRefreshHook_afterClose_throws() {
@@ -373,8 +534,6 @@ class GrayskullClientImplTest {
         // error from the HTTP layer would otherwise propagate out of the scheduled Runnable and
         // cause scheduleWithFixedDelay to silently cancel the recurring task. The outer
         // catch (Throwable) guards against that.
-        when(mockHttpClient.doGetWithRetry(anyString()))
-                .thenReturn(createHttpResponse(new SecretValue(1, "u", "p")));
         client.registerRefreshHook("team:err", v -> {});
 
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))

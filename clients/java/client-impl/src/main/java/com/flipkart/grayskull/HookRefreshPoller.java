@@ -36,11 +36,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <h2>High-level flow</h2>
  * <ol>
- *   <li>Callers invoke {@link #register(String, String, SecretRefreshHook)} to attach a
+ *   <li>Callers invoke {@link #register(String, String, SecretRefreshHook, int)} to attach a
  *       {@link SecretRefreshHook} for a {@code projectId:secretName}. State is kept in
- *       {@link #registry}, keyed by {@code secretRef}. {@link SecretState#lastKnownVersion}
- *       starts at 0, so the first batch poll unconditionally delivers the current server
- *       version to the hook.</li>
+ *       {@link #registry}, keyed by {@code secretRef}. The caller supplies an
+ *       {@code initialKnownVersion} derived from any prior {@code getSecret} calls on the
+ *       same client; this seeds {@link SecretState#lastKnownVersion} so the first poll
+ *       skips versions the application has already seen. When no prior {@code getSecret}
+ *       exists the seed is 0, and the first poll delivers whatever the server holds.
+ *       After seeding, {@code lastKnownVersion} is advanced exclusively by the bulk poll
+ *       path — nothing else writes to it.</li>
  *   <li>A single-threaded {@link #scheduler} runs {@link #pollOnce()} every
  *       {@code intervalSeconds} (fixed-delay: the next tick starts only after the
  *       previous tick finishes). The first tick is delayed by {@code intervalSeconds}
@@ -112,19 +116,31 @@ final class HookRefreshPoller {
     }
 
     /**
-     * Registers {@code hook} for {@code projectId:secretName}.
-     * {@link SecretState#lastKnownVersion} is always left at 0 for newly created state
-     * so the first batch poll delivers the current server version unconditionally.
+     * Registers {@code hook} for {@code projectId:secretName} and seeds
+     * {@link SecretState#lastKnownVersion} from {@code initialKnownVersion}.
+     * <p>
+     * {@code initialKnownVersion} is the version the caller last observed via
+     * {@code getSecret} for this secret, or 0 if no such call has been made.
+     * Only applied when creating new {@link SecretState}; if state already exists
+     * (a second hook for the same secret) {@code lastKnownVersion} is left as-is
+     * since the bulk poll is already advancing it correctly.
+     * </p>
      */
-    RefreshHandlerRef register(String projectId, String secretName, SecretRefreshHook hook) {
+    RefreshHandlerRef register(String projectId, String secretName,
+                               SecretRefreshHook hook, int initialKnownVersion) {
         String secretRef = projectId + ":" + secretName;
         SecretState state = registry.compute(secretRef, (k, existing) -> {
-            SecretState s = existing != null ? existing : new SecretState(projectId, secretName);
+            if (existing != null) {
+                existing.hooks.add(hook);
+                return existing;
+            }
+            SecretState s = new SecretState(projectId, secretName);
             s.hooks.add(hook);
+            s.lastKnownVersion.set(initialKnownVersion);
             return s;
         });
-        log.debug("Registered refresh hook for secretRef:{} (totalHooks:{})",
-                secretRef, state.hooks.size());
+        log.debug("Registered refresh hook for secretRef:{} (totalHooks:{}, initialKnownVersion:{})",
+                secretRef, state.hooks.size(), initialKnownVersion);
         return new DefaultRefreshHandlerRef(secretRef, () -> unregister(secretRef, hook));
     }
 
