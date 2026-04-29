@@ -37,7 +37,9 @@ import static org.mockito.Mockito.when;
 /**
  * {@link HookRefreshPoller} package-private helpers exercised via reflection so production
  * code does not need test-only hooks. For behaviour coverage of polling and hooks, see
- * {@link HookRefreshPollerConcurrencyTest} and {@link GrayskullClientImplTest}.
+ * {@link HookRefreshPollerConcurrencyTest} and {@link GrayskullClientImplTest}. The
+ * {@code finally} resubmit path is covered in
+ * {@link #scheduleFollowUpIfPending_whenPending_submitsRunHooksFor()}.
  */
 @ExtendWith(MockitoExtension.class)
 class HookRefreshPollerTest {
@@ -176,8 +178,9 @@ class HookRefreshPollerTest {
      *       {@code isExecuting} is {@code true}.</li>
      *   <li>When the hook unblocks, the {@code while} loop in {@code runHooksFor}
      *       drains the newly staged update in a further iteration. The
-     *       {@code finally} re-submit path is covered by
-     *       {@link #runHooksFor_finallyDispatcherSubmit_reschedulesRun()}.</li>
+     *       {@code finally} re-submit path (when a value lands in the
+     *       post-drain window) is covered by
+     *       {@link #scheduleFollowUpIfPending_whenPending_submitsRunHooksFor()}.</li>
      * </ol>
      */
     @Test
@@ -234,25 +237,19 @@ class HookRefreshPollerTest {
     }
 
     /**
-     * Covers: {@code if (state.pendingUpdate.get() != null) { dispatcher.submit(() -> runHooksFor(...)); }}
-     * in {@code runHooksFor}'s {@code finally} (including the {@code submit} and the re-entry into
-     * {@code runHooksFor} on the rescheduled task).
-     * <p>
-     * The production race: after the drain {@code while} exits, another thread can set
-     * {@code pendingUpdate} before {@code isExecuting} is released and {@code get()} in
-     * {@code finally} runs. A spinning writer thread and a same-thread {@link ExecutorService}
-     * (via reflection) make that window observable: on the resubmit, {@code submit(Runnable)}
-     * runs the nested {@code runHooksFor} <em>inline</em> so the hook is invoked in-test without
-     * relying on the pool thread. We retry a few attempts to survive scheduler luck on slow CI.
+     * The post-drain {@code finally} path calls {@code scheduleFollowUpIfPending} (exercise the
+     * private method directly). A same-thread {@link ExecutorService} makes
+     * {@code dispatcher.submit(() -> runHooksFor(...))} run the nested
+     * {@code runHooksFor} inline so the hook is invoked in-test without a race on the tiny
+     * inter-instruction window between the drain and {@code get()}.
      */
     @Test
-    void runHooksFor_finallyDispatcherSubmit_reschedulesRun() throws Exception {
+    void scheduleFollowUpIfPending_whenPending_submitsRunHooksFor() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
                 "http://localhost:9999", 60);
 
-        ExecutorService directDispatcher = newSameThreadExecutor();
-        setFinalField(poller, "dispatcher", directDispatcher);
+        setFinalField(poller, "dispatcher", newSameThreadExecutor());
 
         AtomicInteger hookInvocations = new AtomicInteger(0);
         poller.register("p", "s", v -> hookInvocations.incrementAndGet(), 0);
@@ -267,41 +264,15 @@ class HookRefreshPollerTest {
             throw new IllegalStateException("register should have created SecretState for p:s");
         }
 
-        Method runHooksFor = HookRefreshPoller.class.getDeclaredMethod(
-                "runHooksFor", String.class, SecretState.class);
-        runHooksFor.setAccessible(true);
+        state.isExecuting.set(false);
+        state.pendingUpdate.set(new SecretValue(42, "a", "b"));
 
-        final SecretValue late = new SecretValue(42, "a", "b");
-        int seenAfter = 0;
-        for (int attempt = 0; attempt < 10; attempt++) {
-            state.isExecuting.set(false);
-            state.pendingUpdate.set(null);
-            int before = hookInvocations.get();
+        Method scheduleFollowUpIfPending = HookRefreshPoller.class.getDeclaredMethod(
+                "scheduleFollowUpIfPending", String.class, SecretState.class);
+        scheduleFollowUpIfPending.setAccessible(true);
+        scheduleFollowUpIfPending.invoke(poller, "p:s", state);
 
-            AtomicBoolean stopRacer = new AtomicBoolean(false);
-            Thread racer = new Thread(() -> {
-                while (!stopRacer.get() && !Thread.currentThread().isInterrupted()) {
-                    state.pendingUpdate.set(late);
-                }
-            });
-            racer.setDaemon(true);
-            racer.start();
-            runHooksFor.invoke(poller, "p:s", state);
-            stopRacer.set(true);
-            racer.interrupt();
-            racer.join(3000);
-
-            seenAfter = hookInvocations.get() - before;
-            if (seenAfter > 0) {
-                break;
-            }
-        }
-        assertTrue(
-                seenAfter > 0,
-                "Racer should occasionally land a pending value after the empty drain; "
-                        + "finally should submit runHooksFor, which must invoke the hook ("
-                        + hookInvocations.get() + " total invocations). "
-                        + "If this is flaky, increase attempt count or loop iterations in the racer.");
+        assertEquals(1, hookInvocations.get());
     }
 
     private static AbstractExecutorService newSameThreadExecutor() {

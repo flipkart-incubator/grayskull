@@ -281,9 +281,17 @@ final class HookRefreshPoller {
             }
         } finally {
             state.isExecuting.set(false);
-            if (state.pendingUpdate.get() != null) {
-                dispatcher.submit(() -> runHooksFor(secretRef, state));
-            }
+            scheduleFollowUpIfPending(secretRef, state);
+        }
+    }
+
+    /**
+     * If another update was staged after the drain loop but before release, re-run
+     * {@link #runHooksFor} on the dispatcher so the update is not lost.
+     */
+    private void scheduleFollowUpIfPending(String secretRef, SecretState state) {
+        if (state.pendingUpdate.get() != null) {
+            dispatcher.submit(() -> runHooksFor(secretRef, state));
         }
     }
 
