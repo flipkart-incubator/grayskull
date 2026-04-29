@@ -106,7 +106,7 @@ class HookRefreshPollerConcurrencyTest {
                     try {
                         startGate.await();
                         for (int i = 0; i < hooksPerThread; i++) {
-                            poller.register("acme", "shared", v -> { /* no-op */ });
+                            poller.register("acme", "shared", v -> { /* no-op */ }, 0);
                         }
                     } catch (Exception e) {
                         throw new RuntimeException(e);
@@ -147,7 +147,7 @@ class HookRefreshPollerConcurrencyTest {
                 pool.submit(() -> {
                     try {
                         startGate.await();
-                        handles.add(poller.register("acme", "race", v -> { /* no-op */ }));
+                        handles.add(poller.register("acme", "race", v -> { /* no-op */ }, 0));
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     } finally {
@@ -214,7 +214,7 @@ class HookRefreshPollerConcurrencyTest {
                 }
             }
         };
-        poller.register("acme", "fast", slowFirstFastRest);
+        poller.register("acme", "fast", slowFirstFastRest, 0);
 
         // First poll delivers v=1, hook enters and blocks.
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
@@ -286,7 +286,7 @@ class HookRefreshPollerConcurrencyTest {
                 }
             }
         };
-        poller.register("acme", "wake", hook);
+        poller.register("acme", "wake", hook, 0);
 
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
@@ -337,7 +337,7 @@ class HookRefreshPollerConcurrencyTest {
                 finished.countDown();
             }
         };
-        poller.register("acme", "serial", tracker);
+        poller.register("acme", "serial", tracker, 0);
 
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
@@ -383,8 +383,8 @@ class HookRefreshPollerConcurrencyTest {
         };
         SecretRefreshHook other = secretVal -> { /* no-op */ };
 
-        poller.register("acme", "concurrent-mod", slow);
-        RefreshHandlerRef otherHandle = poller.register("acme", "concurrent-mod", other);
+        poller.register("acme", "concurrent-mod", slow, 0);
+        RefreshHandlerRef otherHandle = poller.register("acme", "concurrent-mod", other, 0);
 
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
@@ -415,7 +415,7 @@ class HookRefreshPollerConcurrencyTest {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     void unregister_afterStateAlreadyRemoved_isNoOp() throws Exception {
         SecretRefreshHook hook = v -> { /* no-op */ };
-        poller.register("acme", "ghost", hook);
+        poller.register("acme", "ghost", hook, 0);
 
         // Forcefully clear the registry to simulate the state having already been
         // removed (e.g. by a prior unregister of the last hook on this secret).
@@ -444,12 +444,12 @@ class HookRefreshPollerConcurrencyTest {
         // server still returns an update for the (now-stale) secretRef. The poller
         // must not throw and must not deliver to any hook.
         AtomicInteger calls = new AtomicInteger();
-        RefreshHandlerRef handle = poller.register("acme", "stale", v -> calls.incrementAndGet());
+        RefreshHandlerRef handle = poller.register("acme", "stale", v -> calls.incrementAndGet(), 0);
         handle.unRegister();
 
         // Re-register a NEW secret so the registry is non-empty (otherwise
         // pollOnce short-circuits at registry.isEmpty()).
-        poller.register("acme", "other", v -> { /* no-op */ });
+        poller.register("acme", "other", v -> { /* no-op */ }, 0);
 
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
@@ -521,7 +521,7 @@ class HookRefreshPollerConcurrencyTest {
                 firstDelivered.countDown();
             }
         };
-        poller.register("acme", "late", hook);
+        poller.register("acme", "late", hook, 0);
 
         when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
@@ -613,7 +613,7 @@ class HookRefreshPollerConcurrencyTest {
                     Thread.currentThread().interrupt();
                 }
             };
-            localPoller.register("acme", "block", blocking);
+            localPoller.register("acme", "block", blocking, 0);
 
             when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                     .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
@@ -661,7 +661,7 @@ class HookRefreshPollerConcurrencyTest {
                     Thread.currentThread().interrupt();
                 }
             };
-            localPoller.register("acme", "intr", blocking);
+            localPoller.register("acme", "intr", blocking, 0);
 
             when(mockHttpClient.doPostWithRetry(eq(BATCH_URL), anyString()))
                     .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
