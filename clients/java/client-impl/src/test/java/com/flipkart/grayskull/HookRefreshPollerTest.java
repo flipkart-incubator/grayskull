@@ -289,7 +289,7 @@ class HookRefreshPollerTest {
             runHooksFor.invoke(poller, "p:s", state);
             stopRacer.set(true);
             racer.interrupt();
-            racer.join(3, TimeUnit.SECONDS);
+            racer.join(3000);
 
             seenAfter = hookInvocations.get() - before;
             if (seenAfter > 0) {
