@@ -478,8 +478,9 @@ The client automatically retries transient failures using exponential backoff wi
 
 | Artifact | Version        | 
 |----------|----------------|
-| `client-api` | 0.2.0 |
-| `client-impl` | 0.2.0 |
+| `client-api` | 0.2.0 | 
+| `client-impl` | 0.2.0 | 
+
 
 ### Dependency Requirements
 
