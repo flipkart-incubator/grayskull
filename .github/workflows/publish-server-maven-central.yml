@@ -2,8 +2,6 @@ name: Publish Server to Maven Central
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   publish:
