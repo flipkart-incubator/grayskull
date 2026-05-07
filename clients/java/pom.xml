@@ -6,7 +6,7 @@
 
     <groupId>com.flipkart.grayskull</groupId>
     <artifactId>java-clients</artifactId>
-    <version>0.1.2</version>
+    <version>0.2.0</version>
     <packaging>pom</packaging>
 
     <name>Grayskull Java Clients</name>

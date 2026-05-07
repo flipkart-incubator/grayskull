@@ -198,6 +198,37 @@ class GrayskullClientConfigurationTest {
     }
 
     @Test
+    void testGetPollingIntervalSeconds_defaultIsSixty() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+        assertEquals(60, config.getPollingIntervalSeconds());
+    }
+
+    @Test
+    void testSetPollingIntervalSeconds_positiveValue_stored() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+
+        config.setPollingIntervalSeconds(15);
+
+        assertEquals(15, config.getPollingIntervalSeconds());
+    }
+
+    @Test
+    void testSetPollingIntervalSeconds_zero_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setPollingIntervalSeconds(0));
+    }
+
+    @Test
+    void testSetPollingIntervalSeconds_negative_throws() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> config.setPollingIntervalSeconds(-5));
+    }
+
+    @Test
     void testSetHost_null_throws() {
         GrayskullClientConfiguration config = new GrayskullClientConfiguration();
         assertThrows(IllegalArgumentException.class, () -> config.setHost(null));

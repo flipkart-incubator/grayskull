@@ -15,6 +15,7 @@ import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 class GrayskullHttpClient {
@@ -44,26 +45,38 @@ class GrayskullHttpClient {
     }
 
     HttpResponse doGetWithRetry(String url) {
+        return executeWithRetry(url, () -> doGet(url));
+    }
+
+    HttpResponse doPostWithRetry(String url, String jsonBody) {
+        return executeWithRetry(url, () -> doPost(url, jsonBody));
+    }
+
+    /**
+     * Executes {@code call} through {@link RetryUtil}, normalising exceptions and
+     * emitting the retry metric.
+     */
+    private HttpResponse executeWithRetry(String url, Callable<HttpResponse> call) {
         final int[] attemptCount = {0};
         boolean finalAttemptSuccess = false;
-        
+
         try {
             HttpResponse result = retryUtil.retry(() -> {
                 attemptCount[0]++;
-                return doGet(url);
+                return call.call();
             });
-            
+
             finalAttemptSuccess = true;
             return result;
-            
+
         } catch (IllegalStateException | IllegalArgumentException e) {
             // Configuration or usage errors - rethrow as-is
             throw e;
-        
+
         } catch (GrayskullException e) {
             // GrayskullException already has proper context (retry exhaustion, etc.) - rethrow as-is
             throw e;
-            
+
         } catch (Exception e) {
             throw new GrayskullException(500, "Unexpected error during HTTP request", e);
 
@@ -73,7 +86,7 @@ class GrayskullHttpClient {
             }
         }
     }
-    
+
     HttpResponse doGet(String url) throws RetryableException {
         Request request = buildRequest(url)
                 .get()
@@ -85,9 +98,32 @@ class GrayskullHttpClient {
 
         String body = httpResponse.getBody();
         int bodyLength = body != null ? body.length() : 0;
-        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes", 
+        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes",
                 requestId, url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
-        
+
+        return httpResponse;
+    }
+
+    HttpResponse doPost(String url, String jsonBody) throws RetryableException {
+        RequestBody body = RequestBody.create(
+                jsonBody == null ? "" : jsonBody,
+                MediaType.parse("application/json; charset=utf-8"));
+
+        Request request = buildRequest(url)
+                .post(body)
+                .build();
+
+        String requestId = MDC.get(MDCKeys.GRAYSKULL_REQUEST_ID);
+        int requestBodyLength = jsonBody != null ? jsonBody.length() : 0;
+        log.debug("[RequestId:{}] Executing POST request to: {}, bodyLength: {} bytes",
+                requestId, url, requestBodyLength);
+        HttpResponse httpResponse = executeRequest(request);
+
+        String responseBody = httpResponse.getBody();
+        int bodyLength = responseBody != null ? responseBody.length() : 0;
+        log.debug("[RequestId:{}] Received response from {} with status: {}, protocol: {}, contentType: {}, bodyLength: {} bytes",
+                requestId, url, httpResponse.getStatusCode(), httpResponse.getProtocol(), httpResponse.getContentType(), bodyLength);
+
         return httpResponse;
     }
 

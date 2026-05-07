@@ -58,12 +58,12 @@ Add dependency:
 <dependency>
     <groupId>com.flipkart.grayskull</groupId>
     <artifactId>client-api</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 <dependency>
     <groupId>com.flipkart.grayskull</groupId>
     <artifactId>client-impl</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
@@ -222,7 +222,7 @@ Since server is built like a framework you can add this as dependency in your ap
 <dependency>
     <groupId>com.flipkart.grayskull</groupId>
     <artifactId>server</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 

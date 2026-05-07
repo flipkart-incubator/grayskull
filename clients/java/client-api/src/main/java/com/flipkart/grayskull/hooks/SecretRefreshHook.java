@@ -7,9 +7,7 @@ import com.flipkart.grayskull.models.SecretValue;
  * <p>
  * This hook is registered via {@link com.flipkart.grayskull.GrayskullClient#registerRefreshHook(String, SecretRefreshHook)}
  * and will be called asynchronously when the monitored secret is updated on the server.
- * <p>
- * <b>Note:</b> This is currently part of a placeholder implementation. While hooks can be registered,
- * they will not be invoked until server-sent events support is added in a future release.
+ * </p>
  */
 @FunctionalInterface
 public interface SecretRefreshHook {
