@@ -11,7 +11,7 @@
     <artifactId>spi</artifactId>
 
     <name>Grayskull SPI</name>
-    <description>Service Provider Interfaces for Grayskull authentication and authorization extensions</description>
+    <description>Grayskull SPI</description>
 
     <licenses>
         <license>

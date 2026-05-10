@@ -93,7 +93,6 @@
 
     <build>
         <plugins>
-            <!-- Do not publish this module to Maven Central; it is the bootable application, not a library. -->
             <plugin>
                 <groupId>org.sonatype.central</groupId>
                 <artifactId>central-publishing-maven-plugin</artifactId>

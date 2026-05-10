@@ -10,7 +10,7 @@
     </parent>
     <artifactId>server</artifactId>
     <name>Grayskull Server</name>
-    <description>Grayskull secret management server</description>
+    <description>Grayskull server</description>
 
     <licenses>
         <license>
