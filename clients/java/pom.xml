@@ -6,12 +6,12 @@
 
     <groupId>com.flipkart.grayskull</groupId>
     <artifactId>java-clients</artifactId>
-    <version>0.2.0</version>
+    <version>0.2.1</version>
     <packaging>pom</packaging>
 
     <name>Grayskull Java Clients</name>
     <description>Grayskull Java Client SDK (Java 8+)</description>
-    <url>https://github.com/flipkart/grayskull-oss</url>
+    <url>https://github.com/flipkart-incubator/grayskull</url>
 
     <licenses>
         <license>
@@ -19,6 +19,40 @@
             <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
         </license>
     </licenses>
+
+    <developers>
+        <developer>
+
+            <organization>Flipkart</organization>
+            <organizationUrl>https://www.flipkart.com</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/flipkart-incubator/grayskull.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/flipkart-incubator/grayskull.git</developerConnection>
+        <url>https://github.com/flipkart-incubator/grayskull</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <repositories>
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2/</url>
+        </repository>
+        <repository>
+            <name>Central Portal Snapshots</name>
+            <id>central-portal-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <modules>
         <module>client-api</module>
@@ -38,6 +72,13 @@
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.2.3</maven-surefire-plugin.version>
         <jacoco-maven-plugin.version>0.8.11</jacoco-maven-plugin.version>
+
+        <central.publishing.plugin.version>0.9.0</central.publishing.plugin.version>
+        <maven.source.plugin.version>3.3.0</maven.source.plugin.version>
+        <maven.javadoc.plugin.version>3.6.2</maven.javadoc.plugin.version>
+        <maven.gpg.plugin.version>3.2.1</maven.gpg.plugin.version>
+        <attach.sources.skip>false</attach.sources.skip>
+        <attach.javadoc.skip>false</attach.javadoc.skip>
     </properties>
 
     <!-- Dependencies inherited by ALL child modules -->
@@ -123,14 +164,88 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
             </plugin>
+
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>${central.publishing.plugin.version}</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>true</autoPublish>
+                    <waitUntil>published</waitUntil>
+                </configuration>
+            </plugin>
+
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>${maven.source.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                                <configuration>
+                                    <skipSource>${attach.sources.skip}</skipSource>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
 
-    <distributionManagement>
-        <repository>
-            <id>clojars</id>
-            <url>https://repo.clojars.org</url>
-        </repository>
-    </distributionManagement>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven.javadoc.plugin.version}</version>
+                        <configuration>
+                            <doclint>none</doclint>
+                            <source>8</source>
+                            <failOnError>false</failOnError>
+                            <skip>${attach.javadoc.skip}</skip>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven.gpg.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
