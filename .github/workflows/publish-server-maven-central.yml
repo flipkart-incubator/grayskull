@@ -37,7 +37,7 @@ jobs:
           gpg --list-secret-keys --keyid-format=long
 
       - name: Build and deploy to Maven Central 
-        run: ./mvnw -B -pl '!simple-app' clean deploy -s $GITHUB_WORKSPACE/settings.xml
+        run: ./mvnw -B -Prelease -pl '!simple-app' clean deploy -s $GITHUB_WORKSPACE/settings.xml
         env:
           GPG_PASSPHRASE: ${{ secrets.FOSS_GPG_PASSPHRASE }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.FOSS_GPG_PASSPHRASE }}
