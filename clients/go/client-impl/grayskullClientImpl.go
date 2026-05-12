@@ -81,6 +81,14 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 		return nil, err
 	}
 
+	// Set Grayskull-Workload header: identity from resolver (resolved once)
+	identity := config.GetWorkloadIdentityResolver().Resolve()
+	config.AddDefaultHeader(constants.HeaderWorkload, identity)
+
+	// Set User-Agent header: SDK product/version only (grayskull-go/<version>)
+	userAgent := "grayskull-go/" + GetVersion()
+	config.AddDefaultHeader(constants.HeaderUserAgent, userAgent)
+
 	// Use default logger and Prometheus metrics recorder if not provided
 	logger := slog.Default().With("component", "grayskull-client")
 	if metricsRecorder == nil {

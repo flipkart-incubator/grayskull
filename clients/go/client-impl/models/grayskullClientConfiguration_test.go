@@ -280,3 +280,65 @@ func TestConfiguration_AllFieldsAccessible(t *testing.T) {
 	assert.False(t, config.MetricsEnabled)
 	assert.Equal(t, 120, config.PollingIntervalSeconds)
 }
+
+// TestGetWorkloadIdentityResolver_DefaultResolver verifies that GetWorkloadIdentityResolver
+// returns a default resolver when none is set.
+func TestGetWorkloadIdentityResolver_DefaultResolver(t *testing.T) {
+	config := &GrayskullClientConfiguration{}
+
+	resolver := config.GetWorkloadIdentityResolver()
+
+	assert.NotNil(t, resolver)
+	identity := resolver.Resolve()
+	assert.NotEmpty(t, identity, "default resolver should return non-empty identity")
+}
+
+// TestSetWorkloadIdentityResolver_CustomResolver verifies that a custom resolver can be set.
+func TestSetWorkloadIdentityResolver_CustomResolver(t *testing.T) {
+	config := NewDefaultConfig()
+
+	// Create custom resolver
+	customResolver := &mockWorkloadResolver{identity: "custom-workload-id"}
+	config.SetWorkloadIdentityResolver(customResolver)
+
+	resolver := config.GetWorkloadIdentityResolver()
+	assert.Equal(t, "custom-workload-id", resolver.Resolve())
+}
+
+// TestSetWorkloadIdentityResolver_NilIsNoOp verifies that setting nil resolver is a no-op.
+func TestSetWorkloadIdentityResolver_NilIsNoOp(t *testing.T) {
+	config := NewDefaultConfig()
+
+	// Set custom resolver first
+	customResolver := &mockWorkloadResolver{identity: "custom"}
+	config.SetWorkloadIdentityResolver(customResolver)
+
+	// Try to set nil (should be no-op)
+	config.SetWorkloadIdentityResolver(nil)
+
+	// Should still have the custom resolver
+	resolver := config.GetWorkloadIdentityResolver()
+	assert.Equal(t, "custom", resolver.Resolve())
+}
+
+// TestNewDefaultConfig_HasDefaultWorkloadResolver verifies that NewDefaultConfig
+// initializes with a default workload resolver.
+func TestNewDefaultConfig_HasDefaultWorkloadResolver(t *testing.T) {
+	config := NewDefaultConfig()
+
+	assert.NotNil(t, config.WorkloadIdentityResolver)
+	resolver := config.GetWorkloadIdentityResolver()
+	assert.NotNil(t, resolver)
+
+	identity := resolver.Resolve()
+	assert.NotEmpty(t, identity, "default resolver should return non-empty identity")
+}
+
+// mockWorkloadResolver is a mock implementation for testing
+type mockWorkloadResolver struct {
+	identity string
+}
+
+func (m *mockWorkloadResolver) Resolve() string {
+	return m.identity
+}
