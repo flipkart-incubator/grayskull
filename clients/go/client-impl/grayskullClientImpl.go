@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	clientapi "github.com/flipkart-incubator/grayskull/clients/go/client-api"
@@ -14,7 +16,7 @@ import (
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
-	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
+	internalHooks "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
@@ -30,6 +32,11 @@ type GrayskullClientImpl struct {
 	clientConfig       *models.GrayskullClientConfiguration
 	httpClient         internal.GrayskullHTTPClientInterface
 	metricsRecorder    metrics.MetricsRecorder
+
+	registry         *internalHooks.Registry
+	poller           *internal.Poller
+	lastSeenVersions sync.Map
+	closed           atomic.Bool
 }
 
 var validate = validator.New()
@@ -82,13 +89,35 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 
 	httpClient := internal.NewGrayskullHTTPClient(authProvider, config, logger, metricsRecorder)
 
-	return &GrayskullClientImpl{
+	if concrete, ok := httpClient.(*internal.GrayskullHTTPClient); ok {
+		concrete.SetCustomHeaders(config.GetDefaultHeaders())
+	}
+
+	client := &GrayskullClientImpl{
 		baseURL:            config.Host,
 		authHeaderProvider: authProvider,
 		clientConfig:       config,
 		httpClient:         httpClient,
 		metricsRecorder:    metricsRecorder,
-	}, nil
+		registry:           internalHooks.NewRegistry(),
+	}
+
+	interval := time.Duration(config.PollingIntervalSeconds) * time.Second
+	if interval <= 0 {
+		interval = time.Duration(constants.DefaultPollIntervalSeconds) * time.Second
+	}
+	client.poller = internal.NewPoller(internal.PollerConfig{
+		BaseURL:         config.Host,
+		HTTPClient:      httpClient,
+		Registry:        client.registry,
+		Interval:        interval,
+		MetricsRecorder: metricsRecorder,
+		Logger:          logger.With("subcomponent", "poller"),
+	})
+	client.poller.Start()
+
+	return client, nil
+
 }
 
 // splitSecretRef splits the secret reference into project ID and secret name
@@ -155,12 +184,19 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	// Record metrics for success case
 	g.metricsRecorder.RecordRequest("get_secret", statusCode, time.Since(startTime))
 
+	// Remember the highest version we have observed so that a subsequent
+	// RegisterRefreshHook can seed the poller and skip versions the application
+	g.lastSeenVersions.Store(secretRef, data.DataVersion)
+
 	// Return a pointer to the Data field
 	return &data, nil
 }
 
 // RegisterRefreshHook registers a refresh hook for a secret
 func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef string, hook Client_API_Hooks.SecretRefreshHook) (Client_API_Hooks.RefreshHandlerRef, error) {
+	if c.closed.Load() {
+		return nil, errors.NewGrayskullError(400, "client has been closed; cannot register new refresh hooks")
+	}
 	if secretRef == "" {
 		return nil, errors.NewGrayskullError(400, "secretRef cannot be empty")
 	}
@@ -168,7 +204,31 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 		return nil, errors.NewGrayskullError(400, "hook cannot be nil")
 	}
 
-	// TODO: Implement actual hook invocation when server-side events support is added
-	// Return the singleton instance of the no-op implementation
-	return hooks.GetInstance(), nil
+	parts := c.splitSecretRef(secretRef)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return nil, errors.NewGrayskullError(400,
+			fmt.Sprintf("invalid secretRef format. Expected 'projectId:secretName', got: %s", secretRef))
+	}
+
+	seed := 0
+	if v, ok := c.lastSeenVersions.Load(secretRef); ok {
+		if iv, ok := v.(int); ok {
+			seed = iv
+		}
+	}
+	return c.registry.Register(parts[0], parts[1], hook, seed), nil
+}
+
+// Close stops the background poller and releases HTTP transport resources.
+func (c *GrayskullClientImpl) Close() error {
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+	if c.poller != nil {
+		c.poller.Close()
+	}
+	if c.httpClient != nil {
+		return c.httpClient.Close()
+	}
+	return nil
 }
