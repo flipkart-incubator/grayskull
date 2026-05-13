@@ -5,10 +5,13 @@
     <parent>
         <groupId>com.flipkart.grayskull</groupId>
         <artifactId>parent</artifactId>
-        <version>0.3.0</version>
+        <version>0.3.1</version>
     </parent>
 
     <artifactId>spi</artifactId>
+
+    <name>Grayskull SPI</name>
+    <description>Grayskull SPI</description>
 
     <licenses>
         <license>
