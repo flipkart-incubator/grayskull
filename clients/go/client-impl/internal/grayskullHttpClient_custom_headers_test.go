@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
 	"github.com/stretchr/testify/assert"
@@ -133,14 +134,12 @@ func TestSetCustomHeaders_InternalHeadersWin(t *testing.T) {
 	}))
 
 	var result testResponse
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), constants.GrayskullRequestID, "real-request-id")
 	_, err := rawClient.DoGetWithRetry(ctx, testServer.URL, &result)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Bearer real-token", capturedAuth, "internal Authorization should win")
-	// X-Request-Id is only set if present in context, so it might be empty or a generated one
-	// The key point is it shouldn't be "fake-request-id"
-	assert.NotEqual(t, "fake-request-id", capturedRequestID)
+	assert.Equal(t, "real-request-id", capturedRequestID, "internal request id from context should win")
 }
 
 // TestSetCustomHeaders_MultipleHeadersSet verifies that multiple custom
@@ -288,10 +287,8 @@ func TestApplyHeaders_WithoutCustomHeaders(t *testing.T) {
 
 	// Verify only Authorization is present
 	var capturedAuth string
-	var headerCount int
 	testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
-		headerCount = len(r.Header)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"data":"test"}`))
 	}))

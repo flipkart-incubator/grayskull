@@ -14,6 +14,7 @@ import (
 	Client_API "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
+	internalHooks "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
@@ -35,6 +36,11 @@ type MockGrayskullHTTPClient struct {
 
 func (m *MockGrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string, result any) (int, error) {
 	args := m.Called(ctx, url, result)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockGrayskullHTTPClient) DoPostWithRetry(ctx context.Context, url string, jsonBody []byte, result any) (int, error) {
+	args := m.Called(ctx, url, jsonBody, result)
 	return args.Int(0), args.Error(1)
 }
 
@@ -66,6 +72,7 @@ func NewGrayskullClientForTesting(
 		clientConfig:       config,
 		httpClient:         httpClient,
 		metricsRecorder:    metricsRecorder,
+		registry:           internalHooks.NewRegistry(),
 	}
 }
 
@@ -307,7 +314,7 @@ func TestNewGrayskullClient(t *testing.T) {
 				}
 			}
 
-			client, err := NewGrayskullClient(tt.authProvider, config, nil)
+			client, err := NewGrayskullClient(tt.authProvider, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 			if tt.expectError {
 				assert.Error(t, err, "Expected error but got none")

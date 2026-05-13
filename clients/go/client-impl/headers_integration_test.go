@@ -6,7 +6,9 @@ import (
 	apiconstants "github.com/flipkart-incubator/grayskull/clients/go/client-api/constants"
 	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,7 +36,7 @@ func TestNewGrayskullClient_SetsUserAgentHeader(t *testing.T) {
 	config.Host = "http://localhost:8080"
 	config.MaxConnections = 10
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -61,7 +63,7 @@ func TestNewGrayskullClient_UserAgentFormat(t *testing.T) {
 	config.Host = "http://localhost:8080"
 	config.MaxConnections = 10
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -87,7 +89,7 @@ func TestNewGrayskullClient_SetsWorkloadHeader(t *testing.T) {
 	config.Host = "http://localhost:8080"
 	config.MaxConnections = 10
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -118,7 +120,7 @@ func TestNewGrayskullClient_DefaultWorkloadIsHostname(t *testing.T) {
 	config.Host = "http://localhost:8080"
 	config.MaxConnections = 10
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -147,7 +149,7 @@ func TestNewGrayskullClient_CustomWorkloadResolver(t *testing.T) {
 	customResolver := &mockWorkloadForHeaders{identity: "payment-service-pod-123"}
 	config.SetWorkloadIdentityResolver(customResolver)
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -172,7 +174,7 @@ func TestNewGrayskullClient_BothHeadersSet(t *testing.T) {
 	config.Host = "http://localhost:8080"
 	config.MaxConnections = 10
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -207,7 +209,7 @@ func TestNewGrayskullClient_HeadersOverwriteUserProvided(t *testing.T) {
 	config.AddDefaultHeader(apiconstants.HeaderUserAgent, "my-custom-agent/1.0")
 	config.AddDefaultHeader(apiconstants.HeaderWorkload, "user-provided-workload")
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -246,7 +248,7 @@ func TestNewGrayskullClient_WorkloadResolvedOnce(t *testing.T) {
 	}
 	config.SetWorkloadIdentityResolver(countingResolver)
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -274,7 +276,7 @@ func TestNewGrayskullClient_WorkloadResolverUsesConfiguredResolver(t *testing.T)
 		// Don't set WorkloadIdentityResolver - should use default
 	}
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)

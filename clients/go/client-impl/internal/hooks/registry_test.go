@@ -4,7 +4,6 @@ import (
 	"sync"
 	"testing"
 
-	apiHooks "github.com/flipkart-incubator/grayskull/clients/go/client-api/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 )
 
@@ -217,24 +216,12 @@ func TestConcurrentRegisterAndUnregister_ThreadSafe(t *testing.T) {
 	hook := func(_ models.SecretValue) error { return nil }
 
 	var wg sync.WaitGroup
-	wg.Add(numGoroutines * 2) // half register, half unregister
-
-	refs := make([]apiHooks.RefreshHandlerRef, numGoroutines)
+	wg.Add(numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
-		idx := i
 		go func() {
 			defer wg.Done()
-			refs[idx] = r.Register("proj", "sec", hook, 0)
-		}()
-	}
-
-	for i := 0; i < numGoroutines; i++ {
-		idx := i
-		go func() {
-			defer wg.Done()
-			if refs[idx] != nil {
-				refs[idx].Unregister()
-			}
+			ref := r.Register("proj", "sec", hook, 0)
+			ref.Unregister()
 		}()
 	}
 

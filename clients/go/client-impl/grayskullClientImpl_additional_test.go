@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	Client_API "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
-	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
@@ -49,9 +47,7 @@ func TestRegisterRefreshHook_Success(t *testing.T) {
 		registry:           registry,
 	}
 
-	var hookCalled bool
 	hook := func(v Client_API.SecretValue) error {
-		hookCalled = true
 		return nil
 	}
 
@@ -291,7 +287,7 @@ func TestGetSecret_MultipleCallsSameSecret_SeedUsesLastObservedVersion(t *testin
 
 	// Register hook - should seed with v11
 	hook := func(v Client_API.SecretValue) error { return nil }
-	ref, err := client.RegisterRefreshHook(context.Background(), "team:rotating", hook)
+	_, err = client.RegisterRefreshHook(context.Background(), "team:rotating", hook)
 	assert.NoError(t, err)
 
 	// Verify lastKnownVersion was seeded with 11 (last observed)
@@ -449,12 +445,12 @@ func TestTwoHooksSameSecret_SecondRegistrationLeavesVersionIntact(t *testing.T) 
 	assert.NoError(t, err)
 
 	// Register first hook (seeds lastKnownVersion=8)
-	hook1 := func(v interface{}) error { return nil }
+	hook1 := func(v Client_API.SecretValue) error { return nil }
 	_, err = client.RegisterRefreshHook(context.Background(), "team:shared", hook1)
 	assert.NoError(t, err)
 
 	// Register second hook (should not overwrite version)
-	hook2 := func(v interface{}) error { return nil }
+	hook2 := func(v Client_API.SecretValue) error { return nil }
 	_, err = client.RegisterRefreshHook(context.Background(), "team:shared", hook2)
 	assert.NoError(t, err)
 
@@ -469,6 +465,7 @@ func TestTwoHooksSameSecret_SecondRegistrationLeavesVersionIntact(t *testing.T) 
 func TestRegisterRefreshHook_AfterClose_Throws(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockHTTPClientWithPost{}
+	mockHTTPClient.On("Close").Return(nil)
 
 	config := &models.GrayskullClientConfiguration{
 		Host:           "http://localhost:8080",
@@ -717,7 +714,7 @@ func TestNewGrayskullClient_WithDefaultPollInterval(t *testing.T) {
 	config.MaxConnections = 10
 	config.PollingIntervalSeconds = 0 // Should use default
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -735,7 +732,7 @@ func TestNewGrayskullClient_WithCustomPollInterval(t *testing.T) {
 	config.MaxConnections = 10
 	config.PollingIntervalSeconds = 120 // 2 minutes
 
-	client, err := NewGrayskullClient(mockAuth, config, nil)
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
