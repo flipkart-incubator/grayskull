@@ -2,6 +2,8 @@ package workload
 
 import (
 	"testing"
+
+	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
 )
 
 // TestNewDefaultWorkloadIdentityResolver_ResolvesHostname verifies that the
@@ -58,5 +60,5 @@ func TestResolveHostname_NeverReturnsEmpty(t *testing.T) {
 // TestDefaultWorkloadIdentityResolver_ImplementsInterface verifies the resolver
 // implements the WorkloadIdentityResolver interface.
 func TestDefaultWorkloadIdentityResolver_ImplementsInterface(t *testing.T) {
-	var _ WorkloadIdentityResolver = (*DefaultWorkloadIdentityResolver)(nil)
+	var _ clientapiworkload.WorkloadIdentityResolver = (*DefaultWorkloadIdentityResolver)(nil)
 }

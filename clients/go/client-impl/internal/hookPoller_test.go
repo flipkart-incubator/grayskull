@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
-	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/batch"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
@@ -564,7 +563,7 @@ func TestPollOnce_WithoutGetSecret_SendsLastKnownVersionZero(t *testing.T) {
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(nil)
 
-	registry.Register("acme", "no-get-secret", func(_ interface{}) error { return nil }, 0)
+	registry.Register("acme", "no-get-secret", func(_ models.SecretValue) error { return nil }, 0)
 
 	poller := NewPoller(PollerConfig{
 		BaseURL:         "https://test.example.com",
@@ -589,7 +588,7 @@ func TestPollOnce_WithoutGetSecret_SendsLastKnownVersionZero(t *testing.T) {
 }
 
 // TestNewPoller_DefaultInterval verifies that when interval <= 0, the poller
-// uses the default interval from constants.
+// uses the default interval from Poller defaults.
 func TestNewPoller_DefaultInterval(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -604,7 +603,7 @@ func TestNewPoller_DefaultInterval(t *testing.T) {
 	})
 	defer poller.Close()
 
-	expectedInterval := time.Duration(constants.DefaultPollIntervalSeconds) * time.Second
+	expectedInterval := time.Duration(defaultPollingIntervalSeconds) * time.Second
 	if poller.interval != expectedInterval {
 		t.Errorf("poller interval = %v, want %v (default)", poller.interval, expectedInterval)
 	}
@@ -701,7 +700,7 @@ func TestDispatcherLoop_StopsOnClose(t *testing.T) {
 	select {
 	case <-done:
 		// Success
-	case <-time.After(constants.ShutdownAwait + 1*time.Second):
+	case <-time.After(shutdownAwait + 1*time.Second):
 		t.Error("Close did not return within expected shutdown window")
 	}
 }
@@ -715,7 +714,7 @@ func TestInvokeHookSafe_HookReturnsError_RecordsMetrics(t *testing.T) {
 	mockMetrics := metrics.NewPrometheusRecorder(nil)
 
 	hookErr := errors.New("hook failed")
-	hook := func(_ interface{}) error {
+	hook := func(_ models.SecretValue) error {
 		return hookErr
 	}
 

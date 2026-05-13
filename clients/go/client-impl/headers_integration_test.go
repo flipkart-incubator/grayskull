@@ -3,10 +3,10 @@ package client_impl
 import (
 	"testing"
 
+	apiconstants "github.com/flipkart-incubator/grayskull/clients/go/client-api/constants"
+	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
-	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
-	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/workload"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,7 +43,7 @@ func TestNewGrayskullClient_SetsUserAgentHeader(t *testing.T) {
 	headers := config.GetDefaultHeaders()
 	assert.NotNil(t, headers)
 
-	userAgent, exists := headers[constants.HeaderUserAgent]
+	userAgent, exists := headers[apiconstants.HeaderUserAgent]
 	assert.True(t, exists, "User-Agent header should be set")
 	assert.Contains(t, userAgent, "grayskull-go/", "User-Agent should contain grayskull-go/")
 	assert.NotEmpty(t, userAgent, "User-Agent should not be empty")
@@ -67,7 +67,7 @@ func TestNewGrayskullClient_UserAgentFormat(t *testing.T) {
 	assert.NotNil(t, client)
 
 	headers := config.GetDefaultHeaders()
-	userAgent := headers[constants.HeaderUserAgent]
+	userAgent := headers[apiconstants.HeaderUserAgent]
 
 	// Should match pattern: grayskull-go/<version>
 	// Version can be "dev" (default) or a build-time injected version
@@ -96,7 +96,7 @@ func TestNewGrayskullClient_SetsWorkloadHeader(t *testing.T) {
 	headers := config.GetDefaultHeaders()
 	assert.NotNil(t, headers)
 
-	workloadHeader, exists := headers[constants.HeaderWorkload]
+	workloadHeader, exists := headers[apiconstants.HeaderWorkload]
 	assert.True(t, exists, "Grayskull-Workload header should be set")
 	assert.NotEmpty(t, workloadHeader, "Grayskull-Workload should not be empty")
 
@@ -124,7 +124,7 @@ func TestNewGrayskullClient_DefaultWorkloadIsHostname(t *testing.T) {
 	assert.NotNil(t, client)
 
 	headers := config.GetDefaultHeaders()
-	workloadHeader := headers[constants.HeaderWorkload]
+	workloadHeader := headers[apiconstants.HeaderWorkload]
 
 	// Should be either a valid hostname or "UNKNOWN" (fallback)
 	assert.True(t, len(workloadHeader) > 0, "Workload header should have content")
@@ -154,7 +154,7 @@ func TestNewGrayskullClient_CustomWorkloadResolver(t *testing.T) {
 
 	// Verify custom workload identity was used
 	headers := config.GetDefaultHeaders()
-	workloadHeader := headers[constants.HeaderWorkload]
+	workloadHeader := headers[apiconstants.HeaderWorkload]
 
 	assert.Equal(t, "payment-service-pod-123", workloadHeader, "Custom workload identity should be used")
 
@@ -180,8 +180,8 @@ func TestNewGrayskullClient_BothHeadersSet(t *testing.T) {
 	headers := config.GetDefaultHeaders()
 
 	// Both headers should be present
-	userAgent, hasUserAgent := headers[constants.HeaderUserAgent]
-	workload, hasWorkload := headers[constants.HeaderWorkload]
+	userAgent, hasUserAgent := headers[apiconstants.HeaderUserAgent]
+	workload, hasWorkload := headers[apiconstants.HeaderWorkload]
 
 	assert.True(t, hasUserAgent, "User-Agent header should be set")
 	assert.True(t, hasWorkload, "Grayskull-Workload header should be set")
@@ -204,8 +204,8 @@ func TestNewGrayskullClient_HeadersOverwriteUserProvided(t *testing.T) {
 	config.MaxConnections = 10
 
 	// User tries to set their own User-Agent and Workload headers
-	config.AddDefaultHeader(constants.HeaderUserAgent, "my-custom-agent/1.0")
-	config.AddDefaultHeader(constants.HeaderWorkload, "user-provided-workload")
+	config.AddDefaultHeader(apiconstants.HeaderUserAgent, "my-custom-agent/1.0")
+	config.AddDefaultHeader(apiconstants.HeaderWorkload, "user-provided-workload")
 
 	client, err := NewGrayskullClient(mockAuth, config, nil)
 
@@ -215,8 +215,8 @@ func TestNewGrayskullClient_HeadersOverwriteUserProvided(t *testing.T) {
 	headers := config.GetDefaultHeaders()
 
 	// SDK headers should have overwritten the user-provided ones
-	userAgent := headers[constants.HeaderUserAgent]
-	workload := headers[constants.HeaderWorkload]
+	userAgent := headers[apiconstants.HeaderUserAgent]
+	workload := headers[apiconstants.HeaderWorkload]
 
 	assert.Contains(t, userAgent, "grayskull-go/", "SDK User-Agent should overwrite user-provided")
 	assert.NotEqual(t, "my-custom-agent/1.0", userAgent, "User-provided User-Agent should be overwritten")
@@ -255,7 +255,7 @@ func TestNewGrayskullClient_WorkloadResolvedOnce(t *testing.T) {
 	assert.Equal(t, 1, callCount, "Workload resolver should be called exactly once")
 
 	headers := config.GetDefaultHeaders()
-	workload := headers[constants.HeaderWorkload]
+	workload := headers[apiconstants.HeaderWorkload]
 	assert.Equal(t, "test-identity", workload)
 
 	// Clean up
@@ -281,7 +281,7 @@ func TestNewGrayskullClient_WorkloadResolverUsesConfiguredResolver(t *testing.T)
 
 	// When no resolver is set, GetWorkloadIdentityResolver returns default
 	headers := config.GetDefaultHeaders()
-	workload := headers[constants.HeaderWorkload]
+	workload := headers[apiconstants.HeaderWorkload]
 
 	assert.NotEmpty(t, workload, "Should use default workload resolver when none configured")
 
@@ -304,7 +304,7 @@ func (r *countingWorkloadResolver) Resolve() string {
 
 // Verify interfaces are implemented correctly at compile time
 var (
-	_ workload.WorkloadIdentityResolver = (*mockWorkloadForHeaders)(nil)
-	_ workload.WorkloadIdentityResolver = (*countingWorkloadResolver)(nil)
-	_ auth.GrayskullAuthHeaderProvider   = (*mockAuthForHeaders)(nil)
+	_ clientapiworkload.WorkloadIdentityResolver = (*mockWorkloadForHeaders)(nil)
+	_ clientapiworkload.WorkloadIdentityResolver = (*countingWorkloadResolver)(nil)
+	_ auth.GrayskullAuthHeaderProvider           = (*mockAuthForHeaders)(nil)
 )

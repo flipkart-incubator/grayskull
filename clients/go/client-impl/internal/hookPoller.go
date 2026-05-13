@@ -42,6 +42,13 @@ type dispatchJob struct {
 	state     *hooks.SecretState
 }
 
+const (
+	defaultPollingIntervalSeconds = 60
+	dispatcherWorkers             = 5
+	maxBatchSize                  = 50
+	shutdownAwait                 = 10 * time.Second
+)
+
 // PollerConfig configures a new Poller. Mirrors the HookRefreshPoller constructor.
 type PollerConfig struct {
 	BaseURL         string
@@ -57,7 +64,7 @@ type PollerConfig struct {
 func NewPoller(cfg PollerConfig) *Poller {
 	interval := cfg.Interval
 	if interval <= 0 {
-		interval = time.Duration(constants.DefaultPollIntervalSeconds) * time.Second
+		interval = time.Duration(defaultPollingIntervalSeconds) * time.Second
 	}
 	logger := cfg.Logger
 	if logger == nil {
@@ -70,7 +77,7 @@ func NewPoller(cfg PollerConfig) *Poller {
 		interval:        interval,
 		metricsRecorder: cfg.MetricsRecorder,
 		logger:          logger,
-		dispatchCh:      make(chan dispatchJob, constants.DispatcherWorkers*4),
+		dispatchCh:      make(chan dispatchJob, dispatcherWorkers*4),
 		stopCh:          make(chan struct{}),
 	}
 }
@@ -78,7 +85,7 @@ func NewPoller(cfg PollerConfig) *Poller {
 // Start kicks off the ticker goroutine and the dispatcher worker pool.
 // Safe to call once; subsequent calls are no-ops.
 func (p *Poller) Start() {
-	for i := 0; i < constants.DispatcherWorkers; i++ {
+	for i := 0; i < dispatcherWorkers; i++ {
 		p.wg.Add(1)
 		go p.dispatcherLoop()
 	}
@@ -86,7 +93,7 @@ func (p *Poller) Start() {
 	go p.pollLoop()
 }
 
-// Close stops the ticker and dispatcher and waits up to constants.ShutdownAwait
+// Close stops the ticker and dispatcher and waits up to shutdownAwait
 // for in-flight work to finish.
 func (p *Poller) Close() {
 	p.stopOnce.Do(func() {
@@ -99,9 +106,9 @@ func (p *Poller) Close() {
 	}()
 	select {
 	case <-done:
-	case <-time.After(constants.ShutdownAwait):
+	case <-time.After(shutdownAwait):
 		p.logger.Warn("poller did not stop within shutdown window; abandoning workers",
-			"timeout", constants.ShutdownAwait)
+			"timeout", shutdownAwait)
 	}
 }
 
@@ -167,8 +174,8 @@ func (p *Poller) PollOnce(ctx context.Context) {
 	pollFailed := false
 	anyUpdated := false
 
-	for from := 0; from < totalSecrets; from += constants.MaxBatchSize {
-		to := from + constants.MaxBatchSize
+	for from := 0; from < totalSecrets; from += maxBatchSize {
+		to := from + maxBatchSize
 		if to > totalSecrets {
 			to = totalSecrets
 		}

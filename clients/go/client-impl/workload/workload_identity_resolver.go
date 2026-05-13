@@ -3,14 +3,9 @@ package workload
 import (
 	"log/slog"
 	"os"
-)
 
-// WorkloadIdentityResolver resolves workload identity for the Grayskull-Workload
-// header, usually called once at client startup.
-type WorkloadIdentityResolver interface {
-	// Resolve returns the workload identity string (e.g., hostname, pod name, etc.)
-	Resolve() string
-}
+	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
+)
 
 // DefaultWorkloadIdentityResolver is the default implementation that returns
 // the local hostname. The identity is resolved once in the constructor.
@@ -47,3 +42,5 @@ func resolveHostname() string {
 	}
 	return hostname
 }
+
+var _ clientapiworkload.WorkloadIdentityResolver = (*DefaultWorkloadIdentityResolver)(nil)

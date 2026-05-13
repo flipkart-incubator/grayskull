@@ -152,10 +152,10 @@ func (c *GrayskullHTTPClient) applyHeaders(ctx context.Context, req *http.Reques
 	if authHeader == "" {
 		return errors.New("auth header cannot be empty")
 	}
-	req.Header.Set(constants.HeaderAuthorization, authHeader)
+	req.Header.Set("Authorization", authHeader)
 
 	if requestID := ctx.Value(constants.GrayskullRequestID); requestID != nil {
-		req.Header.Set(constants.HeaderRequestID, fmt.Sprintf("%v", requestID))
+		req.Header.Set("X-Request-Id", fmt.Sprintf("%v", requestID))
 	}
 	return nil
 }

@@ -1,9 +1,11 @@
 package models
 
 import (
-	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
+	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/workload"
 )
+
+const defaultPollingIntervalSeconds = 60
 
 // GrayskullClientConfiguration holds all the necessary configuration parameters
 // required to connect to and interact with the Grayskull service.
@@ -72,7 +74,7 @@ type GrayskullClientConfiguration struct {
 	// WorkloadIdentityResolver resolves the workload identity for the Grayskull-Workload header.
 	// Defaults to DefaultWorkloadIdentityResolver (hostname). Can be customized for
 	// richer identity (e.g., Kubernetes pod name, ECS task ID, etc.).
-	WorkloadIdentityResolver workload.WorkloadIdentityResolver
+	WorkloadIdentityResolver clientapiworkload.WorkloadIdentityResolver
 
 	// defaultHeaders holds headers added to every outbound request. Populated
 	// via AddDefaultHeader; not meant to be set directly from JSON/YAML.
@@ -106,14 +108,14 @@ func (c *GrayskullClientConfiguration) GetDefaultHeaders() map[string]string {
 
 // SetWorkloadIdentityResolver sets a custom workload identity resolver.
 // If nil, the client will use the default resolver (hostname).
-func (c *GrayskullClientConfiguration) SetWorkloadIdentityResolver(resolver workload.WorkloadIdentityResolver) {
+func (c *GrayskullClientConfiguration) SetWorkloadIdentityResolver(resolver clientapiworkload.WorkloadIdentityResolver) {
 	if resolver != nil {
 		c.WorkloadIdentityResolver = resolver
 	}
 }
 
 // GetWorkloadIdentityResolver returns the configured resolver, or a default one if not set.
-func (c *GrayskullClientConfiguration) GetWorkloadIdentityResolver() workload.WorkloadIdentityResolver {
+func (c *GrayskullClientConfiguration) GetWorkloadIdentityResolver() clientapiworkload.WorkloadIdentityResolver {
 	if c.WorkloadIdentityResolver == nil {
 		return workload.NewDefaultWorkloadIdentityResolver()
 	}
@@ -133,7 +135,7 @@ func NewDefaultConfig() *GrayskullClientConfiguration {
 		MaxRetries:               3,
 		MinRetryDelay:            100, // 100ms
 		MetricsEnabled:           true,
-		PollingIntervalSeconds:   constants.DefaultPollIntervalSeconds,
+		PollingIntervalSeconds:   defaultPollingIntervalSeconds,
 		WorkloadIdentityResolver: workload.NewDefaultWorkloadIdentityResolver(),
 	}
 }

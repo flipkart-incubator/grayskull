@@ -12,6 +12,7 @@ import (
 	"time"
 
 	clientapi "github.com/flipkart-incubator/grayskull/clients/go/client-api"
+	apiconstants "github.com/flipkart-incubator/grayskull/clients/go/client-api/constants"
 	Client_API_Hooks "github.com/flipkart-incubator/grayskull/clients/go/client-api/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
@@ -40,6 +41,8 @@ type GrayskullClientImpl struct {
 }
 
 var validate = validator.New()
+
+const defaultPollingIntervalSeconds = 60
 
 // validateConfig validates the GrayskullClientConfiguration using go-playground/validator
 func validateConfig(config *models.GrayskullClientConfiguration) error {
@@ -83,11 +86,11 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 
 	// Set Grayskull-Workload header: identity from resolver (resolved once)
 	identity := config.GetWorkloadIdentityResolver().Resolve()
-	config.AddDefaultHeader(constants.HeaderWorkload, identity)
+	config.AddDefaultHeader(apiconstants.HeaderWorkload, identity)
 
 	// Set User-Agent header: SDK product/version only (grayskull-go/<version>)
 	userAgent := "grayskull-go/" + GetVersion()
-	config.AddDefaultHeader(constants.HeaderUserAgent, userAgent)
+	config.AddDefaultHeader(apiconstants.HeaderUserAgent, userAgent)
 
 	// Use default logger and Prometheus metrics recorder if not provided
 	logger := slog.Default().With("component", "grayskull-client")
@@ -112,7 +115,7 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 
 	interval := time.Duration(config.PollingIntervalSeconds) * time.Second
 	if interval <= 0 {
-		interval = time.Duration(constants.DefaultPollIntervalSeconds) * time.Second
+		interval = time.Duration(defaultPollingIntervalSeconds) * time.Second
 	}
 	client.poller = internal.NewPoller(internal.PollerConfig{
 		BaseURL:         config.Host,
