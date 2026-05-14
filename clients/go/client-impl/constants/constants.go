@@ -7,5 +7,6 @@ type contextKey string
 // Applications can reference these keys in their logging patterns.
 const (
 	// GrayskullRequestID is the unique request identifier for correlating logs across the request lifecycle.
+	// Also sent as the X-Request-Id header to enable end-to-end tracing.
 	GrayskullRequestID contextKey = "grayskullRequestId"
 )

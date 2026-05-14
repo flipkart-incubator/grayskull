@@ -100,10 +100,6 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 
 	httpClient := internal.NewGrayskullHTTPClient(authProvider, config, logger, metricsRecorder)
 
-	if concrete, ok := httpClient.(*internal.GrayskullHTTPClient); ok {
-		concrete.SetCustomHeaders(config.GetDefaultHeaders())
-	}
-
 	client := &GrayskullClientImpl{
 		baseURL:            config.Host,
 		authHeaderProvider: authProvider,

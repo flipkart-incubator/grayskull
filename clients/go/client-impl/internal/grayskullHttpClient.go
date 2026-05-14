@@ -78,6 +78,7 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 		retryConfig:        retryConfig,
 		logger:             logger,
 		metricsRecorder:    metricsRecorder,
+		customHeaders:      config.GetDefaultHeaders(),
 	}
 }
 
@@ -85,21 +86,6 @@ func NewGrayskullHTTPClient(authProvider auth.GrayskullAuthHeaderProvider, confi
 type httpResponse struct {
 	Body       string
 	StatusCode int
-}
-
-// SetCustomHeaders replaces the set of caller-supplied headers that the
-// transport applies to every outbound request. Internal headers (Authorization,
-// X-Request-Id) always take precedence and are written after these.
-func (c *GrayskullHTTPClient) SetCustomHeaders(h map[string]string) {
-	if len(h) == 0 {
-		c.customHeaders = nil
-		return
-	}
-	copied := make(map[string]string, len(h))
-	for k, v := range h {
-		copied[k] = v
-	}
-	c.customHeaders = copied
 }
 
 // DoGetWithRetry performs a GET request with retry logic and unmarshals the response into the provided type
