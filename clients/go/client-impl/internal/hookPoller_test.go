@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/batch"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
@@ -614,7 +615,7 @@ func TestNewPoller_DefaultInterval(t *testing.T) {
 	})
 	defer poller.Close()
 
-	expectedInterval := time.Duration(defaultPollingIntervalSeconds) * time.Second
+	expectedInterval := time.Duration(constants.DefaultPollingIntervalSeconds) * time.Second
 	if poller.interval != expectedInterval {
 		t.Errorf("poller interval = %v, want %v (default)", poller.interval, expectedInterval)
 	}
@@ -763,4 +764,204 @@ func TestInvokeHookSafe_HookReturnsError_RecordsMetrics(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Test passes if no panic and error is logged (we can't easily verify logs here)
+}
+
+func TestSafePollOnce_RecoversWhenPollOncePanics(t *testing.T) {
+	mockClient := &mockHTTPClient{}
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockClient,
+		Registry:        nil, // nil registry causes PollOnce panic; safePollOnce must recover
+		Interval:        10 * time.Millisecond,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	// Should not panic despite nil registry
+	poller.safePollOnce()
+}
+
+func TestPollOnce_ErrorWithZeroStatusFallsBackTo500(t *testing.T) {
+	mockClient := &mockHTTPClient{}
+	registry := hooks.NewRegistry()
+	registry.Register("acme", "zero-status", func(_ models.SecretValue) error { return nil }, 0)
+
+	// Return code=0 + err to hit fallback statusCode=500 path.
+	mockClient.addPostResponse(0, nil, errors.New("network down"))
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockClient,
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	// Should not panic; path of interest is internal fallback status assignment.
+	poller.PollOnce(context.Background())
+}
+
+func TestHandleUpdatedSecret_ChannelFullFallsBackWithoutBlocking(t *testing.T) {
+	mockClient := &mockHTTPClient{}
+	registry := hooks.NewRegistry()
+	registry.Register("acme", "full-chan", func(_ models.SecretValue) error { return nil }, 0)
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockClient,
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	// Force send default branch by using an unbuffered channel with no receiver.
+	poller.dispatchCh = make(chan dispatchJob)
+	poller.handleUpdatedSecret(batch.UpdatedSecret{
+		ProjectID:   "acme",
+		SecretName:  "full-chan",
+		DataVersion: 11,
+		PublicPart:  "p",
+		PrivatePart: "q",
+	})
+
+	state := registry.Get("acme:full-chan")
+	if state == nil {
+		t.Fatal("state should exist")
+	}
+	if !state.HasPending() {
+		t.Fatal("pending value should still be staged when dispatch channel is full")
+	}
+}
+
+func TestRunHooksFor_NoOpWhenExecutionAlreadyHeld(t *testing.T) {
+	mockClient := &mockHTTPClient{}
+	registry := hooks.NewRegistry()
+	state := registry.Register("acme", "locked", func(_ models.SecretValue) error { return nil }, 0)
+	_ = state
+	secretState := registry.Get("acme:locked")
+	if secretState == nil {
+		t.Fatal("state should exist")
+	}
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockClient,
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	secretState.SetPending(&models.SecretValue{DataVersion: 1})
+	if !secretState.TryAcquireExecution() {
+		t.Fatal("expected to acquire execution lock for setup")
+	}
+	poller.runHooksFor("acme:locked", secretState)
+	secretState.ReleaseExecution()
+
+	// If method returned due to lock held, pending should remain.
+	if !secretState.HasPending() {
+		t.Fatal("pending should remain when runHooksFor exits due to execution lock")
+	}
+}
+
+func TestInvokeHookSafe_ErrorPathCovered(t *testing.T) {
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	poller.invokeHookSafe("acme:err", func(_ models.SecretValue) error {
+		return errors.New("hook failure")
+	}, models.SecretValue{DataVersion: 1})
+}
+
+func TestRecoverFromPanic_SwallowsPanic(t *testing.T) {
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	func() {
+		defer poller.recoverFromPanic("test-loop")
+		panic("boom")
+	}()
+}
+
+func TestClose_TimeoutPathCovered(t *testing.T) {
+	original := shutdownAwait
+	shutdownAwait = 5 * time.Millisecond
+	t.Cleanup(func() { shutdownAwait = original })
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+
+	// Simulate a stuck worker so Close hits timeout path.
+	poller.wg.Add(1)
+	poller.Close()
+}
+
+func TestPollOnce_MarshalFailurePathCovered(t *testing.T) {
+	original := marshalBatchRequest
+	marshalBatchRequest = func(v any) ([]byte, error) {
+		return nil, errors.New("marshal exploded")
+	}
+	t.Cleanup(func() { marshalBatchRequest = original })
+
+	registry := hooks.NewRegistry()
+	registry.Register("acme", "marshal-fail", func(_ models.SecretValue) error { return nil }, 0)
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	// Should continue gracefully after marshal error path.
+	poller.PollOnce(context.Background())
+}
+
+func TestResubmitIfPending_CoversStopAndDefaultPaths(t *testing.T) {
+	registry := hooks.NewRegistry()
+	registry.Register("acme", "resubmit", func(_ models.SecretValue) error { return nil }, 0)
+	state := registry.Get("acme:resubmit")
+	if state == nil {
+		t.Fatal("state should exist")
+	}
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+
+	// Cover default branch when dispatch channel cannot accept immediately.
+	poller.dispatchCh = make(chan dispatchJob)
+	state.SetPending(&models.SecretValue{DataVersion: 1})
+	poller.resubmitIfPending("acme:resubmit", state)
+
+	// Cover stop branch.
+	close(poller.stopCh)
+	state.SetPending(&models.SecretValue{DataVersion: 2})
+	poller.resubmitIfPending("acme:resubmit", state)
 }

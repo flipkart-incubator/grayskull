@@ -46,3 +46,13 @@ func TestVersion_GlobalVariable(t *testing.T) {
 		t.Error("Version global variable is empty, expected default value 'dev'")
 	}
 }
+
+func TestGetVersion_ReturnsUnknownWhenVersionEmpty(t *testing.T) {
+	original := Version
+	t.Cleanup(func() { Version = original })
+	Version = ""
+
+	if got := GetVersion(); got != "unknown" {
+		t.Errorf("GetVersion() = %q, want %q when Version is empty", got, "unknown")
+	}
+}

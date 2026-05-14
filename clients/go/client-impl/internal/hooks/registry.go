@@ -91,9 +91,3 @@ func (r *Registry) Snapshot() []*SecretState {
 	return out
 }
 
-// Len returns the number of registered secrets.
-func (r *Registry) Len() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return len(r.byRef)
-}

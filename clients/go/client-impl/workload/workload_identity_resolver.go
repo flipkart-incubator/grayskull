@@ -14,6 +14,7 @@ type DefaultWorkloadIdentityResolver struct {
 }
 
 const unknownHost = "UNKNOWN"
+var hostnameResolver = os.Hostname
 
 // NewDefaultWorkloadIdentityResolver creates a new resolver that uses the local hostname.
 // The hostname is resolved immediately and cached for subsequent Resolve() calls.
@@ -31,7 +32,7 @@ func (r *DefaultWorkloadIdentityResolver) Resolve() string {
 
 // resolveHostname attempts to get the local hostname, falling back to "UNKNOWN" on error.
 func resolveHostname() string {
-	hostname, err := os.Hostname()
+	hostname, err := hostnameResolver()
 	if err != nil {
 		slog.Warn("Could not resolve local hostname for telemetry", "error", err)
 		return unknownHost

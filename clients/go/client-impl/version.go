@@ -8,8 +8,9 @@ package client_impl
 //
 //	go build -ldflags "-X github.com/flipkart-incubator/grayskull/clients/go/client-impl.Version=1.0.0-snapshot"
 //
-// Version format: MAJOR.MINOR.PATCH (semantic versioning)
-const Version = "0.3.0"
+// Version format: MAJOR.MINOR.PATCH (semantic versioning).
+// Kept as var so release builds can override it with -ldflags -X.
+var Version = "0.3.0"
 
 // GetVersion returns the SDK version string.
 func GetVersion() string {

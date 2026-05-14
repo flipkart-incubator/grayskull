@@ -11,12 +11,8 @@ import (
 func TestNewRegistry_IsEmpty(t *testing.T) {
 	r := NewRegistry()
 
-	if r.Len() != 0 {
-		t.Errorf("Len() = %d, want 0 for new registry", r.Len())
-	}
-
 	snapshot := r.Snapshot()
-	if snapshot != nil && len(snapshot) != 0 {
+	if len(snapshot) != 0 {
 		t.Errorf("Snapshot() = %v, want nil or empty for new registry", snapshot)
 	}
 }
@@ -119,8 +115,8 @@ func TestUnregister_LastHook_RemovesState(t *testing.T) {
 	if state != nil {
 		t.Error("state should be removed after unregistering the last hook")
 	}
-	if r.Len() != 0 {
-		t.Errorf("Len() = %d, want 0 after removing last hook", r.Len())
+	if got := len(r.Snapshot()); got != 0 {
+		t.Errorf("len(Snapshot()) = %d, want 0 after removing last hook", got)
 	}
 }
 
@@ -175,35 +171,35 @@ func TestSnapshot_EmptyRegistry_ReturnsNilOrEmpty(t *testing.T) {
 
 	snapshot := r.Snapshot()
 
-	if snapshot != nil && len(snapshot) != 0 {
+	if len(snapshot) != 0 {
 		t.Errorf("Snapshot() on empty registry = %v, want nil or empty", snapshot)
 	}
 }
 
-// TestLen_ReflectsRegistrySize verifies that Len accurately reports the
+// TestSnapshot_ReflectsRegistrySize verifies that Snapshot length tracks
 // number of unique secrets registered.
-func TestLen_ReflectsRegistrySize(t *testing.T) {
+func TestSnapshot_ReflectsRegistrySize(t *testing.T) {
 	r := NewRegistry()
 	hook := func(_ models.SecretValue) error { return nil }
 
-	if r.Len() != 0 {
-		t.Errorf("initial Len() = %d, want 0", r.Len())
+	if got := len(r.Snapshot()); got != 0 {
+		t.Errorf("initial len(Snapshot()) = %d, want 0", got)
 	}
 
 	r.Register("proj", "sec1", hook, 0)
-	if r.Len() != 1 {
-		t.Errorf("Len() after 1 registration = %d, want 1", r.Len())
+	if got := len(r.Snapshot()); got != 1 {
+		t.Errorf("len(Snapshot()) after 1 registration = %d, want 1", got)
 	}
 
 	r.Register("proj", "sec2", hook, 0)
-	if r.Len() != 2 {
-		t.Errorf("Len() after 2 registrations = %d, want 2", r.Len())
+	if got := len(r.Snapshot()); got != 2 {
+		t.Errorf("len(Snapshot()) after 2 registrations = %d, want 2", got)
 	}
 
-	// Registering a second hook for sec1 should not increase Len
+	// Registering a second hook for sec1 should not increase unique secret count
 	r.Register("proj", "sec1", hook, 0)
-	if r.Len() != 2 {
-		t.Errorf("Len() after adding second hook to same secret = %d, want 2", r.Len())
+	if got := len(r.Snapshot()); got != 2 {
+		t.Errorf("len(Snapshot()) after adding second hook to same secret = %d, want 2", got)
 	}
 }
 
@@ -291,8 +287,8 @@ func TestRegister_MultipleSecretsInParallel_AllTracked(t *testing.T) {
 
 	wg.Wait()
 
-	if got := r.Len(); got != numSecrets {
-		t.Errorf("Len() = %d, want %d after parallel registrations", got, numSecrets)
+	if got := len(r.Snapshot()); got != numSecrets {
+		t.Errorf("len(Snapshot()) = %d, want %d after parallel registrations", got, numSecrets)
 	}
 
 	snapshot := r.Snapshot()
@@ -314,8 +310,8 @@ func TestUnregister_NonexistentSecretRef_NoOp(t *testing.T) {
 	ref.Unregister()
 
 	// Should not panic; registry remains empty
-	if r.Len() != 0 {
-		t.Errorf("Len() = %d, want 0 after redundant unregister", r.Len())
+	if got := len(r.Snapshot()); got != 0 {
+		t.Errorf("len(Snapshot()) = %d, want 0 after redundant unregister", got)
 	}
 }
 

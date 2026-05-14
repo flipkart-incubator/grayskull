@@ -42,8 +42,6 @@ type GrayskullClientImpl struct {
 
 var validate = validator.New()
 
-const defaultPollingIntervalSeconds = 60
-
 // validateConfig validates the GrayskullClientConfiguration using go-playground/validator
 func validateConfig(config *models.GrayskullClientConfiguration) error {
 	if err := validate.Struct(config); err != nil {
@@ -59,9 +57,10 @@ func validateConfig(config *models.GrayskullClientConfiguration) error {
 					return errors.NewGrayskullErrorWithMessage(fmt.Sprintf("%s cannot be negative", fieldErr.Field()))
 				case "gt":
 					return errors.NewGrayskullErrorWithMessage(fmt.Sprintf("%s must be greater than 0", fieldErr.Field()))
+				default:
+					return errors.NewGrayskullErrorWithMessage(validationErrors.Error())
 				}
 			}
-			return errors.NewGrayskullErrorWithMessage(validationErrors.Error())
 		}
 		return errors.NewGrayskullErrorWithCause(400, "invalid configuration", err)
 
@@ -111,7 +110,7 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 
 	interval := time.Duration(config.PollingIntervalSeconds) * time.Second
 	if interval <= 0 {
-		interval = time.Duration(defaultPollingIntervalSeconds) * time.Second
+		interval = time.Duration(constants.DefaultPollingIntervalSeconds) * time.Second
 	}
 	client.poller = internal.NewPoller(internal.PollerConfig{
 		BaseURL:         config.Host,

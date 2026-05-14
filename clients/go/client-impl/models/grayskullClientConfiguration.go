@@ -2,10 +2,9 @@ package models
 
 import (
 	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/workload"
 )
-
-const defaultPollingIntervalSeconds = 60
 
 // GrayskullClientConfiguration holds all the necessary configuration parameters
 // required to connect to and interact with the Grayskull service.
@@ -135,7 +134,7 @@ func NewDefaultConfig() *GrayskullClientConfiguration {
 		MaxRetries:               3,
 		MinRetryDelay:            100, // 100ms
 		MetricsEnabled:           true,
-		PollingIntervalSeconds:   defaultPollingIntervalSeconds,
+		PollingIntervalSeconds:   constants.DefaultPollingIntervalSeconds,
 		WorkloadIdentityResolver: workload.NewDefaultWorkloadIdentityResolver(),
 	}
 }

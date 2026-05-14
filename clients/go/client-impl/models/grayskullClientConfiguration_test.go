@@ -3,6 +3,7 @@ package models
 import (
 	"testing"
 
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,7 +23,7 @@ func TestNewDefaultConfig_ReturnsValidConfig(t *testing.T) {
 	assert.Equal(t, 3, config.MaxRetries)
 	assert.Equal(t, 100, config.MinRetryDelay)
 	assert.True(t, config.MetricsEnabled)
-	assert.Equal(t, defaultPollingIntervalSeconds, config.PollingIntervalSeconds)
+	assert.Equal(t, constants.DefaultPollingIntervalSeconds, config.PollingIntervalSeconds)
 }
 
 // TestAddDefaultHeader_AddsHeader verifies that AddDefaultHeader adds a header
@@ -246,7 +247,7 @@ func TestGetDefaultHeaders_ConsecutiveCalls_ReturnIndependentCopies(t *testing.T
 func TestNewDefaultConfig_PollingIntervalSeconds(t *testing.T) {
 	config := NewDefaultConfig()
 
-	assert.Equal(t, defaultPollingIntervalSeconds, config.PollingIntervalSeconds)
+	assert.Equal(t, constants.DefaultPollingIntervalSeconds, config.PollingIntervalSeconds)
 	assert.Equal(t, 60, config.PollingIntervalSeconds, "default should be 60 seconds")
 }
 

@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"errors"
 	"testing"
 
 	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
@@ -61,4 +62,28 @@ func TestResolveHostname_NeverReturnsEmpty(t *testing.T) {
 // implements the WorkloadIdentityResolver interface.
 func TestDefaultWorkloadIdentityResolver_ImplementsInterface(t *testing.T) {
 	var _ clientapiworkload.WorkloadIdentityResolver = (*DefaultWorkloadIdentityResolver)(nil)
+}
+
+func TestResolveHostname_FallsBackToUnknownOnResolverError(t *testing.T) {
+	original := hostnameResolver
+	t.Cleanup(func() { hostnameResolver = original })
+	hostnameResolver = func() (string, error) {
+		return "", errors.New("lookup failed")
+	}
+
+	if got := resolveHostname(); got != unknownHost {
+		t.Errorf("resolveHostname() = %q, want %q on error", got, unknownHost)
+	}
+}
+
+func TestResolveHostname_FallsBackToUnknownOnEmptyHostname(t *testing.T) {
+	original := hostnameResolver
+	t.Cleanup(func() { hostnameResolver = original })
+	hostnameResolver = func() (string, error) {
+		return "", nil
+	}
+
+	if got := resolveHostname(); got != unknownHost {
+		t.Errorf("resolveHostname() = %q, want %q on empty hostname", got, unknownHost)
+	}
 }

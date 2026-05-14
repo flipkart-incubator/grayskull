@@ -43,10 +43,13 @@ type dispatchJob struct {
 }
 
 const (
-	defaultPollingIntervalSeconds = 60
-	dispatcherWorkers             = 5
-	maxBatchSize                  = 50
-	shutdownAwait                 = 10 * time.Second
+	dispatcherWorkers = 5
+	maxBatchSize      = 50
+)
+
+var (
+	shutdownAwait      = 10 * time.Second
+	marshalBatchRequest = json.Marshal
 )
 
 // PollerConfig configures a new Poller. Mirrors the HookRefreshPoller constructor.
@@ -64,7 +67,7 @@ type PollerConfig struct {
 func NewPoller(cfg PollerConfig) *Poller {
 	interval := cfg.Interval
 	if interval <= 0 {
-		interval = time.Duration(defaultPollingIntervalSeconds) * time.Second
+		interval = time.Duration(constants.DefaultPollingIntervalSeconds) * time.Second
 	}
 	logger := cfg.Logger
 	if logger == nil {
@@ -181,7 +184,7 @@ func (p *Poller) PollOnce(ctx context.Context) {
 		}
 		chunk := entries[from:to]
 
-		body, err := json.Marshal(batch.BatchGetSecretsRequest{Secrets: chunk})
+		body, err := marshalBatchRequest(batch.BatchGetSecretsRequest{Secrets: chunk})
 		if err != nil {
 			pollFailed = true
 			statusCode = 500
@@ -274,15 +277,7 @@ func (p *Poller) runHooksFor(secretRef string, state *hooks.SecretState) {
 	}
 	defer func() {
 		state.ReleaseExecution()
-		// If a newer update slipped in after the drain loop but before we
-		// released the slot, re-queue so we don't lose it.
-		if state.HasPending() {
-			select {
-			case p.dispatchCh <- dispatchJob{secretRef: secretRef, state: state}:
-			case <-p.stopCh:
-			default:
-			}
-		}
+		p.resubmitIfPending(secretRef, state)
 	}()
 
 	for {
@@ -292,6 +287,18 @@ func (p *Poller) runHooksFor(secretRef string, state *hooks.SecretState) {
 		}
 		state.LastKnownVersion.Store(int32(value.DataVersion))
 		p.deliverToHooks(secretRef, state, *value)
+	}
+}
+
+func (p *Poller) resubmitIfPending(secretRef string, state *hooks.SecretState) {
+	// If a newer update slipped in after the drain loop but before we
+	// released the slot, re-queue so we don't lose it.
+	if state.HasPending() {
+		select {
+		case p.dispatchCh <- dispatchJob{secretRef: secretRef, state: state}:
+		case <-p.stopCh:
+		default:
+		}
 	}
 }
 
