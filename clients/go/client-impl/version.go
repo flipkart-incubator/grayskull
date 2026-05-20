@@ -10,7 +10,7 @@ package client_impl
 //
 // Version format: MAJOR.MINOR.PATCH (semantic versioning).
 // Kept as var so release builds can override it with -ldflags -X.
-var Version = "0.3.0"
+var Version = "0.2.1"
 
 // GetVersion returns the SDK version string.
 func GetVersion() string {
