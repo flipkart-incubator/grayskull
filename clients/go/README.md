@@ -161,9 +161,9 @@ import (
 )
 
 // Define a refresh hook function
-hook := func(secret models.SecretValue) error {
+hook := func(ctx context.Context, secret models.SecretValue) error {
     fmt.Printf("Secret updated! New version: %d\n", secret.DataVersion)
-    return updateCache(secret)
+    return updateCache(ctx, secret)
 }
 
 // Register the hook

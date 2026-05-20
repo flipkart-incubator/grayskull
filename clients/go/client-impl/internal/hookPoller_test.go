@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// mockHTTPClient implements GrayskullHTTPClientInterface for testing
+// mockHTTPClient is a test stub for GrayskullHTTPClientInterface.
 type mockHTTPClient struct {
 	mu            sync.Mutex
 	postResponses []postResponse
@@ -53,14 +53,12 @@ func (m *mockHTTPClient) DoPostWithRetry(ctx context.Context, url string, jsonBo
 			return resp.statusCode, resp.err
 		}
 		if result != nil && resp.response != nil {
-			// Marshal and unmarshal to simulate real behavior
 			data, _ := json.Marshal(resp.response)
 			json.Unmarshal(data, result)
 		}
 		return resp.statusCode, nil
 	}
 
-	// Default empty response
 	if result != nil {
 		emptyResp := response.Response[batch.BatchGetSecretsResponse]{
 			Data: batch.BatchGetSecretsResponse{
@@ -114,8 +112,7 @@ func (m *mockHTTPClient) resetPostCallCount() {
 	m.postCallCount = 0
 }
 
-// TestPollOnce_NoRegisteredSecrets_DoesNotPost verifies that when no secrets
-// are registered, PollOnce returns early without making an HTTP call.
+// Empty registry: PollOnce makes no HTTP call.
 func TestPollOnce_NoRegisteredSecrets_DoesNotPost(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -139,17 +136,15 @@ func TestPollOnce_NoRegisteredSecrets_DoesNotPost(t *testing.T) {
 	}
 }
 
-// TestPollOnce_SingleChunk_EmptyUpdatedSecrets_OnePost verifies that when
-// all registered secrets fit in one batch and no updates are returned,
-// exactly one POST is made.
+// One chunk fits all secrets; one POST with no updates returned.
 func TestPollOnce_SingleChunk_EmptyUpdatedSecrets_OnePost(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
 	// Register two secrets
-	registry.Register("acme", "db-pass", func(_ models.SecretValue) error { return nil }, 0)
-	registry.Register("acme", "api-key", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "db-pass", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "api-key", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 
 	poller := NewPoller(PollerConfig{
 		BaseURL:         "https://test.example.com",
@@ -169,15 +164,13 @@ func TestPollOnce_SingleChunk_EmptyUpdatedSecrets_OnePost(t *testing.T) {
 	}
 }
 
-// TestPollOnce_FiftyOneSecrets_TwoSequentialPosts verifies that when 51
-// secrets are registered (exceeding MaxBatchSize=50), two sequential POST
-// requests are made: one with 50 secrets and one with 1.
+// 51 registered secrets (> maxBatchSize=50): two sequential POSTs (50+1).
 func TestPollOnce_FiftyOneSecrets_TwoSequentialPosts(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
-	hook := func(_ models.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ models.SecretValue) error { return nil }
 	// Register 51 secrets
 	for i := 0; i < 51; i++ {
 		registry.Register("corp", fmt.Sprintf("svc-%d", i), hook, 0)
@@ -201,8 +194,7 @@ func TestPollOnce_FiftyOneSecrets_TwoSequentialPosts(t *testing.T) {
 	}
 }
 
-// TestPollOnce_BatchReturnsUpdatedSecret_InvokesHook verifies that when
-// the batch response includes an updated secret, the registered hook is invoked.
+// Updated secret in batch response invokes the registered hook.
 func TestPollOnce_BatchReturnsUpdatedSecret_InvokesHook(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -212,7 +204,7 @@ func TestPollOnce_BatchReturnsUpdatedSecret_InvokesHook(t *testing.T) {
 	var receivedVersion int
 	var mu sync.Mutex
 
-	hook := func(v models.SecretValue) error {
+	hook := func(_ context.Context, v models.SecretValue) error {
 		mu.Lock()
 		defer mu.Unlock()
 		receivedVersion = v.DataVersion
@@ -266,15 +258,13 @@ func TestPollOnce_BatchReturnsUpdatedSecret_InvokesHook(t *testing.T) {
 	mu.Unlock()
 }
 
-// TestPollOnce_FirstChunkFails_SecondChunkStillRuns verifies that when
-// the first chunk fails with a GrayskullException, the second chunk is
-// still processed.
+// First-chunk failure does not abort the second chunk.
 func TestPollOnce_FirstChunkFails_SecondChunkStillRuns(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
-	hook := func(_ models.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ models.SecretValue) error { return nil }
 	// Register 51 secrets to force two chunks
 	for i := 0; i < 51; i++ {
 		registry.Register("corp", fmt.Sprintf("svc-%d", i), hook, 0)
@@ -306,9 +296,7 @@ func TestPollOnce_FirstChunkFails_SecondChunkStillRuns(t *testing.T) {
 	}
 }
 
-// TestPollOnce_MultipleHooksForSameSecret_RunInRegistrationOrder verifies
-// that when multiple hooks are registered for the same secret, they are
-// invoked in the order they were registered.
+// Multiple hooks for one secret are invoked in registration order.
 func TestPollOnce_MultipleHooksForSameSecret_RunInRegistrationOrder(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -317,13 +305,13 @@ func TestPollOnce_MultipleHooksForSameSecret_RunInRegistrationOrder(t *testing.T
 	var order []int
 	var mu sync.Mutex
 
-	hook1 := func(_ models.SecretValue) error {
+	hook1 := func(_ context.Context, _ models.SecretValue) error {
 		mu.Lock()
 		order = append(order, 1)
 		mu.Unlock()
 		return nil
 	}
-	hook2 := func(_ models.SecretValue) error {
+	hook2 := func(_ context.Context, _ models.SecretValue) error {
 		mu.Lock()
 		order = append(order, 2)
 		mu.Unlock()
@@ -375,8 +363,7 @@ func TestPollOnce_MultipleHooksForSameSecret_RunInRegistrationOrder(t *testing.T
 	}
 }
 
-// TestPollOnce_HookThrows_SwallowsAndContinues verifies that when the first
-// hook panics or returns an error, the second hook is still invoked.
+// First hook panicking or erroring does not block the second hook.
 func TestPollOnce_HookThrows_SwallowsAndContinues(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -384,10 +371,10 @@ func TestPollOnce_HookThrows_SwallowsAndContinues(t *testing.T) {
 
 	var secondHookCalled atomic.Bool
 
-	hook1 := func(_ models.SecretValue) error {
+	hook1 := func(_ context.Context, _ models.SecretValue) error {
 		panic("consumer bug")
 	}
-	hook2 := func(_ models.SecretValue) error {
+	hook2 := func(_ context.Context, _ models.SecretValue) error {
 		secondHookCalled.Store(true)
 		return nil
 	}
@@ -432,15 +419,13 @@ func TestPollOnce_HookThrows_SwallowsAndContinues(t *testing.T) {
 	}
 }
 
-// TestPollOnce_ChunkInvalidJson_ContinuesGracefully verifies that when
-// the HTTP response contains invalid JSON, PollOnce handles the error
-// gracefully and continues.
+// Invalid JSON in response is handled without panicking.
 func TestPollOnce_ChunkInvalidJson_ContinuesGracefully(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
-	registry.Register("acme", "one", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "one", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 
 	// Return an error for invalid JSON
 	mockClient.addPostResponse(200, nil, errors.New("failed to unmarshal response"))
@@ -464,8 +449,7 @@ func TestPollOnce_ChunkInvalidJson_ContinuesGracefully(t *testing.T) {
 	}
 }
 
-// TestClose_StopsPollingAndDispatcher verifies that Close stops the
-// background goroutines and waits for them to finish.
+// Close stops background goroutines and waits for them.
 func TestClose_StopsPollingAndDispatcher(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -491,9 +475,8 @@ func TestClose_StopsPollingAndDispatcher(t *testing.T) {
 	// should return within the shutdown window)
 }
 
-// TestBuildBatchURL_FormatsCorrectly verifies that buildBatchURL constructs
-// the correct batch endpoint URL.
-func TestBuildBatchURL_FormatsCorrectly(t *testing.T) {
+// NewPoller builds batchURL = baseURL + "/v1/secrets/batch".
+func TestPoller_BatchURLFormatsCorrectly(t *testing.T) {
 	testCases := []struct {
 		baseURL  string
 		expected string
@@ -504,22 +487,27 @@ func TestBuildBatchURL_FormatsCorrectly(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		got := buildBatchURL(tc.baseURL)
-		if got != tc.expected {
-			t.Errorf("buildBatchURL(%q) = %q, want %q", tc.baseURL, got, tc.expected)
+		p := NewPoller(PollerConfig{
+			BaseURL:         tc.baseURL,
+			HTTPClient:      &mockHTTPClient{},
+			Registry:        hooks.NewRegistry(),
+			Interval:        60 * time.Second,
+			MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		})
+		if p.batchURL != tc.expected {
+			t.Errorf("batchURL for %q = %q, want %q", tc.baseURL, p.batchURL, tc.expected)
 		}
 	}
 }
 
-// TestPollOnce_AdvancesLastKnownVersionBeforeInvokingHooks verifies that
-// lastKnownVersion is updated before hooks are invoked (at-most-once semantics).
+// LastKnownVersion is advanced BEFORE hooks run (at-most-once).
 func TestPollOnce_AdvancesLastKnownVersionBeforeInvokingHooks(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
 	var hookCalledAt atomic.Int32
-	hook := func(v models.SecretValue) error {
+	hook := func(_ context.Context, _ models.SecretValue) error {
 		// This hook will check what lastKnownVersion is when it runs
 		state := registry.Get("acme:version-test")
 		if state != nil {
@@ -567,15 +555,13 @@ func TestPollOnce_AdvancesLastKnownVersionBeforeInvokingHooks(t *testing.T) {
 	}
 }
 
-// TestPollOnce_WithoutGetSecret_SendsLastKnownVersionZero verifies that
-// when a hook is registered without a prior getSecret call, the batch
-// request sends lastKnownVersion=0.
+// Hook registered without prior GetSecret -> batch sends lastKnownVersion=0.
 func TestPollOnce_WithoutGetSecret_SendsLastKnownVersionZero(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
-	registry.Register("acme", "no-get-secret", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "no-get-secret", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 
 	poller := NewPoller(PollerConfig{
 		BaseURL:         "https://test.example.com",
@@ -599,8 +585,7 @@ func TestPollOnce_WithoutGetSecret_SendsLastKnownVersionZero(t *testing.T) {
 	}
 }
 
-// TestNewPoller_DefaultInterval verifies that when interval <= 0, the poller
-// uses the default interval from Poller defaults.
+// interval <= 0 falls back to the package default.
 func TestNewPoller_DefaultInterval(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -621,14 +606,13 @@ func TestNewPoller_DefaultInterval(t *testing.T) {
 	}
 }
 
-// TestPollOnce_NullData_ContinuesWithoutUpdates verifies that when the
-// response has a null Data field, PollOnce continues gracefully.
+// Null Data in response is handled gracefully.
 func TestPollOnce_NullData_ContinuesWithoutUpdates(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
-	registry.Register("acme", "one", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "one", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 
 	// Response with null data
 	nullResp := response.Response[batch.BatchGetSecretsResponse]{
@@ -654,9 +638,7 @@ func TestPollOnce_NullData_ContinuesWithoutUpdates(t *testing.T) {
 	}
 }
 
-// TestHandleUpdatedSecret_NonexistentSecret_NoOp verifies that when
-// handleUpdatedSecret receives an update for a secret that's no longer
-// in the registry, it's handled gracefully (no panic).
+// Update for an unregistered secret is a no-op (no panic).
 func TestHandleUpdatedSecret_NonexistentSecret_NoOp(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -681,11 +663,10 @@ func TestHandleUpdatedSecret_NonexistentSecret_NoOp(t *testing.T) {
 	}
 
 	// Should not panic
-	poller.handleUpdatedSecret(item)
+	poller.handleUpdatedSecret(item, "test-request-id")
 }
 
-// TestDispatcherLoop_StopsOnClose verifies that the dispatcher goroutines
-// exit cleanly when the poller is closed.
+// Dispatcher goroutines exit cleanly on Close.
 func TestDispatcherLoop_StopsOnClose(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
@@ -717,8 +698,7 @@ func TestDispatcherLoop_StopsOnClose(t *testing.T) {
 	}
 }
 
-// TestInvokeHookSafe_HookReturnsError_RecordsMetrics verifies that when
-// a hook returns an error (not panic), the error is logged and metrics
+// Hook returning an error (not panic) is logged and metric'd as failure.
 // are recorded.
 func TestInvokeHookSafe_HookReturnsError_RecordsMetrics(t *testing.T) {
 	mockClient := &mockHTTPClient{}
@@ -726,7 +706,7 @@ func TestInvokeHookSafe_HookReturnsError_RecordsMetrics(t *testing.T) {
 	mockMetrics := metrics.NewPrometheusRecorder(prometheus.NewRegistry())
 
 	hookErr := errors.New("hook failed")
-	hook := func(_ models.SecretValue) error {
+	hook := func(_ context.Context, _ models.SecretValue) error {
 		return hookErr
 	}
 
@@ -784,7 +764,7 @@ func TestSafePollOnce_RecoversWhenPollOncePanics(t *testing.T) {
 func TestPollOnce_ErrorWithZeroStatusFallsBackTo500(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
-	registry.Register("acme", "zero-status", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "zero-status", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 
 	// Return code=0 + err to hit fallback statusCode=500 path.
 	mockClient.addPostResponse(0, nil, errors.New("network down"))
@@ -805,7 +785,7 @@ func TestPollOnce_ErrorWithZeroStatusFallsBackTo500(t *testing.T) {
 func TestHandleUpdatedSecret_ChannelFullFallsBackWithoutBlocking(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
-	registry.Register("acme", "full-chan", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "full-chan", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 
 	poller := NewPoller(PollerConfig{
 		BaseURL:         "https://test.example.com",
@@ -824,7 +804,7 @@ func TestHandleUpdatedSecret_ChannelFullFallsBackWithoutBlocking(t *testing.T) {
 		DataVersion: 11,
 		PublicPart:  "p",
 		PrivatePart: "q",
-	})
+	}, "test-request-id")
 
 	state := registry.Get("acme:full-chan")
 	if state == nil {
@@ -838,7 +818,7 @@ func TestHandleUpdatedSecret_ChannelFullFallsBackWithoutBlocking(t *testing.T) {
 func TestRunHooksFor_NoOpWhenExecutionAlreadyHeld(t *testing.T) {
 	mockClient := &mockHTTPClient{}
 	registry := hooks.NewRegistry()
-	state := registry.Register("acme", "locked", func(_ models.SecretValue) error { return nil }, 0)
+	state := registry.Register("acme", "locked", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 	_ = state
 	secretState := registry.Get("acme:locked")
 	if secretState == nil {
@@ -858,7 +838,7 @@ func TestRunHooksFor_NoOpWhenExecutionAlreadyHeld(t *testing.T) {
 	if !secretState.TryAcquireExecution() {
 		t.Fatal("expected to acquire execution lock for setup")
 	}
-	poller.runHooksFor("acme:locked", secretState)
+	poller.runHooksFor("acme:locked", secretState, "test-request-id")
 	secretState.ReleaseExecution()
 
 	// If method returned due to lock held, pending should remain.
@@ -877,25 +857,9 @@ func TestInvokeHookSafe_ErrorPathCovered(t *testing.T) {
 	})
 	defer poller.Close()
 
-	poller.invokeHookSafe("acme:err", func(_ models.SecretValue) error {
+	poller.invokeHookSafe(context.Background(), "acme:err", func(_ context.Context, _ models.SecretValue) error {
 		return errors.New("hook failure")
 	}, models.SecretValue{DataVersion: 1})
-}
-
-func TestRecoverFromPanic_SwallowsPanic(t *testing.T) {
-	poller := NewPoller(PollerConfig{
-		BaseURL:         "https://test.example.com",
-		HTTPClient:      &mockHTTPClient{},
-		Registry:        hooks.NewRegistry(),
-		Interval:        60 * time.Second,
-		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
-	})
-	defer poller.Close()
-
-	func() {
-		defer poller.recoverFromPanic("test-loop")
-		panic("boom")
-	}()
 }
 
 func TestClose_TimeoutPathCovered(t *testing.T) {
@@ -917,14 +881,8 @@ func TestClose_TimeoutPathCovered(t *testing.T) {
 }
 
 func TestPollOnce_MarshalFailurePathCovered(t *testing.T) {
-	original := marshalBatchRequest
-	marshalBatchRequest = func(v any) ([]byte, error) {
-		return nil, errors.New("marshal exploded")
-	}
-	t.Cleanup(func() { marshalBatchRequest = original })
-
 	registry := hooks.NewRegistry()
-	registry.Register("acme", "marshal-fail", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "marshal-fail", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 
 	poller := NewPoller(PollerConfig{
 		BaseURL:         "https://test.example.com",
@@ -932,6 +890,9 @@ func TestPollOnce_MarshalFailurePathCovered(t *testing.T) {
 		Registry:        registry,
 		Interval:        60 * time.Second,
 		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		MarshalRequest: func(v any) ([]byte, error) {
+			return nil, errors.New("marshal exploded")
+		},
 	})
 	defer poller.Close()
 
@@ -941,7 +902,7 @@ func TestPollOnce_MarshalFailurePathCovered(t *testing.T) {
 
 func TestResubmitIfPending_CoversStopAndDefaultPaths(t *testing.T) {
 	registry := hooks.NewRegistry()
-	registry.Register("acme", "resubmit", func(_ models.SecretValue) error { return nil }, 0)
+	registry.Register("acme", "resubmit", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
 	state := registry.Get("acme:resubmit")
 	if state == nil {
 		t.Fatal("state should exist")
@@ -958,10 +919,264 @@ func TestResubmitIfPending_CoversStopAndDefaultPaths(t *testing.T) {
 	// Cover default branch when dispatch channel cannot accept immediately.
 	poller.dispatchCh = make(chan dispatchJob)
 	state.SetPending(&models.SecretValue{DataVersion: 1})
-	poller.resubmitIfPending("acme:resubmit", state)
+	poller.resubmitIfPending("acme:resubmit", state, "test-request-id")
 
 	// Cover stop branch.
 	close(poller.stopCh)
 	state.SetPending(&models.SecretValue{DataVersion: 2})
-	poller.resubmitIfPending("acme:resubmit", state)
+	poller.resubmitIfPending("acme:resubmit", state, "test-request-id")
 }
+
+// Happy path: resubmit lands on the channel (covers the first select arm).
+func TestResubmitIfPending_SuccessArm(t *testing.T) {
+	registry := hooks.NewRegistry()
+	registry.Register("acme", "resub-ok", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
+	state := registry.Get("acme:resub-ok")
+	if state == nil {
+		t.Fatal("state should exist")
+	}
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+
+	state.SetPending(&models.SecretValue{DataVersion: 1})
+
+	// dispatchCh has a buffer, so the resubmit should succeed on the first arm.
+	poller.resubmitIfPending("acme:resub-ok", state, "rid")
+
+	select {
+	case job := <-poller.dispatchCh:
+		if job.secretRef != "acme:resub-ok" {
+			t.Errorf("dispatched secretRef = %q, want %q", job.secretRef, "acme:resub-ok")
+		}
+		if job.requestID != "rid" {
+			t.Errorf("dispatched requestID = %q, want %q", job.requestID, "rid")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("resubmit did not land on dispatchCh within 1s")
+	}
+}
+
+// Hook receives a non-nil ctx carrying the poll-cycle request id.
+func TestPollOnce_HookReceivesContextWithRequestID(t *testing.T) {
+	mockClient := &mockHTTPClient{}
+	registry := hooks.NewRegistry()
+
+	var gotCtx atomic.Value // context.Context
+	done := make(chan struct{}, 1)
+
+	hook := func(ctx context.Context, _ models.SecretValue) error {
+		if ctx != nil {
+			gotCtx.Store(ctx)
+		}
+		select {
+		case done <- struct{}{}:
+		default:
+		}
+		return nil
+	}
+	registry.Register("acme", "ctx-hook", hook, 0)
+
+	mockClient.addPostResponse(200, response.Response[batch.BatchGetSecretsResponse]{
+		Data: batch.BatchGetSecretsResponse{
+			UpdatedCount: 1,
+			UpdatedSecrets: []batch.UpdatedSecret{
+				{ProjectID: "acme", SecretName: "ctx-hook", DataVersion: 1, PublicPart: "p", PrivatePart: "q"},
+			},
+		},
+		Message: "Success",
+	}, nil)
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockClient,
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer poller.Close()
+	poller.Start()
+
+	ctx := context.WithValue(context.Background(), constants.GrayskullRequestID, "rid-42")
+	poller.PollOnce(ctx)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("hook was not invoked within 1s")
+	}
+
+	got, ok := gotCtx.Load().(context.Context)
+	if !ok || got == nil {
+		t.Fatal("hook received nil context")
+	}
+	if rid, _ := got.Value(constants.GrayskullRequestID).(string); rid != "rid-42" {
+		t.Errorf("hook ctx request id = %q, want %q", rid, "rid-42")
+	}
+}
+
+// Close cancels the ctx delivered to a long-running hook.
+func TestPoller_Close_CancelsHookContext(t *testing.T) {
+	mockClient := &mockHTTPClient{}
+	registry := hooks.NewRegistry()
+
+	hookStarted := make(chan struct{})
+	hookFinished := make(chan error, 1)
+
+	hook := func(ctx context.Context, _ models.SecretValue) error {
+		close(hookStarted)
+		select {
+		case <-ctx.Done():
+			hookFinished <- ctx.Err()
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+			hookFinished <- errors.New("hook timed out without ctx cancellation")
+			return nil
+		}
+	}
+	registry.Register("acme", "long-hook", hook, 0)
+
+	mockClient.addPostResponse(200, response.Response[batch.BatchGetSecretsResponse]{
+		Data: batch.BatchGetSecretsResponse{
+			UpdatedCount: 1,
+			UpdatedSecrets: []batch.UpdatedSecret{
+				{ProjectID: "acme", SecretName: "long-hook", DataVersion: 1, PublicPart: "p", PrivatePart: "q"},
+			},
+		},
+		Message: "Success",
+	}, nil)
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockClient,
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	poller.Start()
+
+	poller.PollOnce(context.Background())
+
+	select {
+	case <-hookStarted:
+	case <-time.After(time.Second):
+		t.Fatal("hook never started")
+	}
+
+	// Closing the poller must cancel the hook ctx so the hook can return.
+	_ = poller.Close()
+
+	select {
+	case err := <-hookFinished:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("hook ctx error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("hook did not observe ctx cancellation after Close")
+	}
+}
+
+// Close returns ErrShutdownTimeout when workers can't drain in time.
+func TestPoller_Close_ReturnsShutdownTimeout(t *testing.T) {
+	original := shutdownAwait
+	shutdownAwait = 5 * time.Millisecond
+	t.Cleanup(func() { shutdownAwait = original })
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        60 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+
+	// Simulate a stuck worker so the WaitGroup never drains.
+	poller.wg.Add(1)
+
+	if err := poller.Close(); !errors.Is(err, ErrShutdownTimeout) {
+		t.Errorf("Close() error = %v, want ErrShutdownTimeout", err)
+	}
+}
+
+// Clean shutdown: Close returns nil.
+func TestPoller_Close_NilWhenCleanShutdown(t *testing.T) {
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        10 * time.Millisecond,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	poller.Start()
+
+	if err := poller.Close(); err != nil {
+		t.Errorf("Close() = %v, want nil for clean shutdown", err)
+	}
+	// Second call should be a no-op and not return an error.
+	if err := poller.Close(); err != nil {
+		t.Errorf("second Close() = %v, want nil", err)
+	}
+}
+
+// Start is idempotent: repeated calls don't spawn extra goroutines (Close
+// still drains within the default window).
+func TestPoller_Start_IsIdempotent(t *testing.T) {
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        10 * time.Millisecond,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+
+	poller.Start()
+	poller.Start()
+	poller.Start()
+
+	// Invariant: Close must return nil under the default shutdown window
+	// (non-idempotent Start would inflate goroutines and could fail this).
+	if err := poller.Close(); err != nil {
+		t.Errorf("Close() after repeated Start = %v, want nil", err)
+	}
+}
+
+// Unset (or <=0) RequestTimeout falls back to Interval.
+func TestNewPoller_RequestTimeoutDefaultsToInterval(t *testing.T) {
+	p := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        7 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		// RequestTimeout intentionally left zero.
+	})
+	defer p.Close()
+
+	if p.requestTimeout != 7*time.Second {
+		t.Errorf("requestTimeout = %v, want %v (default to interval)", p.requestTimeout, 7*time.Second)
+	}
+}
+
+// Explicit RequestTimeout is used as-is.
+func TestNewPoller_RequestTimeoutHonored(t *testing.T) {
+	p := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      &mockHTTPClient{},
+		Registry:        hooks.NewRegistry(),
+		Interval:        60 * time.Second,
+		RequestTimeout:  3 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	defer p.Close()
+
+	if p.requestTimeout != 3*time.Second {
+		t.Errorf("requestTimeout = %v, want %v", p.requestTimeout, 3*time.Second)
+	}
+}
+

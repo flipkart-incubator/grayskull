@@ -8,10 +8,10 @@ import (
 	"github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 )
 
-// hookEntry pairs a hook with the handler ref token that registered it
+// hookEntry pairs a hook with its handler ref (identity key for Unregister).
 type hookEntry struct {
-	token *DefaultRefreshHandlerRef
-	hook  apiHooks.SecretRefreshHook
+	handlerRef *DefaultRefreshHandlerRef
+	hook       apiHooks.SecretRefreshHook
 }
 
 // SecretState is the per-secret runtime state owned by the registry.
@@ -19,46 +19,50 @@ type SecretState struct {
 	ProjectID  string
 	SecretName string
 
-	// LastKnownVersion is the highest version delivered to hooks so far. The
-	// poller advances this BEFORE invoking hooks (at-most-once semantics).
+	// LastKnownVersion is advanced BEFORE hooks run (at-most-once delivery).
 	LastKnownVersion atomic.Int32
 
-	// pending holds at most one staged update. Newer updates overwrite older
-	// ones so consumers always observe the latest value, never a stale one.
+	// pending holds at most one staged update; newer values overwrite older
+	// ones so consumers always see the latest version.
 	pending atomic.Pointer[models.SecretValue]
 
-	// isExecuting guarantees only one dispatcher goroutine runs hooks for
-	// this secret at any time (non-reentrant per-secret).
+	// isExecuting makes hook execution non-reentrant per-secret.
 	isExecuting atomic.Bool
 
 	mu    sync.RWMutex
-	hooks []hookEntry // ordered by registration time
+	hooks []hookEntry // registration order
 }
 
 func newSecretState(projectID, secretName string) *SecretState {
 	return &SecretState{ProjectID: projectID, SecretName: secretName}
 }
 
-// SetPending stages an update for later delivery.
-func (s *SecretState) SetPending(v *models.SecretValue) { s.pending.Store(v) }
+// SetPending stages an update. Nil is a no-op (it's TakePending's "empty"
+// sentinel; accepting it would silently clear a queued update).
+func (s *SecretState) SetPending(v *models.SecretValue) {
+	if v == nil {
+		return
+	}
+	s.pending.Store(v)
+}
 
-// TakePending drains and returns the staged value (nil if none).
+// TakePending drains and returns the staged value, or nil if none.
 func (s *SecretState) TakePending() *models.SecretValue { return s.pending.Swap(nil) }
 
 // HasPending reports whether a value is staged.
 func (s *SecretState) HasPending() bool { return s.pending.Load() != nil }
 
-// TryAcquireExecution flips the executing flag from false to true.
-// Returns false if another runner already owns the slot.
+// TryAcquireExecution returns true on success, false if another runner
+// already owns the slot.
 func (s *SecretState) TryAcquireExecution() bool {
 	return s.isExecuting.CompareAndSwap(false, true)
 }
 
-// ReleaseExecution clears the executing flag.
+// ReleaseExecution clears the execution slot.
 func (s *SecretState) ReleaseExecution() { s.isExecuting.Store(false) }
 
-// SnapshotHooks returns a copy of the registered hooks in registration order.
-// Returning a copy keeps the caller from holding the lock during invocation.
+// SnapshotHooks returns a copy of the hooks in registration order so callers
+// don't hold the lock during invocation.
 func (s *SecretState) SnapshotHooks() []apiHooks.SecretRefreshHook {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

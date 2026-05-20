@@ -607,7 +607,7 @@ func TestGrayskullHTTPClient_E2E_PostAuthHeaderValidation(t *testing.T) {
 	})
 }
 
-// Restored coverage scenarios that were previously in a separate test file.
+// Restored coverage that previously lived in a separate file.
 func TestGrayskullHTTPClient_E2E_PostNetworkError(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hj, ok := w.(http.Hijacker)
@@ -660,4 +660,81 @@ func TestGrayskullHTTPClient_E2E_PostReadBodyError(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, statusCode == 0 || statusCode == http.StatusOK)
 	assert.Contains(t, err.Error(), "failed after")
+}
+
+// GET and POST share the same retry behavior on retryable 5xx via
+// unified doWithRetry helper.
+func TestGrayskullHTTPClient_SharedRetryPathForGetAndPost(t *testing.T) {
+	t.Run("GET retries 5xx then succeeds", func(t *testing.T) {
+		var calls int
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"ok"}`))
+		}))
+
+		client := setupClient(t, nil)
+		var result testResponse
+		status, err := client.DoGetWithRetry(context.Background(), ts.URL, &result)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "ok", result.Data)
+		assert.Equal(t, 2, calls, "should have retried exactly once")
+	})
+
+	t.Run("POST retries 5xx then succeeds", func(t *testing.T) {
+		var calls int
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"ok"}`))
+		}))
+
+		client := setupClient(t, nil)
+		var result testResponse
+		status, err := client.DoPostWithRetry(context.Background(), ts.URL, []byte(`{"x":1}`), &result)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "ok", result.Data)
+		assert.Equal(t, 2, calls, "should have retried exactly once")
+	})
+}
+
+// POST sets Content-Type; GET does not. Only header-level divergence
+// preserved by the shared helper.
+func TestGrayskullHTTPClient_PostSetsContentType(t *testing.T) {
+	t.Run("POST has Content-Type", func(t *testing.T) {
+		var got string
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = r.Header.Get("Content-Type")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		}))
+		client := setupClient(t, nil)
+		_, _ = client.DoPostWithRetry(context.Background(), ts.URL, []byte(`{}`), nil)
+		assert.Equal(t, "application/json; charset=utf-8", got)
+	})
+
+	t.Run("GET has no Content-Type", func(t *testing.T) {
+		var got string
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = r.Header.Get("Content-Type")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		}))
+		client := setupClient(t, nil)
+		var result testResponse
+		_, _ = client.DoGetWithRetry(context.Background(), ts.URL, &result)
+		assert.Equal(t, "", got)
+	})
 }

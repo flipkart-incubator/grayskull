@@ -1,14 +1,13 @@
 package hooks
 
 import (
+	"context"
 	"sync"
 	"testing"
 
 	"github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 )
 
-// TestNewState_StoresIdentityFields verifies that newSecretState correctly
-// stores the projectID and secretName fields.
 func TestNewState_StoresIdentityFields(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -20,17 +19,15 @@ func TestNewState_StoresIdentityFields(t *testing.T) {
 	}
 }
 
-// TestNewState_LastKnownVersionStartsAtZero verifies that lastKnownVersion
-// is initialized to 0 so the first poll asks the server for the current value.
+// LastKnownVersion must start at 0 so the first poll fetches current.
 func TestNewState_LastKnownVersionStartsAtZero(t *testing.T) {
 	s := newSecretState("p", "s")
 
 	if got := s.LastKnownVersion.Load(); got != 0 {
-		t.Errorf("LastKnownVersion = %d, want 0 (must start at 0 so first poll gets current value)", got)
+		t.Errorf("LastKnownVersion = %d, want 0", got)
 	}
 }
 
-// TestNewState_IsExecutingStartsFalse verifies that isExecuting starts false.
 func TestNewState_IsExecutingStartsFalse(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -39,8 +36,6 @@ func TestNewState_IsExecutingStartsFalse(t *testing.T) {
 	}
 }
 
-// TestNewState_PendingUpdateStartsNull_AndHooksEmpty verifies that the
-// pending atomic pointer starts nil and hooks slice is empty.
 func TestNewState_PendingUpdateStartsNull_AndHooksEmpty(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -53,7 +48,6 @@ func TestNewState_PendingUpdateStartsNull_AndHooksEmpty(t *testing.T) {
 	}
 }
 
-// TestSetPending_StagesUpdate verifies that SetPending stores a value.
 func TestSetPending_StagesUpdate(t *testing.T) {
 	s := newSecretState("p", "s")
 	v := &models.SecretValue{DataVersion: 3, PublicPart: "pub", PrivatePart: "priv"}
@@ -68,8 +62,33 @@ func TestSetPending_StagesUpdate(t *testing.T) {
 	}
 }
 
-// TestTakePending_DrainsAndReturnsValue verifies that TakePending returns
-// the staged value and clears the pending slot (atomic swap to nil).
+// Nil is TakePending's "empty" sentinel; SetPending(nil) must be a no-op so
+// it can't silently clear a queued update.
+func TestSetPending_NilIsNoOp(t *testing.T) {
+	t.Run("nil on empty state stays empty", func(t *testing.T) {
+		s := newSecretState("p", "s")
+		s.SetPending(nil)
+		if s.HasPending() {
+			t.Error("HasPending() should still be false after SetPending(nil)")
+		}
+	})
+
+	t.Run("nil does not clear an existing staged value", func(t *testing.T) {
+		s := newSecretState("p", "s")
+		v := &models.SecretValue{DataVersion: 11, PublicPart: "p", PrivatePart: "q"}
+		s.SetPending(v)
+
+		s.SetPending(nil)
+
+		if !s.HasPending() {
+			t.Fatal("HasPending() should still be true after SetPending(nil)")
+		}
+		if got := s.TakePending(); got != v {
+			t.Errorf("TakePending() = %v, want %v (nil must not have overwritten)", got, v)
+		}
+	})
+}
+
 func TestTakePending_DrainsAndReturnsValue(t *testing.T) {
 	s := newSecretState("p", "s")
 	v := &models.SecretValue{DataVersion: 7, PublicPart: "a", PrivatePart: "b"}
@@ -88,8 +107,6 @@ func TestTakePending_DrainsAndReturnsValue(t *testing.T) {
 	}
 }
 
-// TestTakePending_WhenNil_ReturnsNil verifies that TakePending returns nil
-// when no value is staged.
 func TestTakePending_WhenNil_ReturnsNil(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -100,8 +117,6 @@ func TestTakePending_WhenNil_ReturnsNil(t *testing.T) {
 	}
 }
 
-// TestHasPending_ReflectsPendingState verifies that HasPending correctly
-// reports whether a value is staged.
 func TestHasPending_ReflectsPendingState(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -123,8 +138,6 @@ func TestHasPending_ReflectsPendingState(t *testing.T) {
 	}
 }
 
-// TestTryAcquireExecution_FlipsFlagFromFalseToTrue verifies that the first
-// call returns true and sets isExecuting to true.
 func TestTryAcquireExecution_FlipsFlagFromFalseToTrue(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -136,24 +149,17 @@ func TestTryAcquireExecution_FlipsFlagFromFalseToTrue(t *testing.T) {
 	}
 }
 
-// TestTryAcquireExecution_ReturnsFalseWhenAlreadyExecuting verifies that
-// when another runner already owns the slot, TryAcquireExecution returns false.
 func TestTryAcquireExecution_ReturnsFalseWhenAlreadyExecuting(t *testing.T) {
 	s := newSecretState("p", "s")
 
-	// First acquisition succeeds
 	if !s.TryAcquireExecution() {
 		t.Fatal("first TryAcquireExecution should succeed")
 	}
-
-	// Second acquisition should fail
 	if s.TryAcquireExecution() {
 		t.Error("second TryAcquireExecution should return false when already executing")
 	}
 }
 
-// TestReleaseExecution_ClearsFlag verifies that ReleaseExecution sets
-// isExecuting back to false.
 func TestReleaseExecution_ClearsFlag(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -163,15 +169,11 @@ func TestReleaseExecution_ClearsFlag(t *testing.T) {
 	if s.isExecuting.Load() {
 		t.Error("isExecuting should be false after ReleaseExecution")
 	}
-
-	// After release, a new TryAcquireExecution should succeed
 	if !s.TryAcquireExecution() {
 		t.Error("TryAcquireExecution should succeed after ReleaseExecution")
 	}
 }
 
-// TestSnapshotHooks_ReturnsEmptyWhenNoHooks verifies that SnapshotHooks
-// returns nil or empty slice when no hooks are registered.
 func TestSnapshotHooks_ReturnsEmptyWhenNoHooks(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -182,23 +184,19 @@ func TestSnapshotHooks_ReturnsEmptyWhenNoHooks(t *testing.T) {
 	}
 }
 
-// TestSnapshotHooks_ReturnsCopyInRegistrationOrder verifies that
-// SnapshotHooks returns hooks in the order they were added and that
-// the returned slice is a copy (modifications don't affect the original).
+// SnapshotHooks preserves registration order and returns a copy.
 func TestSnapshotHooks_ReturnsCopyInRegistrationOrder(t *testing.T) {
 	s := newSecretState("p", "s")
 
-	// Mock hooks
-	hook1 := func(v models.SecretValue) error { return nil }
-	hook2 := func(v models.SecretValue) error { return nil }
-	hook3 := func(v models.SecretValue) error { return nil }
+	hook1 := func(_ context.Context, _ models.SecretValue) error { return nil }
+	hook2 := func(_ context.Context, _ models.SecretValue) error { return nil }
+	hook3 := func(_ context.Context, _ models.SecretValue) error { return nil }
 
-	// Add hooks to the internal slice directly for testing
 	s.mu.Lock()
 	s.hooks = []hookEntry{
-		{token: &DefaultRefreshHandlerRef{secretRef: "p:s"}, hook: hook1},
-		{token: &DefaultRefreshHandlerRef{secretRef: "p:s"}, hook: hook2},
-		{token: &DefaultRefreshHandlerRef{secretRef: "p:s"}, hook: hook3},
+		{handlerRef: &DefaultRefreshHandlerRef{secretRef: "p:s"}, hook: hook1},
+		{handlerRef: &DefaultRefreshHandlerRef{secretRef: "p:s"}, hook: hook2},
+		{handlerRef: &DefaultRefreshHandlerRef{secretRef: "p:s"}, hook: hook3},
 	}
 	s.mu.Unlock()
 
@@ -208,24 +206,22 @@ func TestSnapshotHooks_ReturnsCopyInRegistrationOrder(t *testing.T) {
 		t.Errorf("SnapshotHooks() returned %d hooks, want 3", len(snapshot))
 	}
 
-	// Verify it's a copy: modifying the snapshot shouldn't affect the original
 	s.mu.RLock()
 	originalLen := len(s.hooks)
 	s.mu.RUnlock()
 
-	snapshot = append(snapshot, hook1) // modify the snapshot
+	snapshot = append(snapshot, hook1)
 
 	s.mu.RLock()
 	newLen := len(s.hooks)
 	s.mu.RUnlock()
 
 	if newLen != originalLen {
-		t.Errorf("modifying snapshot affected original: original had %d hooks, now has %d", originalLen, newLen)
+		t.Errorf("snapshot append leaked into original: %d -> %d", originalLen, newLen)
 	}
 }
 
-// TestSetPending_OverwritesOlderUpdate verifies that newer updates overwrite
-// older ones, ensuring consumers always observe the latest value.
+// Newer SetPending overwrites older (coalescing).
 func TestSetPending_OverwritesOlderUpdate(t *testing.T) {
 	s := newSecretState("p", "s")
 
@@ -233,28 +229,26 @@ func TestSetPending_OverwritesOlderUpdate(t *testing.T) {
 	v2 := &models.SecretValue{DataVersion: 10, PublicPart: "new", PrivatePart: "new"}
 
 	s.SetPending(v1)
-	s.SetPending(v2) // overwrites v1
+	s.SetPending(v2)
 
 	got := s.TakePending()
 
 	if got != v2 {
-		t.Errorf("TakePending() after overwrite = %v, want v2 (%v)", got, v2)
+		t.Errorf("TakePending() after overwrite = %v, want v2", got)
 	}
 	if got.DataVersion != 10 {
-		t.Errorf("got version %d, want 10 (newer value should overwrite older)", got.DataVersion)
+		t.Errorf("got version %d, want 10", got.DataVersion)
 	}
 }
 
-// TestConcurrentSetAndTakePending_ThreadSafe verifies that concurrent
-// SetPending and TakePending calls are thread-safe.
+// Race check; run with -race.
 func TestConcurrentSetAndTakePending_ThreadSafe(t *testing.T) {
 	s := newSecretState("p", "s")
 	const numGoroutines = 50
 
 	var wg sync.WaitGroup
-	wg.Add(numGoroutines * 2) // half setters, half takers
+	wg.Add(numGoroutines * 2)
 
-	// Setters
 	for i := 0; i < numGoroutines; i++ {
 		go func(version int) {
 			defer wg.Done()
@@ -262,21 +256,16 @@ func TestConcurrentSetAndTakePending_ThreadSafe(t *testing.T) {
 			s.SetPending(v)
 		}(i)
 	}
-
-	// Takers
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
 			s.TakePending()
 		}()
 	}
-
 	wg.Wait()
-	// Test passes if no data race is detected (run with -race flag)
 }
 
-// TestConcurrentAcquireAndRelease_ThreadSafe verifies that concurrent
-// TryAcquireExecution and ReleaseExecution calls are thread-safe.
+// Race check; run with -race.
 func TestConcurrentAcquireAndRelease_ThreadSafe(t *testing.T) {
 	s := newSecretState("p", "s")
 	const numGoroutines = 50
@@ -301,15 +290,12 @@ func TestConcurrentAcquireAndRelease_ThreadSafe(t *testing.T) {
 
 	wg.Wait()
 
-	// At least one goroutine should have acquired the lock
 	if successCount == 0 {
-		t.Error("no goroutine successfully acquired execution; expected at least one")
+		t.Error("no goroutine acquired execution; expected at least one")
 	}
-	// Test passes if no data race is detected (run with -race flag)
 }
 
-// TestLastKnownVersion_AtomicUpdates verifies that LastKnownVersion can be
-// safely updated concurrently.
+// Race check; run with -race.
 func TestLastKnownVersion_AtomicUpdates(t *testing.T) {
 	s := newSecretState("p", "s")
 	const numGoroutines = 100
@@ -326,9 +312,8 @@ func TestLastKnownVersion_AtomicUpdates(t *testing.T) {
 
 	wg.Wait()
 
-	// Final value should be one of the versions written (atomic guarantees)
 	finalVersion := s.LastKnownVersion.Load()
 	if finalVersion < 0 || finalVersion >= int32(numGoroutines) {
-		t.Errorf("LastKnownVersion = %d, expected value in range [0, %d)", finalVersion, numGoroutines)
+		t.Errorf("LastKnownVersion = %d, want in [0, %d)", finalVersion, numGoroutines)
 	}
 }

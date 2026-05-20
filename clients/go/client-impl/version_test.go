@@ -4,55 +4,44 @@ import (
 	"testing"
 )
 
-// TestGetVersion_ReturnsNonEmpty verifies that GetVersion always returns a non-empty string.
-func TestGetVersion_ReturnsNonEmpty(t *testing.T) {
-	version := GetVersion()
+// TestGetVersion_MatchesConstant: GetVersion returns Version, or "unknown"
+// when Version is empty.
+func TestGetVersion_MatchesConstant(t *testing.T) {
+	t.Run("returns constant when set", func(t *testing.T) {
+		if Version == "" {
+			t.Fatal("Version constant should not be empty by default")
+		}
+		if got := GetVersion(); got != Version {
+			t.Errorf("GetVersion() = %q, want %q", got, Version)
+		}
+	})
 
-	if version == "" {
-		t.Error("GetVersion() returned empty string, expected non-empty version")
-	}
+	t.Run("returns unknown when Version is empty", func(t *testing.T) {
+		original := Version
+		t.Cleanup(func() { Version = original })
+		Version = ""
+		if got := GetVersion(); got != "unknown" {
+			t.Errorf("GetVersion() = %q, want %q", got, "unknown")
+		}
+	})
+
+	t.Run("is consistent across calls", func(t *testing.T) {
+		if a, b := GetVersion(), GetVersion(); a != b {
+			t.Errorf("GetVersion() returned inconsistent values: %q vs %q", a, b)
+		}
+	})
 }
 
-// TestGetVersion_ReturnsVersionFromConstant verifies that GetVersion returns the
-// version defined in the Version constant.
-func TestGetVersion_ReturnsVersionFromConstant(t *testing.T) {
-	version := GetVersion()
-
-	// Should match the Version constant (default: "1.0.0" or whatever is set in version.go)
-	if version == "" {
-		t.Error("GetVersion() returned empty string, expected version from constant")
-	}
-
-	// Verify it matches the Version constant
-	if version != Version {
-		t.Errorf("GetVersion() = %q, want %q", version, Version)
-	}
-}
-
-// TestGetVersion_Consistency verifies that GetVersion returns the same value on multiple calls.
-func TestGetVersion_Consistency(t *testing.T) {
-	version1 := GetVersion()
-	version2 := GetVersion()
-	version3 := GetVersion()
-
-	if version1 != version2 || version2 != version3 {
-		t.Errorf("GetVersion() returned inconsistent values: %q, %q, %q", version1, version2, version3)
-	}
-}
-
-// TestVersion_GlobalVariable verifies the Version variable is accessible.
-func TestVersion_GlobalVariable(t *testing.T) {
+// TestVersion_LooksLikeSemVer: loose sanity check; Version contains a digit
+// or '.'.
+func TestVersion_LooksLikeSemVer(t *testing.T) {
 	if Version == "" {
-		t.Error("Version global variable is empty, expected default value 'dev'")
+		t.Skip("Version overridden to empty elsewhere")
 	}
-}
-
-func TestGetVersion_ReturnsUnknownWhenVersionEmpty(t *testing.T) {
-	original := Version
-	t.Cleanup(func() { Version = original })
-	Version = ""
-
-	if got := GetVersion(); got != "unknown" {
-		t.Errorf("GetVersion() = %q, want %q when Version is empty", got, "unknown")
+	for _, c := range Version {
+		if (c >= '0' && c <= '9') || c == '.' {
+			return
+		}
 	}
+	t.Errorf("Version %q does not look like a valid version string", Version)
 }

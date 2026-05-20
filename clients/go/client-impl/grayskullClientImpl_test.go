@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
@@ -22,15 +23,14 @@ import (
 	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 )
 
-// setupTestRegistry sets up a new registry for testing
+// setupTestRegistry returns a fresh registry for tests.
 func setupTestRegistry(t *testing.T) {
 	// No-op now as metrics handle their own registration
 }
 
-// Use the actual interface from the implementation
 type GrayskullHTTPClient = internal.GrayskullHTTPClientInterface
 
-// MockGrayskullHTTPClient is a mock implementation of the HTTP client
+// MockGrayskullHTTPClient is a test stub for the HTTP client.
 type MockGrayskullHTTPClient struct {
 	mock.Mock
 }
@@ -50,7 +50,7 @@ func (m *MockGrayskullHTTPClient) Close() error {
 	return args.Error(0)
 }
 
-// MockAuthProvider is a mock implementation of the auth provider
+// MockAuthProvider is a test stub for the auth provider.
 type MockAuthProvider struct {
 	mock.Mock
 }
@@ -436,8 +436,7 @@ func TestGetSecret(t *testing.T) {
 	}
 }
 
-// Note: splitSecretRef is tested indirectly through GetSecret tests
-// since it's an unexported method
+// splitSecretRef is tested indirectly via GetSecret tests.
 
 func TestRegisterRefreshHook(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
@@ -456,7 +455,7 @@ func TestRegisterRefreshHook(t *testing.T) {
 	)
 
 	t.Run("successful hook registration", func(t *testing.T) {
-		hook := func(secret Client_API.SecretValue) error {
+		hook := func(_ context.Context, _ Client_API.SecretValue) error {
 			return nil
 		}
 		ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", hook)
@@ -466,7 +465,7 @@ func TestRegisterRefreshHook(t *testing.T) {
 	})
 
 	t.Run("empty secret ref", func(t *testing.T) {
-		hook := func(secret Client_API.SecretValue) error {
+		hook := func(_ context.Context, _ Client_API.SecretValue) error {
 			return nil
 		}
 		ref, err := client.RegisterRefreshHook(context.Background(), "", hook)
@@ -715,7 +714,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 	})
 }
 
-// TestRegisterRefreshHook_Success verifies successful hook registration
+// Successful hook registration.
 func TestRegisterRefreshHook_Success(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -735,7 +734,7 @@ func TestRegisterRefreshHook_Success(t *testing.T) {
 		registry:           registry,
 	}
 
-	hook := func(v Client_API.SecretValue) error {
+	hook := func(_ context.Context, _ Client_API.SecretValue) error {
 		return nil
 	}
 
@@ -751,7 +750,7 @@ func TestRegisterRefreshHook_Success(t *testing.T) {
 	assert.NotNil(t, state)
 }
 
-// TestRegisterRefreshHook_CanUnregister verifies that unregistering a hook works
+// Unregister works after a successful Register.
 func TestRegisterRefreshHook_CanUnregister(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -771,7 +770,7 @@ func TestRegisterRefreshHook_CanUnregister(t *testing.T) {
 		registry:           registry,
 	}
 
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 
 	ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", hook)
 	assert.NoError(t, err)
@@ -786,7 +785,7 @@ func TestRegisterRefreshHook_CanUnregister(t *testing.T) {
 	assert.False(t, ref.IsActive())
 }
 
-// TestRegisterRefreshHook_InvalidSecretRef verifies error for invalid secretRef
+// Invalid secretRef returns an error.
 func TestRegisterRefreshHook_InvalidSecretRef(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -806,7 +805,7 @@ func TestRegisterRefreshHook_InvalidSecretRef(t *testing.T) {
 		registry:           registry,
 	}
 
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 
 	// No colon
 	ref, err := client.RegisterRefreshHook(context.Background(), "no-colon", hook)
@@ -825,8 +824,7 @@ func TestRegisterRefreshHook_InvalidSecretRef(t *testing.T) {
 	assert.Nil(t, ref)
 }
 
-// TestGetSecret_ThenRegisterHook_SeedsPollerWithObservedVersion verifies
-// that getSecret observed version is used to seed the hook's lastKnownVersion
+// GetSecret's observed version seeds a later RegisterRefreshHook.
 func TestGetSecret_ThenRegisterHook_SeedsPollerWithObservedVersion(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -868,7 +866,7 @@ func TestGetSecret_ThenRegisterHook_SeedsPollerWithObservedVersion(t *testing.T)
 	assert.NoError(t, err)
 
 	// Register hook
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	ref, err := client.RegisterRefreshHook(context.Background(), "team:db-pass", hook)
 	assert.NoError(t, err)
 	assert.NotNil(t, ref)
@@ -879,8 +877,7 @@ func TestGetSecret_ThenRegisterHook_SeedsPollerWithObservedVersion(t *testing.T)
 	assert.Equal(t, int32(7), state.LastKnownVersion.Load())
 }
 
-// TestRegisterHook_WithoutPriorGetSecret_StartsFromVersionZero verifies
-// that without a prior getSecret, the hook starts with lastKnownVersion=0
+// Hook registered without prior GetSecret starts at lastKnownVersion=0.
 func TestRegisterHook_WithoutPriorGetSecret_StartsFromVersionZero(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -900,7 +897,7 @@ func TestRegisterHook_WithoutPriorGetSecret_StartsFromVersionZero(t *testing.T) 
 		registry:           registry,
 	}
 
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	ref, err := client.RegisterRefreshHook(context.Background(), "team:no-get-secret", hook)
 	assert.NoError(t, err)
 	assert.NotNil(t, ref)
@@ -911,8 +908,7 @@ func TestRegisterHook_WithoutPriorGetSecret_StartsFromVersionZero(t *testing.T) 
 	assert.Equal(t, int32(0), state.LastKnownVersion.Load())
 }
 
-// TestGetSecret_MultipleCallsSameSecret_SeedUsesLastObservedVersion verifies
-// that multiple getSecret calls update the seed version, and the last one wins
+// Repeated GetSecret updates the seed; latest wins.
 func TestGetSecret_MultipleCallsSameSecret_SeedUsesLastObservedVersion(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -974,7 +970,7 @@ func TestGetSecret_MultipleCallsSameSecret_SeedUsesLastObservedVersion(t *testin
 	assert.NoError(t, err)
 
 	// Register hook - should seed with v11
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	_, err = client.RegisterRefreshHook(context.Background(), "team:rotating", hook)
 	assert.NoError(t, err)
 
@@ -984,8 +980,8 @@ func TestGetSecret_MultipleCallsSameSecret_SeedUsesLastObservedVersion(t *testin
 	assert.Equal(t, int32(11), state.LastKnownVersion.Load())
 }
 
-// TestRegisterHook_ThenGetSecret_DoesNotRetroactivelyUpdatePoller verifies
-// that getSecret called AFTER registerRefreshHook does not update the poller's version
+// GetSecret called AFTER RegisterRefreshHook does not retroactively bump
+// the poller's LastKnownVersion.
 func TestRegisterHook_ThenGetSecret_DoesNotRetroactivelyUpdatePoller(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -1023,7 +1019,7 @@ func TestRegisterHook_ThenGetSecret_DoesNotRetroactivelyUpdatePoller(t *testing.
 	}
 
 	// Register hook first (no prior getSecret, so seed=0)
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	_, err := client.RegisterRefreshHook(context.Background(), "team:late-get", hook)
 	assert.NoError(t, err)
 
@@ -1037,8 +1033,7 @@ func TestRegisterHook_ThenGetSecret_DoesNotRetroactivelyUpdatePoller(t *testing.
 	assert.Equal(t, int32(0), state.LastKnownVersion.Load())
 }
 
-// TestGetSecret_DifferentSecret_DoesNotSeedUnrelatedHook verifies that
-// versions for one secret don't bleed into another
+// Versions for one secret don't bleed into another.
 func TestGetSecret_DifferentSecret_DoesNotSeedUnrelatedHook(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -1080,7 +1075,7 @@ func TestGetSecret_DifferentSecret_DoesNotSeedUnrelatedHook(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Register hook for a different secret (secret-b)
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	_, err = client.RegisterRefreshHook(context.Background(), "team:secret-b", hook)
 	assert.NoError(t, err)
 
@@ -1090,8 +1085,7 @@ func TestGetSecret_DifferentSecret_DoesNotSeedUnrelatedHook(t *testing.T) {
 	assert.Equal(t, int32(0), state.LastKnownVersion.Load())
 }
 
-// TestTwoHooksSameSecret_SecondRegistrationLeavesVersionIntact verifies
-// that registering a second hook for the same secret doesn't overwrite lastKnownVersion
+// Second registration on the same secret must not overwrite LastKnownVersion.
 func TestTwoHooksSameSecret_SecondRegistrationLeavesVersionIntact(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -1133,12 +1127,12 @@ func TestTwoHooksSameSecret_SecondRegistrationLeavesVersionIntact(t *testing.T) 
 	assert.NoError(t, err)
 
 	// Register first hook (seeds lastKnownVersion=8)
-	hook1 := func(v Client_API.SecretValue) error { return nil }
+	hook1 := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	_, err = client.RegisterRefreshHook(context.Background(), "team:shared", hook1)
 	assert.NoError(t, err)
 
 	// Register second hook (should not overwrite version)
-	hook2 := func(v Client_API.SecretValue) error { return nil }
+	hook2 := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	_, err = client.RegisterRefreshHook(context.Background(), "team:shared", hook2)
 	assert.NoError(t, err)
 
@@ -1148,8 +1142,7 @@ func TestTwoHooksSameSecret_SecondRegistrationLeavesVersionIntact(t *testing.T) 
 	assert.Equal(t, int32(8), state.LastKnownVersion.Load())
 }
 
-// TestRegisterRefreshHook_AfterClose_Throws verifies that registering a hook
-// after client is closed returns an error
+// RegisterRefreshHook after Close returns an error.
 func TestRegisterRefreshHook_AfterClose_Throws(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -1174,7 +1167,7 @@ func TestRegisterRefreshHook_AfterClose_Throws(t *testing.T) {
 	client.Close()
 
 	// Try to register a hook after close
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	ref, err := client.RegisterRefreshHook(context.Background(), "team:after-close", hook)
 
 	assert.Error(t, err)
@@ -1182,7 +1175,7 @@ func TestRegisterRefreshHook_AfterClose_Throws(t *testing.T) {
 	assert.Contains(t, err.Error(), "client has been closed")
 }
 
-// TestClose_CleansUpResources verifies that Close properly cleans up resources
+// Close cleans up resources.
 func TestClose_CleansUpResources(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -1209,7 +1202,7 @@ func TestClose_CleansUpResources(t *testing.T) {
 	mockHTTPClient.AssertCalled(t, "Close")
 }
 
-// TestClose_CalledTwice_IsIdempotent verifies that calling Close multiple times is safe
+// Close is idempotent.
 func TestClose_CalledTwice_IsIdempotent(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -1240,8 +1233,7 @@ func TestClose_CalledTwice_IsIdempotent(t *testing.T) {
 	mockHTTPClient.AssertNumberOfCalls(t, "Close", 1)
 }
 
-// TestSplitSecretRef_WithColonsInSecretName verifies that secretNames with
-// colons are handled correctly (splits on first colon only)
+// secretNames containing colons split on the first colon only.
 func TestSplitSecretRef_WithColonsInSecretName(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockHTTPClient := &MockGrayskullHTTPClient{}
@@ -1262,7 +1254,7 @@ func TestSplitSecretRef_WithColonsInSecretName(t *testing.T) {
 	}
 
 	// Test indirectly through RegisterRefreshHook
-	hook := func(v Client_API.SecretValue) error { return nil }
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	ref, err := client.RegisterRefreshHook(context.Background(), "project:secret:with:colons", hook)
 
 	assert.NoError(t, err)
@@ -1276,7 +1268,7 @@ func TestSplitSecretRef_WithColonsInSecretName(t *testing.T) {
 	assert.Equal(t, "secret:with:colons", state.SecretName)
 }
 
-// TestConcurrentGetSecretAndRegisterHook verifies thread safety
+// Race check; run with -race.
 func TestConcurrentGetSecretAndRegisterHook(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -1329,7 +1321,7 @@ func TestConcurrentGetSecretAndRegisterHook(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			hook := func(v Client_API.SecretValue) error { return nil }
+			hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 			client.RegisterRefreshHook(context.Background(), "team:concurrent", hook)
 		}()
 	}
@@ -1338,8 +1330,7 @@ func TestConcurrentGetSecretAndRegisterHook(t *testing.T) {
 	// Test passes if no data race detected (run with -race flag)
 }
 
-// TestGetSecret_RecordsVersionInLastSeenVersions verifies that successful
-// getSecret calls update lastSeenVersions
+// Successful GetSecret updates lastSeenVersions.
 func TestGetSecret_RecordsVersionInLastSeenVersions(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
@@ -1381,7 +1372,7 @@ func TestGetSecret_RecordsVersionInLastSeenVersions(t *testing.T) {
 
 	// Verify version was recorded in lastSeenVersions (via hook registration)
 	// The lastSeenVersions is private, so we verify indirectly through hook registration
-	hook2 := func(v Client_API.SecretValue) error { return nil }
+	hook2 := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
 	ref, err2 := client.RegisterRefreshHook(context.Background(), "team:recorded", hook2)
 	assert.NoError(t, err2)
 
@@ -1392,8 +1383,7 @@ func TestGetSecret_RecordsVersionInLastSeenVersions(t *testing.T) {
 	ref.Unregister()
 }
 
-// TestNewGrayskullClient_WithDefaultPollInterval verifies that the poller
-// is started with the correct interval
+// Default poll interval is applied when none is configured.
 func TestNewGrayskullClient_WithDefaultPollInterval(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 
@@ -1411,7 +1401,7 @@ func TestNewGrayskullClient_WithDefaultPollInterval(t *testing.T) {
 	client.(*GrayskullClientImpl).Close()
 }
 
-// TestNewGrayskullClient_WithCustomPollInterval verifies custom polling interval
+// Custom poll interval is honored.
 func TestNewGrayskullClient_WithCustomPollInterval(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
 
@@ -1436,4 +1426,59 @@ func TestClose_WithNilHttpClientReturnsNil(t *testing.T) {
 	client := &GrayskullClientImpl{}
 	err := client.Close()
 	assert.NoError(t, err)
+}
+
+// Poller ErrShutdownTimeout is surfaced through Client.Close (visibility
+// into partial shutdown).
+func TestClose_PropagatesPollerShutdownTimeout(t *testing.T) {
+	// Tighten the shutdown window so the test is fast.
+	prev := internal.SetShutdownAwaitForTest(5 * time.Millisecond)
+	t.Cleanup(func() { internal.RestoreShutdownAwaitForTest(prev) })
+
+	mockHTTP := new(MockGrayskullHTTPClient)
+	mockHTTP.On("Close").Return(nil).Maybe()
+
+	poller := internal.NewPoller(internal.PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockHTTP,
+		Registry:        internalHooks.NewRegistry(),
+		Interval:        60 * time.Second, // poller not started; this is unused
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	// Simulate a stuck worker so the WaitGroup never drains.
+	internal.AddStuckWorkerForTest(poller)
+
+	client := &GrayskullClientImpl{
+		httpClient: mockHTTP,
+		poller:     poller,
+	}
+
+	err := client.Close()
+	if !errors.Is(err, internal.ErrShutdownTimeout) {
+		t.Errorf("client.Close() = %v, want errors.Is(..., ErrShutdownTimeout) == true", err)
+	}
+}
+
+// HTTP transport close error is propagated when the poller closes cleanly.
+func TestClose_PropagatesHttpClientErrorWhenPollerSucceeds(t *testing.T) {
+	httpErr := errors.New("transport close failed")
+	mockHTTP := new(MockGrayskullHTTPClient)
+	mockHTTP.On("Close").Return(httpErr)
+
+	poller := internal.NewPoller(internal.PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockHTTP,
+		Registry:        internalHooks.NewRegistry(),
+		Interval:        60 * time.Second, // poller not started; this is unused
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+
+	client := &GrayskullClientImpl{
+		httpClient: mockHTTP,
+		poller:     poller,
+	}
+
+	if err := client.Close(); !errors.Is(err, httpErr) {
+		t.Errorf("client.Close() = %v, want %v", err, httpErr)
+	}
 }

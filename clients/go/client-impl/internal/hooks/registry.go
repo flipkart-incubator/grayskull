@@ -6,8 +6,8 @@ import (
 	apiHooks "github.com/flipkart-incubator/grayskull/clients/go/client-api/hooks"
 )
 
-// Registry owns per-secret hook state. Concurrent-safe for interleaved register /
-// unregister / iteration.
+// Registry owns per-secret hook state. Safe for concurrent register,
+// unregister, and iteration.
 type Registry struct {
 	mu    sync.RWMutex
 	byRef map[string]*SecretState
@@ -18,11 +18,10 @@ func NewRegistry() *Registry {
 	return &Registry{byRef: make(map[string]*SecretState)}
 }
 
-// Register attaches hook to (projectID, secretName), seeding lastKnownVersion
-// from initialKnownVersion only when the state row is newly created. Subsequent
-// registrations for the same secret leave the existing version untouched so the
-// poller continues to advance it correctly. Returns the handle the caller uses
-// to remove the hook.
+// Register attaches hook to (projectID, secretName). initialKnownVersion
+// seeds LastKnownVersion only on first registration for the secret;
+// subsequent calls leave the existing version alone. Returns the handle
+// used to unregister.
 func (r *Registry) Register(projectID, secretName string, hook apiHooks.SecretRefreshHook, initialKnownVersion int) *DefaultRefreshHandlerRef {
 	secretRef := projectID + ":" + secretName
 
@@ -34,21 +33,22 @@ func (r *Registry) Register(projectID, secretName string, hook apiHooks.SecretRe
 		r.byRef[secretRef] = state
 	}
 
-	var token *DefaultRefreshHandlerRef
-	token = NewDefaultRefreshHandlerRef(secretRef, func() {
-		r.removeEntry(secretRef, token)
+	var handlerRef *DefaultRefreshHandlerRef
+	handlerRef = NewDefaultRefreshHandlerRef(secretRef, func() {
+		r.removeEntry(secretRef, handlerRef)
 	})
 
 	state.mu.Lock()
-	state.hooks = append(state.hooks, hookEntry{token: token, hook: hook})
+	state.hooks = append(state.hooks, hookEntry{handlerRef: handlerRef, hook: hook})
 	state.mu.Unlock()
 	r.mu.Unlock()
 
-	return token
+	return handlerRef
 }
 
-// removeEntry drops the entry whose token pointer matches
-func (r *Registry) removeEntry(secretRef string, token *DefaultRefreshHandlerRef) {
+// removeEntry drops the entry matching handlerRef. Deletes the SecretState
+// when its last hook is removed.
+func (r *Registry) removeEntry(secretRef string, handlerRef *DefaultRefreshHandlerRef) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	state, ok := r.byRef[secretRef]
@@ -57,7 +57,7 @@ func (r *Registry) removeEntry(secretRef string, token *DefaultRefreshHandlerRef
 	}
 	state.mu.Lock()
 	for i, e := range state.hooks {
-		if e.token == token {
+		if e.handlerRef == handlerRef {
 			state.hooks = append(state.hooks[:i], state.hooks[i+1:]...)
 			break
 		}
@@ -76,8 +76,8 @@ func (r *Registry) Get(secretRef string) *SecretState {
 	return r.byRef[secretRef]
 }
 
-// Snapshot returns a copy of every registered SecretState. Callers must not
-// mutate the returned slice.
+// Snapshot returns a copy of every registered SecretState; the returned
+// slice must not be mutated.
 func (r *Registry) Snapshot() []*SecretState {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -90,4 +90,3 @@ func (r *Registry) Snapshot() []*SecretState {
 	}
 	return out
 }
-
