@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
@@ -14,21 +16,21 @@ import (
 	Client_API "github.com/flipkart-incubator/grayskull/clients/go/client-api/models"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/auth"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
+	internalHooks "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
 	grayskullErrors "github.com/flipkart-incubator/grayskull/clients/go/client-impl/models/errors"
 )
 
-// setupTestRegistry sets up a new registry for testing
+// setupTestRegistry returns a fresh registry for tests.
 func setupTestRegistry(t *testing.T) {
 	// No-op now as metrics handle their own registration
 }
 
-// Use the actual interface from the implementation
 type GrayskullHTTPClient = internal.GrayskullHTTPClientInterface
 
-// MockGrayskullHTTPClient is a mock implementation of the HTTP client
+// MockGrayskullHTTPClient is a test stub for the HTTP client.
 type MockGrayskullHTTPClient struct {
 	mock.Mock
 }
@@ -38,12 +40,17 @@ func (m *MockGrayskullHTTPClient) DoGetWithRetry(ctx context.Context, url string
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockGrayskullHTTPClient) DoPostWithRetry(ctx context.Context, url string, jsonBody []byte, result any) (int, error) {
+	args := m.Called(ctx, url, jsonBody, result)
+	return args.Int(0), args.Error(1)
+}
+
 func (m *MockGrayskullHTTPClient) Close() error {
 	args := m.Called()
 	return args.Error(0)
 }
 
-// MockAuthProvider is a mock implementation of the auth provider
+// MockAuthProvider is a test stub for the auth provider.
 type MockAuthProvider struct {
 	mock.Mock
 }
@@ -66,8 +73,11 @@ func NewGrayskullClientForTesting(
 		clientConfig:       config,
 		httpClient:         httpClient,
 		metricsRecorder:    metricsRecorder,
+		registry:           internalHooks.NewRegistry(),
 	}
 }
+
+func testNilContext() context.Context { return nil }
 
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
@@ -238,6 +248,12 @@ func TestValidateConfig(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_NilConfigReturnsInvalidConfigurationError(t *testing.T) {
+	err := validateConfig(nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid configuration")
+}
+
 func TestNewGrayskullClient(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -307,7 +323,7 @@ func TestNewGrayskullClient(t *testing.T) {
 				}
 			}
 
-			client, err := NewGrayskullClient(tt.authProvider, config, nil)
+			client, err := NewGrayskullClient(tt.authProvider, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 
 			if tt.expectError {
 				assert.Error(t, err, "Expected error but got none")
@@ -318,6 +334,19 @@ func TestNewGrayskullClient(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewGrayskullClient_WithNilMetricsRecorder_UsesDefault(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	client, err := NewGrayskullClient(mockAuth, config, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+	assert.NoError(t, client.Close())
 }
 
 func TestGetSecret(t *testing.T) {
@@ -407,8 +436,7 @@ func TestGetSecret(t *testing.T) {
 	}
 }
 
-// Note: splitSecretRef is tested indirectly through GetSecret tests
-// since it's an unexported method
+// splitSecretRef is tested indirectly via GetSecret tests.
 
 func TestRegisterRefreshHook(t *testing.T) {
 	mockAuth := &MockAuthProvider{}
@@ -427,7 +455,7 @@ func TestRegisterRefreshHook(t *testing.T) {
 	)
 
 	t.Run("successful hook registration", func(t *testing.T) {
-		hook := func(secret Client_API.SecretValue) error {
+		hook := func(_ context.Context, _ Client_API.SecretValue) error {
 			return nil
 		}
 		ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", hook)
@@ -437,7 +465,7 @@ func TestRegisterRefreshHook(t *testing.T) {
 	})
 
 	t.Run("empty secret ref", func(t *testing.T) {
-		hook := func(secret Client_API.SecretValue) error {
+		hook := func(_ context.Context, _ Client_API.SecretValue) error {
 			return nil
 		}
 		ref, err := client.RegisterRefreshHook(context.Background(), "", hook)
@@ -464,7 +492,7 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		Host: "http://localhost:8080",
 	}
 
-	t.Run("nil context creates new context with request ID", func(t *testing.T) {
+	t.Run("context TODO path succeeds", func(t *testing.T) {
 		secretValue := Client_API.SecretValue{
 			DataVersion: 1,
 			PublicPart:  "test-data",
@@ -488,7 +516,38 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
 		)
 
-		result, err := client.GetSecret(nil, "project:secret")
+		result, err := client.GetSecret(context.TODO(), "project:secret")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, secretValue.PublicPart, result.PublicPart)
+	})
+
+	t.Run("nil context path succeeds", func(t *testing.T) {
+		secretValue := Client_API.SecretValue{
+			DataVersion: 2,
+			PublicPart:  "nil-context-data",
+		}
+		resp := response.NewResponse(secretValue, "success")
+		jsonData, _ := json.Marshal(resp)
+
+		mockHTTPClient := &MockGrayskullHTTPClient{}
+		mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				result := args.Get(2).(*response.Response[Client_API.SecretValue])
+				json.Unmarshal(jsonData, result)
+			}).
+			Return(200, nil)
+
+		client := NewGrayskullClientForTesting(
+			"http://localhost:8080",
+			mockAuth,
+			config,
+			mockHTTPClient,
+			metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		)
+
+		result, err := client.GetSecret(testNilContext(), "project:secret")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -653,4 +712,773 @@ func TestGetSecret_AdditionalScenarios(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
 	})
+}
+
+// Successful hook registration.
+func TestRegisterRefreshHook_Success(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	hook := func(_ context.Context, _ Client_API.SecretValue) error {
+		return nil
+	}
+
+	ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", hook)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, ref)
+	assert.True(t, ref.IsActive())
+	assert.Equal(t, "project:secret", ref.GetSecretRef())
+
+	// Verify state was created in registry
+	state := registry.Get("project:secret")
+	assert.NotNil(t, state)
+}
+
+// Unregister works after a successful Register.
+func TestRegisterRefreshHook_CanUnregister(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+
+	ref, err := client.RegisterRefreshHook(context.Background(), "project:secret", hook)
+	assert.NoError(t, err)
+	assert.True(t, ref.IsActive())
+
+	// Unregister
+	ref.Unregister()
+	assert.False(t, ref.IsActive())
+
+	// Unregister again should be idempotent
+	ref.Unregister()
+	assert.False(t, ref.IsActive())
+}
+
+// Invalid secretRef returns an error.
+func TestRegisterRefreshHook_InvalidSecretRef(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+
+	// No colon
+	ref, err := client.RegisterRefreshHook(context.Background(), "no-colon", hook)
+	assert.Error(t, err)
+	assert.Nil(t, ref)
+	assert.Contains(t, err.Error(), "invalid secretRef format")
+
+	// Empty projectID
+	ref, err = client.RegisterRefreshHook(context.Background(), ":secret", hook)
+	assert.Error(t, err)
+	assert.Nil(t, ref)
+
+	// Empty secretName
+	ref, err = client.RegisterRefreshHook(context.Background(), "project:", hook)
+	assert.Error(t, err)
+	assert.Nil(t, ref)
+}
+
+// GetSecret's observed version seeds a later RegisterRefreshHook.
+func TestGetSecret_ThenRegisterHook_SeedsPollerWithObservedVersion(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	secretValue := Client_API.SecretValue{
+		DataVersion: 7,
+		PublicPart:  "user",
+		PrivatePart: "pwd",
+	}
+	resp := response.NewResponse(secretValue, "Success")
+	jsonData, _ := json.Marshal(resp)
+
+	mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(2).(*response.Response[Client_API.SecretValue])
+			json.Unmarshal(jsonData, result)
+		}).
+		Return(200, nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	// GetSecret observes v7
+	_, err := client.GetSecret(context.Background(), "team:db-pass")
+	assert.NoError(t, err)
+
+	// Register hook
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	ref, err := client.RegisterRefreshHook(context.Background(), "team:db-pass", hook)
+	assert.NoError(t, err)
+	assert.NotNil(t, ref)
+
+	// Verify lastKnownVersion was seeded with 7
+	state := registry.Get("team:db-pass")
+	assert.NotNil(t, state)
+	assert.Equal(t, int32(7), state.LastKnownVersion.Load())
+}
+
+// Hook registered without prior GetSecret starts at lastKnownVersion=0.
+func TestRegisterHook_WithoutPriorGetSecret_StartsFromVersionZero(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	ref, err := client.RegisterRefreshHook(context.Background(), "team:no-get-secret", hook)
+	assert.NoError(t, err)
+	assert.NotNil(t, ref)
+
+	// Verify lastKnownVersion is 0
+	state := registry.Get("team:no-get-secret")
+	assert.NotNil(t, state)
+	assert.Equal(t, int32(0), state.LastKnownVersion.Load())
+}
+
+// Repeated GetSecret updates the seed; latest wins.
+func TestGetSecret_MultipleCallsSameSecret_SeedUsesLastObservedVersion(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	// First call returns v9
+	secretValue1 := Client_API.SecretValue{
+		DataVersion: 9,
+		PublicPart:  "u",
+		PrivatePart: "p",
+	}
+	resp1 := response.NewResponse(secretValue1, "Success")
+	jsonData1, _ := json.Marshal(resp1)
+
+	// Second call returns v11
+	secretValue2 := Client_API.SecretValue{
+		DataVersion: 11,
+		PublicPart:  "u",
+		PrivatePart: "p",
+	}
+	resp2 := response.NewResponse(secretValue2, "Success")
+	jsonData2, _ := json.Marshal(resp2)
+
+	callCount := 0
+	mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(2).(*response.Response[Client_API.SecretValue])
+			callCount++
+			if callCount == 1 {
+				json.Unmarshal(jsonData1, result)
+			} else {
+				json.Unmarshal(jsonData2, result)
+			}
+		}).
+		Return(200, nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	// First getSecret observes v9
+	_, err := client.GetSecret(context.Background(), "team:rotating")
+	assert.NoError(t, err)
+
+	// Second getSecret observes v11 (this is the last call)
+	_, err = client.GetSecret(context.Background(), "team:rotating")
+	assert.NoError(t, err)
+
+	// Register hook - should seed with v11
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	_, err = client.RegisterRefreshHook(context.Background(), "team:rotating", hook)
+	assert.NoError(t, err)
+
+	// Verify lastKnownVersion was seeded with 11 (last observed)
+	state := registry.Get("team:rotating")
+	assert.NotNil(t, state)
+	assert.Equal(t, int32(11), state.LastKnownVersion.Load())
+}
+
+// GetSecret called AFTER RegisterRefreshHook does not retroactively bump
+// the poller's LastKnownVersion.
+func TestRegisterHook_ThenGetSecret_DoesNotRetroactivelyUpdatePoller(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	secretValue := Client_API.SecretValue{
+		DataVersion: 11,
+		PublicPart:  "u",
+		PrivatePart: "p",
+	}
+	resp := response.NewResponse(secretValue, "Success")
+	jsonData, _ := json.Marshal(resp)
+
+	mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(2).(*response.Response[Client_API.SecretValue])
+			json.Unmarshal(jsonData, result)
+		}).
+		Return(200, nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	// Register hook first (no prior getSecret, so seed=0)
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	_, err := client.RegisterRefreshHook(context.Background(), "team:late-get", hook)
+	assert.NoError(t, err)
+
+	// Now call getSecret (after registration)
+	_, err = client.GetSecret(context.Background(), "team:late-get")
+	assert.NoError(t, err)
+
+	// Verify lastKnownVersion is still 0 (not retroactively updated)
+	state := registry.Get("team:late-get")
+	assert.NotNil(t, state)
+	assert.Equal(t, int32(0), state.LastKnownVersion.Load())
+}
+
+// Versions for one secret don't bleed into another.
+func TestGetSecret_DifferentSecret_DoesNotSeedUnrelatedHook(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	secretValue := Client_API.SecretValue{
+		DataVersion: 5,
+		PublicPart:  "u",
+		PrivatePart: "p",
+	}
+	resp := response.NewResponse(secretValue, "Success")
+	jsonData, _ := json.Marshal(resp)
+
+	mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(2).(*response.Response[Client_API.SecretValue])
+			json.Unmarshal(jsonData, result)
+		}).
+		Return(200, nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	// GetSecret for secret-a records v5
+	_, err := client.GetSecret(context.Background(), "team:secret-a")
+	assert.NoError(t, err)
+
+	// Register hook for a different secret (secret-b)
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	_, err = client.RegisterRefreshHook(context.Background(), "team:secret-b", hook)
+	assert.NoError(t, err)
+
+	// Verify secret-b has lastKnownVersion=0 (not seeded from secret-a)
+	state := registry.Get("team:secret-b")
+	assert.NotNil(t, state)
+	assert.Equal(t, int32(0), state.LastKnownVersion.Load())
+}
+
+// Second registration on the same secret must not overwrite LastKnownVersion.
+func TestTwoHooksSameSecret_SecondRegistrationLeavesVersionIntact(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	secretValue := Client_API.SecretValue{
+		DataVersion: 8,
+		PublicPart:  "u",
+		PrivatePart: "p",
+	}
+	resp := response.NewResponse(secretValue, "Success")
+	jsonData, _ := json.Marshal(resp)
+
+	mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(2).(*response.Response[Client_API.SecretValue])
+			json.Unmarshal(jsonData, result)
+		}).
+		Return(200, nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	// GetSecret observes v8
+	_, err := client.GetSecret(context.Background(), "team:shared")
+	assert.NoError(t, err)
+
+	// Register first hook (seeds lastKnownVersion=8)
+	hook1 := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	_, err = client.RegisterRefreshHook(context.Background(), "team:shared", hook1)
+	assert.NoError(t, err)
+
+	// Register second hook (should not overwrite version)
+	hook2 := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	_, err = client.RegisterRefreshHook(context.Background(), "team:shared", hook2)
+	assert.NoError(t, err)
+
+	// Verify lastKnownVersion is still 8
+	state := registry.Get("team:shared")
+	assert.NotNil(t, state)
+	assert.Equal(t, int32(8), state.LastKnownVersion.Load())
+}
+
+// RegisterRefreshHook after Close returns an error.
+func TestRegisterRefreshHook_AfterClose_Throws(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+	mockHTTPClient.On("Close").Return(nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	// Close the client
+	client.Close()
+
+	// Try to register a hook after close
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	ref, err := client.RegisterRefreshHook(context.Background(), "team:after-close", hook)
+
+	assert.Error(t, err)
+	assert.Nil(t, ref)
+	assert.Contains(t, err.Error(), "client has been closed")
+}
+
+// Close cleans up resources.
+func TestClose_CleansUpResources(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+	mockHTTPClient.On("Close").Return(nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	err := client.Close()
+
+	assert.NoError(t, err)
+	mockHTTPClient.AssertCalled(t, "Close")
+}
+
+// Close is idempotent.
+func TestClose_CalledTwice_IsIdempotent(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+	mockHTTPClient.On("Close").Return(nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	err1 := client.Close()
+	err2 := client.Close()
+
+	assert.NoError(t, err1)
+	assert.NoError(t, err2)
+
+	// Close should be called only once due to idempotency
+	mockHTTPClient.AssertNumberOfCalls(t, "Close", 1)
+}
+
+// secretNames containing colons split on the first colon only.
+func TestSplitSecretRef_WithColonsInSecretName(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	// Test indirectly through RegisterRefreshHook
+	hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	ref, err := client.RegisterRefreshHook(context.Background(), "project:secret:with:colons", hook)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, ref)
+	assert.Equal(t, "project:secret:with:colons", ref.GetSecretRef())
+
+	// Verify state was created correctly
+	state := registry.Get("project:secret:with:colons")
+	assert.NotNil(t, state)
+	assert.Equal(t, "project", state.ProjectID)
+	assert.Equal(t, "secret:with:colons", state.SecretName)
+}
+
+// Race check; run with -race.
+func TestConcurrentGetSecretAndRegisterHook(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	secretValue := Client_API.SecretValue{
+		DataVersion: 1,
+		PublicPart:  "p",
+		PrivatePart: "p",
+	}
+	resp := response.NewResponse(secretValue, "Success")
+	jsonData, _ := json.Marshal(resp)
+
+	mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(2).(*response.Response[Client_API.SecretValue])
+			json.Unmarshal(jsonData, result)
+		}).
+		Return(200, nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	const numGoroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines * 2) // half GetSecret, half RegisterRefreshHook
+
+	// Concurrent GetSecret calls
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			defer wg.Done()
+			client.GetSecret(context.Background(), "team:concurrent")
+		}()
+	}
+
+	// Concurrent RegisterRefreshHook calls
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			defer wg.Done()
+			hook := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+			client.RegisterRefreshHook(context.Background(), "team:concurrent", hook)
+		}()
+	}
+
+	wg.Wait()
+	// Test passes if no data race detected (run with -race flag)
+}
+
+// Successful GetSecret updates lastSeenVersions.
+func TestGetSecret_RecordsVersionInLastSeenVersions(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+	mockAuth.On("GetAuthHeader").Return("Bearer test-token", nil)
+
+	mockHTTPClient := &MockGrayskullHTTPClient{}
+
+	secretValue := Client_API.SecretValue{
+		DataVersion: 42,
+		PublicPart:  "test",
+		PrivatePart: "test",
+	}
+	resp := response.NewResponse(secretValue, "Success")
+	jsonData, _ := json.Marshal(resp)
+
+	mockHTTPClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			result := args.Get(2).(*response.Response[Client_API.SecretValue])
+			json.Unmarshal(jsonData, result)
+		}).
+		Return(200, nil)
+
+	config := &models.GrayskullClientConfiguration{
+		Host:           "http://localhost:8080",
+		MaxConnections: 10,
+	}
+
+	registry := internalHooks.NewRegistry()
+	client := &GrayskullClientImpl{
+		baseURL:            config.Host,
+		authHeaderProvider: mockAuth,
+		clientConfig:       config,
+		httpClient:         mockHTTPClient,
+		metricsRecorder:    metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+		registry:           registry,
+	}
+
+	_, err := client.GetSecret(context.Background(), "team:recorded")
+	assert.NoError(t, err)
+
+	// Verify version was recorded in lastSeenVersions (via hook registration)
+	// The lastSeenVersions is private, so we verify indirectly through hook registration
+	hook2 := func(_ context.Context, _ Client_API.SecretValue) error { return nil }
+	ref, err2 := client.RegisterRefreshHook(context.Background(), "team:recorded", hook2)
+	assert.NoError(t, err2)
+
+	// Verify the hook was seeded with version 42
+	state := registry.Get("team:recorded")
+	assert.NotNil(t, state)
+	assert.Equal(t, int32(42), state.LastKnownVersion.Load())
+	ref.Unregister()
+}
+
+// Default poll interval is applied when none is configured.
+func TestNewGrayskullClient_WithDefaultPollInterval(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+
+	config := models.NewDefaultConfig()
+	config.Host = "http://localhost:8080"
+	config.MaxConnections = 10
+	config.PollingIntervalSeconds = 0 // Should use default
+
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
+
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+
+	// Clean up
+	client.(*GrayskullClientImpl).Close()
+}
+
+// Custom poll interval is honored.
+func TestNewGrayskullClient_WithCustomPollInterval(t *testing.T) {
+	mockAuth := &MockAuthProvider{}
+
+	config := models.NewDefaultConfig()
+	config.Host = "http://localhost:8080"
+	config.MaxConnections = 10
+	config.PollingIntervalSeconds = 120 // 2 minutes
+
+	client, err := NewGrayskullClient(mockAuth, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
+
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+
+	implClient := client.(*GrayskullClientImpl)
+	assert.NotNil(t, implClient.poller)
+
+	// Clean up
+	implClient.Close()
+}
+
+func TestClose_WithNilHttpClientReturnsNil(t *testing.T) {
+	client := &GrayskullClientImpl{}
+	err := client.Close()
+	assert.NoError(t, err)
+}
+
+// Poller ErrShutdownTimeout is surfaced through Client.Close (visibility
+// into partial shutdown).
+func TestClose_PropagatesPollerShutdownTimeout(t *testing.T) {
+	// Tighten the shutdown window so the test is fast.
+	prev := internal.SetShutdownAwaitForTest(5 * time.Millisecond)
+	t.Cleanup(func() { internal.RestoreShutdownAwaitForTest(prev) })
+
+	mockHTTP := new(MockGrayskullHTTPClient)
+	mockHTTP.On("Close").Return(nil).Maybe()
+
+	poller := internal.NewPoller(internal.PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockHTTP,
+		Registry:        internalHooks.NewRegistry(),
+		Interval:        60 * time.Second, // poller not started; this is unused
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+	// Simulate a stuck worker so the WaitGroup never drains.
+	internal.AddStuckWorkerForTest(poller)
+
+	client := &GrayskullClientImpl{
+		httpClient: mockHTTP,
+		poller:     poller,
+	}
+
+	err := client.Close()
+	if !errors.Is(err, internal.ErrShutdownTimeout) {
+		t.Errorf("client.Close() = %v, want errors.Is(..., ErrShutdownTimeout) == true", err)
+	}
+}
+
+// HTTP transport close error is propagated when the poller closes cleanly.
+func TestClose_PropagatesHttpClientErrorWhenPollerSucceeds(t *testing.T) {
+	httpErr := errors.New("transport close failed")
+	mockHTTP := new(MockGrayskullHTTPClient)
+	mockHTTP.On("Close").Return(httpErr)
+
+	poller := internal.NewPoller(internal.PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockHTTP,
+		Registry:        internalHooks.NewRegistry(),
+		Interval:        60 * time.Second, // poller not started; this is unused
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+
+	client := &GrayskullClientImpl{
+		httpClient: mockHTTP,
+		poller:     poller,
+	}
+
+	if err := client.Close(); !errors.Is(err, httpErr) {
+		t.Errorf("client.Close() = %v, want %v", err, httpErr)
+	}
 }

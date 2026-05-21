@@ -11,5 +11,6 @@ type GrayskullAuthHeaderProvider interface {
 	// Returns:
 	//   - The authentication header value (e.g., "Basic dXNlcm5hbWU6cGFzc3dvcmQ=")
 	//   - An error if authentication token generation fails
+
 	GetAuthHeader() (string, error)
 }

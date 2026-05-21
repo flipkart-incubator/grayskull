@@ -468,3 +468,273 @@ func TestGrayskullHTTPClient_E2E_ReadBodyError(t *testing.T) {
 	assert.True(t, statusCode == 0 || statusCode == http.StatusOK)
 	assert.Contains(t, err.Error(), "failed after")
 }
+
+func TestGrayskullHTTPClient_E2E_PostSuccessAfterRetry(t *testing.T) {
+	attempts := 0
+	testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"error":"retry"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data":"posted"}`))
+	}))
+
+	client := setupClient(t, &models.GrayskullClientConfiguration{
+		MaxRetries:    3,
+		MinRetryDelay: 10,
+		ReadTimeout:   1000,
+	})
+
+	var result testResponse
+	statusCode, err := client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"hello":"world"}`), &result)
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, statusCode)
+	assert.Equal(t, "posted", result.Data)
+	assert.Equal(t, 2, attempts)
+}
+
+func TestGrayskullHTTPClient_E2E_PostRetryableFailureExhausted(t *testing.T) {
+	testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"error":"down"}`))
+	}))
+
+	client := setupClient(t, &models.GrayskullClientConfiguration{
+		MaxRetries:    2,
+		MinRetryDelay: 10,
+		ReadTimeout:   1000,
+	})
+
+	var result testResponse
+	statusCode, err := client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"x":1}`), &result)
+
+	assert.Error(t, err)
+	assert.True(t, statusCode == 0 || statusCode == http.StatusServiceUnavailable)
+	assert.Contains(t, err.Error(), "failed after")
+}
+
+func TestGrayskullHTTPClient_E2E_PostNonRetryableFailure(t *testing.T) {
+	testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"bad request"}`))
+	}))
+
+	client := setupClient(t, &models.GrayskullClientConfiguration{
+		MaxRetries:    2,
+		MinRetryDelay: 10,
+		ReadTimeout:   1000,
+	})
+
+	var result testResponse
+	statusCode, err := client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"x":1}`), &result)
+
+	assert.Error(t, err)
+	assert.True(t, statusCode == 0 || statusCode == http.StatusBadRequest)
+	assert.Contains(t, err.Error(), "failed after")
+}
+
+func TestGrayskullHTTPClient_E2E_PostUnmarshalError(t *testing.T) {
+	testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`not-json`))
+	}))
+
+	client := setupClient(t, nil)
+	var result testResponse
+	statusCode, err := client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"x":1}`), &result)
+
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusOK, statusCode)
+	assert.Contains(t, err.Error(), "failed to unmarshal response")
+}
+
+func TestGrayskullHTTPClient_E2E_PostSkipsUnmarshalForNilResultOrEmptyBody(t *testing.T) {
+	testServer := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	client := setupClient(t, nil)
+
+	statusCode, err := client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"x":1}`), nil)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, statusCode)
+
+	var result testResponse
+	statusCode, err = client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"x":1}`), &result)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, statusCode)
+}
+
+func TestGrayskullHTTPClient_E2E_PostInvalidURL(t *testing.T) {
+	client := setupClient(t, nil)
+	var result testResponse
+	statusCode, err := client.DoPostWithRetry(context.Background(), "://invalid-url", []byte(`{"x":1}`), &result)
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, statusCode)
+	assert.Contains(t, err.Error(), "failed after")
+}
+
+func TestGrayskullHTTPClient_E2E_PostAuthHeaderValidation(t *testing.T) {
+	t.Run("auth provider error", func(t *testing.T) {
+		mockAuth := &MockAuthProviderHTTP{}
+		mockAuth.On("GetAuthHeader").Return("", errors.New("auth provider failed"))
+		config := &models.GrayskullClientConfiguration{MaxRetries: 1, MinRetryDelay: 10, ReadTimeout: 1000}
+
+		client := internal.NewGrayskullHTTPClient(mockAuth, config, nil, NewNoopRecorder())
+		statusCode, err := client.DoPostWithRetry(context.Background(), "http://example.com", []byte(`{}`), nil)
+
+		assert.Error(t, err)
+		assert.Equal(t, 0, statusCode)
+		assert.Contains(t, err.Error(), "failed to get auth header")
+	})
+
+	t.Run("empty auth header", func(t *testing.T) {
+		mockAuth := &MockAuthProviderHTTP{}
+		mockAuth.On("GetAuthHeader").Return("", nil)
+		config := &models.GrayskullClientConfiguration{MaxRetries: 1, MinRetryDelay: 10, ReadTimeout: 1000}
+
+		client := internal.NewGrayskullHTTPClient(mockAuth, config, nil, NewNoopRecorder())
+		statusCode, err := client.DoPostWithRetry(context.Background(), "http://example.com", []byte(`{}`), nil)
+
+		assert.Error(t, err)
+		assert.Equal(t, 0, statusCode)
+		assert.Contains(t, err.Error(), "auth header cannot be empty")
+	})
+}
+
+// Restored coverage that previously lived in a separate file.
+func TestGrayskullHTTPClient_E2E_PostNetworkError(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if ok {
+			conn, _, _ := hj.Hijack()
+			if conn != nil {
+				conn.Close()
+			}
+		}
+	}))
+	defer testServer.Close()
+
+	client := setupClient(t, &models.GrayskullClientConfiguration{
+		MaxRetries:    2,
+		MinRetryDelay: 10,
+		ReadTimeout:   1000,
+	})
+
+	var result testResponse
+	statusCode, err := client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"x":1}`), &result)
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, statusCode)
+	assert.Contains(t, err.Error(), "failed after")
+}
+
+func TestGrayskullHTTPClient_E2E_PostReadBodyError(t *testing.T) {
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data":"test"}`))
+		hj, ok := w.(http.Hijacker)
+		if ok {
+			conn, _, _ := hj.Hijack()
+			if conn != nil {
+				conn.Close()
+			}
+		}
+	}))
+	defer testServer.Close()
+
+	client := setupClient(t, &models.GrayskullClientConfiguration{
+		MaxRetries:    2,
+		MinRetryDelay: 10,
+		ReadTimeout:   1000,
+	})
+
+	var result testResponse
+	statusCode, err := client.DoPostWithRetry(context.Background(), testServer.URL, []byte(`{"x":1}`), &result)
+
+	assert.Error(t, err)
+	assert.True(t, statusCode == 0 || statusCode == http.StatusOK)
+	assert.Contains(t, err.Error(), "failed after")
+}
+
+// GET and POST share the same retry behavior on retryable 5xx via
+// unified doWithRetry helper.
+func TestGrayskullHTTPClient_SharedRetryPathForGetAndPost(t *testing.T) {
+	t.Run("GET retries 5xx then succeeds", func(t *testing.T) {
+		var calls int
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"ok"}`))
+		}))
+
+		client := setupClient(t, nil)
+		var result testResponse
+		status, err := client.DoGetWithRetry(context.Background(), ts.URL, &result)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "ok", result.Data)
+		assert.Equal(t, 2, calls, "should have retried exactly once")
+	})
+
+	t.Run("POST retries 5xx then succeeds", func(t *testing.T) {
+		var calls int
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":"ok"}`))
+		}))
+
+		client := setupClient(t, nil)
+		var result testResponse
+		status, err := client.DoPostWithRetry(context.Background(), ts.URL, []byte(`{"x":1}`), &result)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "ok", result.Data)
+		assert.Equal(t, 2, calls, "should have retried exactly once")
+	})
+}
+
+// POST sets Content-Type; GET does not. Only header-level divergence
+// preserved by the shared helper.
+func TestGrayskullHTTPClient_PostSetsContentType(t *testing.T) {
+	t.Run("POST has Content-Type", func(t *testing.T) {
+		var got string
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = r.Header.Get("Content-Type")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		}))
+		client := setupClient(t, nil)
+		_, _ = client.DoPostWithRetry(context.Background(), ts.URL, []byte(`{}`), nil)
+		assert.Equal(t, "application/json; charset=utf-8", got)
+	})
+
+	t.Run("GET has no Content-Type", func(t *testing.T) {
+		var got string
+		ts := setupTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = r.Header.Get("Content-Type")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		}))
+		client := setupClient(t, nil)
+		var result testResponse
+		_, _ = client.DoGetWithRetry(context.Background(), ts.URL, &result)
+		assert.Equal(t, "", got)
+	})
+}

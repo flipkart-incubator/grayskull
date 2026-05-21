@@ -9,4 +9,7 @@ const (
 	// GrayskullRequestID is the unique request identifier for correlating logs across the request lifecycle.
 	// Also sent as the X-Request-Id header to enable end-to-end tracing.
 	GrayskullRequestID contextKey = "grayskullRequestId"
+
+	// DefaultPollingIntervalSeconds is the default batch refresh poll interval.
+	DefaultPollingIntervalSeconds = 60
 )

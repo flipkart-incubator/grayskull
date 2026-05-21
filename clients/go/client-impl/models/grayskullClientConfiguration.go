@@ -1,5 +1,11 @@
 package models
 
+import (
+	clientapiworkload "github.com/flipkart-incubator/grayskull/clients/go/client-api/workload"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/workload"
+)
+
 // GrayskullClientConfiguration holds all the necessary configuration parameters
 // required to connect to and interact with the Grayskull service.
 type GrayskullClientConfiguration struct {
@@ -59,20 +65,76 @@ type GrayskullClientConfiguration struct {
 	// response times, etc.) for monitoring and observability.
 	// Default: true
 	MetricsEnabled bool `json:"metricsEnabled" yaml:"metricsEnabled"`
+
+	// PollingIntervalSeconds is the fixed delay in seconds between consecutive
+	// batch-refresh poll cycles.  Default: 60 (one minute)
+	PollingIntervalSeconds int `json:"pollingIntervalSeconds" yaml:"pollingIntervalSeconds" validate:"gte=0"`
+
+	// WorkloadIdentityResolver resolves the workload identity for the Grayskull-Workload header.
+	// Defaults to DefaultWorkloadIdentityResolver (hostname). Can be customized for
+	// richer identity (e.g., Kubernetes pod name, ECS task ID, etc.).
+	WorkloadIdentityResolver clientapiworkload.WorkloadIdentityResolver
+
+	// defaultHeaders holds headers added to every outbound request. Populated
+	// via AddDefaultHeader; not meant to be set directly from JSON/YAML.
+	defaultHeaders map[string]string
+}
+
+// AddDefaultHeader registers a header that the HTTP transport will attach to
+// every outbound request. Internal headers (Authorization, X-Request-Id)
+// always overwrite a conflicting custom value.
+func (c *GrayskullClientConfiguration) AddDefaultHeader(key, value string) {
+	if key == "" || value == "" {
+		return
+	}
+	if c.defaultHeaders == nil {
+		c.defaultHeaders = make(map[string]string)
+	}
+	c.defaultHeaders[key] = value
+}
+
+// GetDefaultHeaders returns a read-only copy of the registered default headers.
+func (c *GrayskullClientConfiguration) GetDefaultHeaders() map[string]string {
+	if len(c.defaultHeaders) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(c.defaultHeaders))
+	for k, v := range c.defaultHeaders {
+		out[k] = v
+	}
+	return out
+}
+
+// SetWorkloadIdentityResolver sets a custom workload identity resolver.
+// If nil, the client will use the default resolver (hostname).
+func (c *GrayskullClientConfiguration) SetWorkloadIdentityResolver(resolver clientapiworkload.WorkloadIdentityResolver) {
+	if resolver != nil {
+		c.WorkloadIdentityResolver = resolver
+	}
+}
+
+// GetWorkloadIdentityResolver returns the configured resolver, or a default one if not set.
+func (c *GrayskullClientConfiguration) GetWorkloadIdentityResolver() clientapiworkload.WorkloadIdentityResolver {
+	if c.WorkloadIdentityResolver == nil {
+		return workload.NewDefaultWorkloadIdentityResolver()
+	}
+	return c.WorkloadIdentityResolver
 }
 
 // NewDefaultConfig returns a new GrayskullClientConfiguration with default values.
 func NewDefaultConfig() *GrayskullClientConfiguration {
 	return &GrayskullClientConfiguration{
-		Host:                "",
-		ConnectionTimeout:   10000, // 10 seconds
-		ReadTimeout:         30000, // 30 seconds
-		MaxConnections:      10,
-		IdleConnTimeout:     300000, // 5 minutes
-		MaxIdleConns:        10,     // same as MaxConnections
-		MaxIdleConnsPerHost: 10,     // same as MaxConnections
-		MaxRetries:          3,
-		MinRetryDelay:       100, // 100ms
-		MetricsEnabled:      true,
+		Host:                     "",
+		ConnectionTimeout:        10000, // 10 seconds
+		ReadTimeout:              30000, // 30 seconds
+		MaxConnections:           10,
+		IdleConnTimeout:          300000, // 5 minutes
+		MaxIdleConns:             10,     // same as MaxConnections
+		MaxIdleConnsPerHost:      10,     // same as MaxConnections
+		MaxRetries:               3,
+		MinRetryDelay:            100, // 100ms
+		MetricsEnabled:           true,
+		PollingIntervalSeconds:   constants.DefaultPollingIntervalSeconds,
+		WorkloadIdentityResolver: workload.NewDefaultWorkloadIdentityResolver(),
 	}
 }
