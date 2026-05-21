@@ -27,6 +27,10 @@ type mockHTTPClient struct {
 	postCallCount int
 	postErr       error
 	closed        bool
+
+	// test controls for simulating a blocked in-flight POST.
+	blockPostUntilCtxDone bool
+	postStarted           chan struct{}
 }
 
 type postResponse struct {
@@ -39,6 +43,17 @@ func (m *mockHTTPClient) DoPostWithRetry(ctx context.Context, url string, jsonBo
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.postCallCount++
+
+	if m.blockPostUntilCtxDone {
+		if m.postStarted != nil {
+			select {
+			case m.postStarted <- struct{}{}:
+			default:
+			}
+		}
+		<-ctx.Done()
+		return 0, ctx.Err()
+	}
 
 	if m.postErr != nil {
 		return 500, m.postErr
@@ -1101,6 +1116,53 @@ func TestPoller_Close_ReturnsShutdownTimeout(t *testing.T) {
 
 	if err := poller.Close(); !errors.Is(err, ErrShutdownTimeout) {
 		t.Errorf("Close() error = %v, want ErrShutdownTimeout", err)
+	}
+}
+
+// Close cancels in-flight poll HTTP calls (they don't wait full request timeout).
+func TestPoller_Close_CancelsInFlightPollRequest(t *testing.T) {
+	original := shutdownAwait
+	shutdownAwait = 500 * time.Millisecond
+	t.Cleanup(func() { shutdownAwait = original })
+
+	mockClient := &mockHTTPClient{
+		blockPostUntilCtxDone: true,
+		postStarted:           make(chan struct{}, 1),
+	}
+	registry := hooks.NewRegistry()
+	registry.Register("acme", "cancel-me", func(_ context.Context, _ models.SecretValue) error { return nil }, 0)
+
+	poller := NewPoller(PollerConfig{
+		BaseURL:         "https://test.example.com",
+		HTTPClient:      mockClient,
+		Registry:        registry,
+		Interval:        60 * time.Second,
+		RequestTimeout:  30 * time.Second,
+		MetricsRecorder: metrics.NewPrometheusRecorder(prometheus.NewRegistry()),
+	})
+
+	poller.wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer poller.wg.Done()
+		poller.safePollOnce()
+		close(done)
+	}()
+
+	select {
+	case <-mockClient.postStarted:
+	case <-time.After(time.Second):
+		t.Fatal("poll request never started")
+	}
+
+	if err := poller.Close(); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("in-flight poll request was not canceled by Close")
 	}
 }
 

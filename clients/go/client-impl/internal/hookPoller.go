@@ -39,6 +39,9 @@ type Poller struct {
 	// hookCtx is the root ctx for consumer hooks; cancelled on Close.
 	hookCtx       context.Context
 	cancelHookCtx context.CancelFunc
+	// pollCtx is the root ctx for outbound poll HTTP calls; cancelled on Close.
+	pollCtx       context.Context
+	cancelPollCtx context.CancelFunc
 
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -100,6 +103,7 @@ func NewPoller(cfg PollerConfig) *Poller {
 		marshal = json.Marshal
 	}
 	hookCtx, cancelHookCtx := context.WithCancel(context.Background())
+	pollCtx, cancelPollCtx := context.WithCancel(context.Background())
 	return &Poller{
 		registry:        cfg.Registry,
 		httpClient:      cfg.HTTPClient,
@@ -112,6 +116,8 @@ func NewPoller(cfg PollerConfig) *Poller {
 		dispatchCh:      make(chan dispatchJob, dispatcherWorkers*4),
 		hookCtx:         hookCtx,
 		cancelHookCtx:   cancelHookCtx,
+		pollCtx:         pollCtx,
+		cancelPollCtx:   cancelPollCtx,
 		stopCh:          make(chan struct{}),
 	}
 }
@@ -134,6 +140,7 @@ func (p *Poller) Close() error {
 	p.stopOnce.Do(func() {
 		close(p.stopCh)
 		p.cancelHookCtx()
+		p.cancelPollCtx()
 	})
 
 	done := make(chan struct{})
@@ -177,7 +184,7 @@ func (p *Poller) safePollOnce() {
 	}()
 
 	requestID := uuid.NewString()
-	ctx := context.WithValue(context.Background(), constants.GrayskullRequestID, requestID)
+	ctx := context.WithValue(p.pollCtx, constants.GrayskullRequestID, requestID)
 	ctx, cancel := context.WithTimeout(ctx, p.requestTimeout)
 	defer cancel()
 
