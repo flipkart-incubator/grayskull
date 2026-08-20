@@ -28,6 +28,8 @@ import com.flipkart.grayskull.spi.repositories.SecretRepository;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.service.utils.AuthnUtil;
 import com.flipkart.grayskull.service.utils.SecretEncryptionUtil;
+import com.flipkart.grayskull.service.utils.StageTimer;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -54,6 +56,7 @@ public class SecretServiceImpl implements SecretService {
     private final KmsConfig kmsConfig;
     private final ProjectRepository projectRepository;
     private final AuthnUtil authnUtil;
+    private final MeterRegistry meterRegistry;
 
     /**
      * Lists secrets for a given project with pagination.
@@ -120,8 +123,10 @@ public class SecretServiceImpl implements SecretService {
      */
     @Override
     public SecretMetadata readSecretMetadata(String projectId, String secretName) {
-        Secret secret = findActiveSecretOrThrow(projectId, secretName);
-        return secretMapper.secretToSecretMetadata(secret);
+        Secret secret = StageTimer.time(meterRegistry, "getSecretMetadata", "dbSecretLookup",
+                () -> findActiveSecretOrThrow(projectId, secretName));
+        return StageTimer.time(meterRegistry, "getSecretMetadata", "responseMapping",
+                () -> secretMapper.secretToSecretMetadata(secret));
     }
 
     /**
@@ -133,15 +138,17 @@ public class SecretServiceImpl implements SecretService {
      */
     @Override
     public SecretDataResponse readSecretValue(String projectId, String secretName) {
-        Secret secret = findActiveSecretOrThrow(projectId, secretName);
+        Secret secret = StageTimer.time(meterRegistry, "getSecretData", "dbSecretLookup",
+                () -> findActiveSecretOrThrow(projectId, secretName));
 
-        SecretData secretData = secretDataRepository
-                .getBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Secret data not found for secret: " + secret.getId()));
+        SecretData secretData = StageTimer.time(meterRegistry, "getSecretData", "dbSecretDataLookup", () ->
+                secretDataRepository.getBySecretIdAndDataVersion(secret.getId(), secret.getCurrentDataVersion())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                "Secret data not found for secret: " + secret.getId())));
         secretEncryptionUtil.decryptSecretData(secretData);
 
-        return secretMapper.toSecretDataResponse(secret, secretData);
+        return StageTimer.time(meterRegistry, "getSecretData", "responseMapping",
+                () -> secretMapper.toSecretDataResponse(secret, secretData));
     }
 
     @Override
@@ -288,18 +295,20 @@ public class SecretServiceImpl implements SecretService {
     @Override
     public SecretDataVersionResponse getSecretDataVersion(String projectId, String secretName, int version,
             Optional<LifecycleState> state) {
-        Secret secret = state
+        Secret secret = StageTimer.time(meterRegistry, "getSecretVersion", "dbSecretLookup", () -> state
                 .map(secretState -> secretRepository.findByProjectIdAndNameAndState(projectId, secretName, secretState)
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                                 "Secret with name " + secretName + " and state " + secretState + " not found.")))
-                .orElseGet(() -> findActiveSecretOrThrow(projectId, secretName));
+                .orElseGet(() -> findActiveSecretOrThrow(projectId, secretName)));
 
-        SecretData secretData = secretDataRepository.getBySecretIdAndDataVersion(secret.getId(), version)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Secret with name " + secretName + " and version " + version + " not found."));
+        SecretData secretData = StageTimer.time(meterRegistry, "getSecretVersion", "dbSecretDataLookup", () ->
+                secretDataRepository.getBySecretIdAndDataVersion(secret.getId(), version)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                "Secret with name " + secretName + " and version " + version + " not found.")));
         secretEncryptionUtil.decryptSecretData(secretData);
 
-        return secretMapper.secretDataToSecretDataVersionResponse(secret, secretData);
+        return StageTimer.time(meterRegistry, "getSecretVersion", "responseMapping",
+                () -> secretMapper.secretDataToSecretDataVersionResponse(secret, secretData));
     }
 
     /**

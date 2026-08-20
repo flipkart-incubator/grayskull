@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.authn;
 
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.AllArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.SecurityConfigurer;
@@ -12,6 +13,7 @@ import org.springframework.security.web.context.SecurityContextHolderFilter;
 public class AuthenticationFilterSecurityConfigurer implements SecurityConfigurer<DefaultSecurityFilterChain, HttpSecurity> {
 
     private final GrayskullAuthenticationProvider authenticationProvider;
+    private final MeterRegistry meterRegistry;
 
     @Override
     public void init(HttpSecurity builder) {
@@ -22,6 +24,6 @@ public class AuthenticationFilterSecurityConfigurer implements SecurityConfigure
     public void configure(HttpSecurity http) {
         AuthenticationManager authenticationManager = http.getSharedObject(AuthenticationManager.class);
         authenticationProvider.initialize(authenticationManager);
-        http.addFilterAfter(new AuthenticationFilter(authenticationProvider), SecurityContextHolderFilter.class);
+        http.addFilterAfter(new AuthenticationFilter(authenticationProvider, meterRegistry), SecurityContextHolderFilter.class);
     }
 }

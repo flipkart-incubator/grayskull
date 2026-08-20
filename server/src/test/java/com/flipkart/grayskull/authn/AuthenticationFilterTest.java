@@ -2,6 +2,7 @@ package com.flipkart.grayskull.authn;
 
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,7 +28,7 @@ class AuthenticationFilterTest {
 
     private final FilterChain filterChain = mock(FilterChain.class);
 
-    private final AuthenticationFilter authenticationFilter = new AuthenticationFilter(authenticationProvider);
+    private final AuthenticationFilter authenticationFilter = new AuthenticationFilter(authenticationProvider, new SimpleMeterRegistry());
 
     @BeforeEach
     void setUp() {

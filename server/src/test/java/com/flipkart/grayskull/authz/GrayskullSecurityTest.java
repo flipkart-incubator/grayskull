@@ -10,6 +10,7 @@ import com.flipkart.grayskull.spi.models.SecretProvider;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
 import com.flipkart.grayskull.spi.repositories.SecretProviderRepository;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,7 +33,7 @@ class GrayskullSecurityTest {
     private final SecretRepository secretRepository = mock();
     private final SecretProviderRepository secretProviderRepository = mock();
     private final GrayskullAuthorizationProvider authorizationProvider = mock();
-    private final GrayskullSecurity grayskullSecurity = new GrayskullSecurity(projectRepository, secretRepository, secretProviderRepository, authorizationProvider);
+    private final GrayskullSecurity grayskullSecurity = new GrayskullSecurity(projectRepository, secretRepository, secretProviderRepository, authorizationProvider, new SimpleMeterRegistry());
 
     private final Authentication authentication = new GrayskullAuthentication("test-user", null);
     private final Project project = Project.builder()

@@ -9,6 +9,10 @@ import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
 import com.flipkart.grayskull.spi.repositories.SecretProviderRepository;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
+import com.flipkart.grayskull.service.utils.SpiCallTimer;
+import io.micrometer.core.annotation.Counted;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -38,6 +42,7 @@ public class GrayskullSecurity {
     private final SecretRepository secretRepository;
     private final SecretProviderRepository secretProviderRepository;
     private final GrayskullAuthorizationProvider authorizationProvider;
+    private final MeterRegistry meterRegistry;
 
     /**
      * Checks if the current user has permission to perform a project-level action.
@@ -86,6 +91,8 @@ public class GrayskullSecurity {
      * @param action     The action to authorize (e.g., "READ_SECRET_VALUE").
      * @return {@code true} if authorized, {@code false} otherwise.
      */
+    @Timed("methodTimed")
+    @Counted("methodCounted")
     public boolean hasPermission(String projectId, String secretName, String action) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return projectRepository.findById(projectId)
@@ -94,12 +101,14 @@ public class GrayskullSecurity {
                             // Secret exists, check with secret context
                             AuthorizationContext context = AuthorizationContext.forSecret(authentication, project,
                                     secret);
-                            return authorizationProvider.isAuthorized(context, action);
+                            return SpiCallTimer.time(meterRegistry, "authz",
+                                    () -> authorizationProvider.isAuthorized(context, action));
                         })
                         .orElseGet(() -> {
                             // Secret does not exist, fall back to a project-level check.
                             AuthorizationContext context = AuthorizationContext.forProject(authentication, project);
-                            return authorizationProvider.isAuthorized(context, action);
+                            return SpiCallTimer.time(meterRegistry, "authz",
+                                    () -> authorizationProvider.isAuthorized(context, action));
                         }))
                 .orElse(false);
     }

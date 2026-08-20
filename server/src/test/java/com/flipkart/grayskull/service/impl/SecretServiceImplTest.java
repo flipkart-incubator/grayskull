@@ -16,6 +16,7 @@ import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
 import com.flipkart.grayskull.spi.repositories.SecretDataRepository;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ class SecretServiceImplTest {
     private final ProjectRepository projectRepository = mock();
     private final AuthnUtil authnUtil = mock();
 
-    private final SecretServiceImpl secretService = new SecretServiceImpl(secretRepository, secretDataRepository, secretMapper, secretEncryptionUtil, kmsConfig, projectRepository, authnUtil);
+    private final SecretServiceImpl secretService = new SecretServiceImpl(secretRepository, secretDataRepository, secretMapper, secretEncryptionUtil, kmsConfig, projectRepository, authnUtil, new SimpleMeterRegistry());
 
     @Test
     @DisplayName("destroySecret should throw NotFoundException when secret does not exist")

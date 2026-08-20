@@ -1,7 +1,9 @@
 package com.flipkart.grayskull.authn;
 
+import com.flipkart.grayskull.service.utils.SpiCallTimer;
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,11 +22,13 @@ import java.io.IOException;
 public class AuthenticationFilter extends OncePerRequestFilter {
 
     private final GrayskullAuthenticationProvider authenticationProvider;
+    private final MeterRegistry meterRegistry;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         try {
-            GrayskullAuthentication authentication = authenticationProvider.authenticate(request);
+            GrayskullAuthentication authentication = SpiCallTimer.time(meterRegistry, "authn",
+                    () -> authenticationProvider.authenticate(request));
             if (authentication != null) {
                 SecurityContext context = SecurityContextHolder.getContextHolderStrategy().createEmptyContext();
                 context.setAuthentication(authentication);

@@ -12,7 +12,9 @@ import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
+import com.flipkart.grayskull.service.utils.StageTimer;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -39,6 +41,7 @@ public class SecretController {
     private final RequestUtils requestUtils;
     private final List<MetadataValidator> metadataValidators;
     private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
+    private final MeterRegistry meterRegistry;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -99,7 +102,7 @@ public class SecretController {
                 .actorId(actorName)
                 .ips(requestUtils.getRemoteIPs())
                 .metadata(auditMetadata).build();
-        asyncAuditLogger.log(auditEntry);
+        StageTimer.time(meterRegistry, "getSecretData", "auditEnqueue", () -> asyncAuditLogger.log(auditEntry));
         return ResponseTemplate.success(response, "Successfully read secret value.");
     }
 
@@ -158,7 +161,7 @@ public class SecretController {
                 .actorId(actorName)
                 .ips(requestUtils.getRemoteIPs())
                 .metadata(auditMetadata).build();
-        asyncAuditLogger.log(auditEntry);
+        StageTimer.time(meterRegistry, "getSecretVersion", "auditEnqueue", () -> asyncAuditLogger.log(auditEntry));
         return ResponseTemplate.success(response, "Successfully retrieved secret version.");
     }
 }

@@ -3,6 +3,7 @@ package com.flipkart.grayskull.service.utils;
 import com.flipkart.grayskull.spi.EncryptionService;
 import com.flipkart.grayskull.spi.models.EncryptableValue;
 import com.flipkart.grayskull.spi.models.SecretData;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -17,7 +18,7 @@ class SecretEncryptionUtilTest {
 
     private final EncryptionService encryptionService = mock(EncryptionService.class);
 
-    private final SecretEncryptionUtil secretEncryptionUtil = new SecretEncryptionUtil(encryptionService);
+    private final SecretEncryptionUtil secretEncryptionUtil = new SecretEncryptionUtil(encryptionService, new SimpleMeterRegistry());
 
     static Stream<Arguments> encryptSecretDataTestCases() {
         return Stream.of(

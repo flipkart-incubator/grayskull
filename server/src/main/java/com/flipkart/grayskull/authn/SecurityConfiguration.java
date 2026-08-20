@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.authn;
 
 import com.flipkart.grayskull.spi.GrayskullAuthenticationProvider;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,7 +16,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfiguration {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, GrayskullAuthenticationProvider authenticationProvider) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, GrayskullAuthenticationProvider authenticationProvider, MeterRegistry meterRegistry) throws Exception {
 
         http
                 .sessionManagement(session -> session
@@ -30,7 +31,7 @@ public class SecurityConfiguration {
                 )
                 .csrf(AbstractHttpConfigurer::disable);
 
-        http.apply(new AuthenticationFilterSecurityConfigurer(authenticationProvider));
+        http.apply(new AuthenticationFilterSecurityConfigurer(authenticationProvider, meterRegistry));
 
         return http.build();
     }

@@ -13,6 +13,7 @@ import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.MetadataValidator;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.AuditEntry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -44,7 +45,7 @@ class SecretControllerTest {
 
     @BeforeEach
     void setUp() {
-        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins, auditMetadataEnhancers);
+        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins, auditMetadataEnhancers, new SimpleMeterRegistry());
         SecurityContextHolder.setContext(new SecurityContextImpl(new GrayskullAuthentication("user", "actor-name")));
     }
 
