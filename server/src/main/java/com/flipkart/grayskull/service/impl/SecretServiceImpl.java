@@ -72,7 +72,6 @@ public class SecretServiceImpl implements SecretService {
         List<SecretMetadata> secretMetadata = secrets.stream()
                 .map(secretMapper::secretToSecretMetadata)
                 .toList();
-        log.info("Listed secrets for project: {}, count: {}, user: {}", projectId, secretMetadata.size(), authnUtil.getCurrentUsername());
         return new ListSecretsResponse(secretMetadata, total);
     }
 
@@ -101,8 +100,7 @@ public class SecretServiceImpl implements SecretService {
 
         String keyId = resolveKmsKeyId(projectId);
 
-        String currentUser = authnUtil.getCurrentUsername();
-        Secret secret = secretMapper.requestToSecret(request, projectId, currentUser);
+        Secret secret = secretMapper.requestToSecret(request, projectId, authnUtil.getCurrentUsername());
         Secret savedSecret = secretRepository.save(secret);
 
         SecretData secretData = secretMapper.requestToSecretData(request, savedSecret.getId());
@@ -110,7 +108,6 @@ public class SecretServiceImpl implements SecretService {
         secretDataRepository.save(secretData);
         savedSecret.setData(secretData);
 
-        log.info("Created secret for project: {}, secret: {}, user: {}", projectId, savedSecret.getName(), currentUser);
         return secretMapper.secretToSecretResponse(savedSecret);
     }
 
@@ -124,7 +121,6 @@ public class SecretServiceImpl implements SecretService {
     @Override
     public SecretMetadata readSecretMetadata(String projectId, String secretName) {
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
-        log.info("Read secret metadata for project: {}, secret: {}, user: {}", projectId, secretName, authnUtil.getCurrentUsername());
         return secretMapper.secretToSecretMetadata(secret);
     }
 
@@ -145,7 +141,6 @@ public class SecretServiceImpl implements SecretService {
                         "Secret data not found for secret: " + secret.getId()));
         secretEncryptionUtil.decryptSecretData(secretData);
 
-        log.info("Read secret value for project: {}, secret: {}, version: {}, user: {}", projectId, secretName, secret.getCurrentDataVersion(), authnUtil.getCurrentUsername());
         return secretMapper.toSecretDataResponse(secret, secretData);
     }
 
@@ -193,7 +188,6 @@ public class SecretServiceImpl implements SecretService {
             items.add(secretMapper.toBatchSecretItem(secret, secretData));
         }
 
-        log.info("Batch read secrets, requested: {}, updated: {}, user: {}", entries.size(), items.size(), authnUtil.getCurrentUsername());
         return BatchGetSecretsResponse.builder()
                 .updatedCount(items.size())
                 .updatedSecrets(items)
@@ -234,8 +228,7 @@ public class SecretServiceImpl implements SecretService {
         // If concurrent modification occurs, this will fail early before creating
         // orphaned SecretData
         secret.setCurrentDataVersion(newVersion);
-        String currentUser = authnUtil.getCurrentUsername();
-        secret.setUpdatedBy(currentUser);
+        secret.setUpdatedBy(authnUtil.getCurrentUsername());
         secretRepository.save(secret); // May throw OptimisticLockingFailureException
 
         // Only create and save SecretData after Secret update succeeds
@@ -252,8 +245,6 @@ public class SecretServiceImpl implements SecretService {
         response.setUpdatedTime(secret.getUpdatedTime());
         response.setCreatedBy(secret.getCreatedBy());
         response.setUpdatedBy(secret.getUpdatedBy());
-
-        log.info("Updated secret data for project: {}, secret: {}, version: {}, user: {}", projectId, secretName, newVersion, currentUser);
         return response;
     }
 
@@ -269,10 +260,8 @@ public class SecretServiceImpl implements SecretService {
     public void deleteSecret(String projectId, String secretName) {
         Secret secret = findActiveSecretOrThrow(projectId, secretName);
         secret.setState(LifecycleState.DISABLED);
-        String currentUser = authnUtil.getCurrentUsername();
-        secret.setUpdatedBy(currentUser);
+        secret.setUpdatedBy(authnUtil.getCurrentUsername());
         secretRepository.save(secret);
-        log.info("Soft deleted secret for project: {}, secret: {}, user: {}", projectId, secretName, currentUser);
     }
 
     @Override
@@ -284,7 +273,6 @@ public class SecretServiceImpl implements SecretService {
             throw new BadRequestException("Secret has to soft deleted before destroying. Call the api with destroy=false first");
         }
         secretRepository.delete(secret);
-        log.info("Destroyed secret for project: {}, secret: {}, user: {}", projectId, secretName, authnUtil.getCurrentUsername());
     }
 
     /**
@@ -311,7 +299,6 @@ public class SecretServiceImpl implements SecretService {
                         "Secret with name " + secretName + " and version " + version + " not found."));
         secretEncryptionUtil.decryptSecretData(secretData);
 
-        log.info("Read secret version for project: {}, secret: {}, version: {}, user: {}", projectId, secretName, version, authnUtil.getCurrentUsername());
         return secretMapper.secretDataToSecretDataVersionResponse(secret, secretData);
     }
 
