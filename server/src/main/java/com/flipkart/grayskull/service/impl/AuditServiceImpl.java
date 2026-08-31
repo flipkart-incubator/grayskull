@@ -34,6 +34,7 @@ public class AuditServiceImpl implements AuditService {
         List<AuditEntry> entries = auditEntryRepository.findByFilters(projectId, resourceName, resourceType, actionString, userTypeString, afterTimestamp, offset, limit);
         long total = auditEntryRepository.countByFilters(projectId, resourceName, resourceType, actionString, userTypeString, afterTimestamp);
 
+        log.info("Read audit entries for project: {}, resource: {}, count: {}", projectId.orElse("-"), resourceName.orElse("-"), entries.size());
         return new AuditEntriesResponse(entries, total);
     }
 }

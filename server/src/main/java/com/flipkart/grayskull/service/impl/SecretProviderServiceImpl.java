@@ -36,13 +36,17 @@ public class SecretProviderServiceImpl implements SecretProviderService {
      */
     @Override
     public List<SecretProvider> listProviders() {
-        return secretProviderRepository.findAll();
+        List<SecretProvider> providers = secretProviderRepository.findAll();
+        log.info("Listed secret providers, count: {}", providers.size());
+        return providers;
     }
 
     @Override
     public SecretProvider getProvider(String name) {
-        return secretProviderRepository.findByName(name)
+        SecretProvider provider = secretProviderRepository.findByName(name)
                 .orElseThrow(() -> new NotFoundException("Secret provider not found with name: " + name));
+        log.info("Reading secret provider with name: {}", name);
+        return provider;
     }
 
     @Override
