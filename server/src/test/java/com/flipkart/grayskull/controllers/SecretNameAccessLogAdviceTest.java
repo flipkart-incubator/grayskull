@@ -80,6 +80,27 @@ class SecretNameAccessLogAdviceTest {
     }
 
     @Test
+    @DisplayName("afterBodyRead should leave the attribute unset when the name is null")
+    void afterBodyRead_ignoresNullName() {
+        MockHttpServletRequest request = bindRequest();
+        CreateSecretRequest body = new CreateSecretRequest();
+
+        advice.afterBodyRead(body, null, null, CreateSecretRequest.class, null);
+
+        assertThat(request.getAttribute(SecretNameAccessLogAdvice.SECRET_NAME_ATTRIBUTE)).isNull();
+    }
+
+    @Test
+    @DisplayName("afterBodyRead should ignore a body that is not a create secret request")
+    void afterBodyRead_ignoresUnrelatedBody() {
+        MockHttpServletRequest request = bindRequest();
+        Object body = "not a create secret request";
+
+        assertThat(advice.afterBodyRead(body, null, null, String.class, null)).isSameAs(body);
+        assertThat(request.getAttribute(SecretNameAccessLogAdvice.SECRET_NAME_ATTRIBUTE)).isNull();
+    }
+
+    @Test
     @DisplayName("afterBodyRead should not fail when there is no bound request")
     void afterBodyRead_withoutBoundRequest() {
         RequestContextHolder.resetRequestAttributes();

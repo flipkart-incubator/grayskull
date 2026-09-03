@@ -222,7 +222,7 @@ Since server is built like a framework you can add this as dependency in your ap
 <dependency>
     <groupId>com.flipkart.grayskull</groupId>
     <artifactId>server</artifactId>
-    <version>0.3.1</version>
+    <version>0.3.2</version>
 </dependency>
 ```
 
