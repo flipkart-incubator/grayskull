@@ -20,7 +20,9 @@ public class SecretNameAccessLogAdvice extends RequestBodyAdviceAdapter {
     @Override
     public boolean supports(MethodParameter methodParameter, Type targetType,
             Class<? extends HttpMessageConverter<?>> converterType) {
-        return CreateSecretRequest.class.equals(targetType);
+        return methodParameter != null
+                && SecretController.class.equals(methodParameter.getDeclaringClass())
+                && CreateSecretRequest.class.equals(targetType);
     }
 
     @Override

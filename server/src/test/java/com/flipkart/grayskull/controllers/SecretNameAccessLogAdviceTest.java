@@ -2,12 +2,16 @@ package com.flipkart.grayskull.controllers;
 
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
+import com.flipkart.grayskull.service.interfaces.SecretService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.MethodParameter;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+
+import java.lang.reflect.Method;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,12 +31,27 @@ class SecretNameAccessLogAdviceTest {
         RequestContextHolder.resetRequestAttributes();
     }
 
+    private static MethodParameter bodyParameter(Class<?> controller, String methodName, Class<?>... parameterTypes)
+            throws NoSuchMethodException {
+        Method method = controller.getDeclaredMethod(methodName, parameterTypes);
+        return new MethodParameter(method, method.getParameterCount() - 1);
+    }
+
     @Test
-    @DisplayName("supports should apply only to the create secret body")
-    void supports_onlyCreateSecretRequest() {
-        assertThat(advice.supports(null, CreateSecretRequest.class, null)).isTrue();
-        assertThat(advice.supports(null, UpgradeSecretDataRequest.class, null)).isFalse();
-        assertThat(advice.supports(null, String.class, null)).isFalse();
+    @DisplayName("supports should apply only to the create secret handler on SecretController")
+    void supports_onlyCreateSecretHandler() throws NoSuchMethodException {
+        MethodParameter create =
+                bodyParameter(SecretController.class, "createSecret", String.class, CreateSecretRequest.class);
+        MethodParameter upgrade = bodyParameter(SecretController.class, "upgradeSecretData", String.class,
+                String.class, UpgradeSecretDataRequest.class);
+        MethodParameter outsideController =
+                bodyParameter(SecretService.class, "createSecret", String.class, CreateSecretRequest.class);
+
+        assertThat(advice.supports(create, CreateSecretRequest.class, null)).isTrue();
+        assertThat(advice.supports(upgrade, UpgradeSecretDataRequest.class, null)).isFalse();
+        assertThat(advice.supports(create, String.class, null)).isFalse();
+        assertThat(advice.supports(outsideController, CreateSecretRequest.class, null)).isFalse();
+        assertThat(advice.supports(null, CreateSecretRequest.class, null)).isFalse();
     }
 
     @Test
