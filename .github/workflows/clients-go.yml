@@ -22,7 +22,7 @@ jobs:
     - uses: actions/checkout@v6
     
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: '1.23.0'
         cache-dependency-path: clients/go/client-impl/go.sum
@@ -58,7 +58,7 @@ jobs:
       continue-on-error: true
     
     - name: Upload Test Results
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: Go Client Test Results
         path: |
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Upload
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: Event File
           path: ${{ github.event_path }}
