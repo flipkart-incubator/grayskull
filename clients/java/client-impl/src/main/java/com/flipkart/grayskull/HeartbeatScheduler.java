@@ -23,13 +23,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * Reports the secrets and versions this instance holds to {@code POST /v1/secrets/batch} (with the
- * {@code Grayskull-Heartbeat} header) once per interval, so long-lived processes stay visible to rotation.
- * <p>
- * After a success the next heartbeat waits the interval ±1/24 (24 h ±1 h). After a failure it retries with
- * backoff: 5, 10, 20, 40, then every 60 minutes (±10%, never longer than the interval). No inline retries;
- * runs on its own daemon thread and never touches {@code getSecret}.
- * </p>
+ * Sends a heartbeat every 24h (± 1h jitter) listing the secrets and versions this instance holds, so long-running
+ *  On failure it retries later with backoff
  */
 final class HeartbeatScheduler {
 
