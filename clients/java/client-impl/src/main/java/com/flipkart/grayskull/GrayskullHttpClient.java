@@ -15,6 +15,8 @@ import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
@@ -105,11 +107,19 @@ class GrayskullHttpClient {
     }
 
     HttpResponse doPost(String url, String jsonBody) throws RetryableException {
+        return doPost(url, jsonBody, Collections.<String, String>emptyMap());
+    }
+
+    /**
+     * Single POST attempt (no {@link RetryUtil}) with {@code extraHeaders} added to this request
+     * only. Used by the heartbeat, which reschedules on failure instead of retrying inline.
+     */
+    HttpResponse doPost(String url, String jsonBody, Map<String, String> extraHeaders) throws RetryableException {
         RequestBody body = RequestBody.create(
                 jsonBody == null ? "" : jsonBody,
                 MediaType.parse("application/json; charset=utf-8"));
 
-        Request request = buildRequest(url)
+        Request request = buildRequest(url, extraHeaders)
                 .post(body)
                 .build();
 
@@ -128,9 +138,16 @@ class GrayskullHttpClient {
     }
 
     private Request.Builder buildRequest(String url) {
+        return buildRequest(url, Collections.<String, String>emptyMap());
+    }
+
+    private Request.Builder buildRequest(String url, Map<String, String> extraHeaders) {
         Request.Builder requestBuilder = new Request.Builder().url(url);
 
         clientConfiguration.getDefaultHeaders().forEach(requestBuilder::header);
+        if (extraHeaders != null) {
+            extraHeaders.forEach(requestBuilder::header);
+        }
 
         String authHeader = authHeaderProvider.getAuthHeader();
         if (authHeader == null || authHeader.trim().isEmpty()) {

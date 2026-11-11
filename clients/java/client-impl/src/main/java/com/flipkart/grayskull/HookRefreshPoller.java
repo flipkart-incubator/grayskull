@@ -312,12 +312,21 @@ final class HookRefreshPoller {
         }
     }
 
+    /**
+     * The version last delivered to hooks for {@code secretRef}, or 0 when no hook is registered.
+     * Used by the heartbeat to report hook-delivered versions.
+     */
+    int lastKnownVersion(String secretRef) {
+        SecretState state = registry.get(secretRef);
+        return state == null ? 0 : state.lastKnownVersion.get();
+    }
+
     void close() {
         shutdownExecutor(scheduler, "poller");
         shutdownExecutor(dispatcher, "dispatcher");
     }
 
-    private static String buildBatchUrl(String baseUrl) {
+    static String buildBatchUrl(String baseUrl) {
         HttpUrl parsed = HttpUrl.parse(baseUrl);
         if (parsed == null) {
             throw new IllegalStateException("Invalid baseUrl: " + baseUrl);

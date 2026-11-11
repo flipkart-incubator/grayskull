@@ -13,6 +13,7 @@ import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
+import com.flipkart.grayskull.models.request.BatchGetSecretsRequest;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.response.Response;
 import okhttp3.HttpUrl;
@@ -22,6 +23,9 @@ import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,6 +48,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final HookRefreshPoller refreshPoller;
+    private final HeartbeatScheduler heartbeatScheduler;
 
 
     private final ConcurrentHashMap<String, Integer> lastSeenVersions = new ConcurrentHashMap<>();
@@ -86,6 +91,35 @@ public final class GrayskullClientImpl implements GrayskullClient {
         this.refreshPoller = new HookRefreshPoller(
                 httpClient, objectMapper, baseUrl,
                 grayskullClientConfiguration.getPollingIntervalSeconds());
+
+        if (grayskullClientConfiguration.isHeartbeatEnabled()) {
+            this.heartbeatScheduler = new HeartbeatScheduler(
+                    httpClient, objectMapper, baseUrl,
+                    grayskullClientConfiguration.getHeartbeatIntervalSeconds(),
+                    this::heldSecrets);
+            this.heartbeatScheduler.start();
+        } else {
+            this.heartbeatScheduler = null;
+        }
+    }
+
+    /**
+     * Every secret fetched through {@link #getSecret} with the latest version received, for the heartbeat:
+     * the fetched version, or the version the refresh-hook poller delivered since, whichever is newer.
+     */
+    private List<BatchGetSecretsRequest.Entry> heldSecrets() {
+        List<BatchGetSecretsRequest.Entry> entries = new ArrayList<>(lastSeenVersions.size());
+        for (Map.Entry<String, Integer> seen : lastSeenVersions.entrySet()) {
+            String secretRef = seen.getKey();
+            int separator = secretRef.indexOf(':');
+            if (separator <= 0 || separator == secretRef.length() - 1) {
+                continue;
+            }
+            int version = Math.max(seen.getValue(), refreshPoller.lastKnownVersion(secretRef));
+            entries.add(new BatchGetSecretsRequest.Entry(
+                    secretRef.substring(0, separator), secretRef.substring(separator + 1), version));
+        }
+        return entries;
     }
 
     /**
@@ -194,6 +228,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
             return;
         }
         log.info("Closing Grayskull client");
+        if (heartbeatScheduler != null) {
+            heartbeatScheduler.close();
+        }
         refreshPoller.close();
         if (httpClient != null) {
             httpClient.close();
