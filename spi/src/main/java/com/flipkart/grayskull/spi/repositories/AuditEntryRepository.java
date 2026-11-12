@@ -1,6 +1,9 @@
 package com.flipkart.grayskull.spi.repositories;
 
+import com.flipkart.grayskull.spi.models.AuditCursor;
 import com.flipkart.grayskull.spi.models.AuditEntry;
+import com.flipkart.grayskull.spi.models.AuditPage;
+import com.flipkart.grayskull.spi.models.AuditQuery;
 
 import java.util.Date;
 import java.util.List;
@@ -57,4 +60,17 @@ public interface AuditEntryRepository {
      * @return Count of audit entries matching the filters
      */
     long countByFilters(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<String> action, Optional<String> userType, Optional<Date> afterTimestamp);
+
+    /**
+     * Finds one page of audit entries, newest first, ordered by (timestamp desc, id desc).
+     * Paging is keyset based: the next page starts strictly after {@code cursor}.
+     *
+     * @param query  filters; null fields are ignored
+     * @param cursor position of the last entry of the previous page, or null for the first page
+     * @param limit  maximum number of entries to return
+     * @return the page, with the cursor for the next page
+     */
+    default AuditPage findPage(AuditQuery query, AuditCursor cursor, int limit) {
+        throw new UnsupportedOperationException("Cursor paging is not supported by " + getClass().getName());
+    }
 }
