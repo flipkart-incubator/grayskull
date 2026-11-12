@@ -1,4 +1,7 @@
 spring:
+  # the MySQL datasource comes from TestGrayskullApplication (Testcontainers)
+  flyway:
+    locations: classpath:db/audit
   data:
     mongodb:
       database: grayskull-test
@@ -50,3 +53,7 @@ grayskull:
     service-user-prefix: "service:"
     human-user-prefix: "human:"
     max-query-age-days: 180
+    # tests run the outbox relayer themselves (AuditOutboxRelayer#tick), as often as they need
+    relayer:
+      cron: "-"
+      lock-at-least-for: PT0S
