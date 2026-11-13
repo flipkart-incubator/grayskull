@@ -13,7 +13,7 @@ import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
-import com.flipkart.grayskull.models.request.BatchGetSecretsRequest;
+import com.flipkart.grayskull.models.request.HeartbeatRequest;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.response.Response;
 import okhttp3.HttpUrl;
@@ -105,10 +105,11 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
     /**
      * Every secret fetched through {@link #getSecret} with the latest version received, for the heartbeat:
-     * the fetched version, or the version the refresh-hook poller delivered since, whichever is newer.
+     * the fetched version, or the version the refresh-hook poller delivered since, whichever is newer;
+     * plus whether a refresh hook is registered for it.
      */
-    private List<BatchGetSecretsRequest.Entry> heldSecrets() {
-        List<BatchGetSecretsRequest.Entry> entries = new ArrayList<>(lastSeenVersions.size());
+    private List<HeartbeatRequest.HeldSecret> heldSecrets() {
+        List<HeartbeatRequest.HeldSecret> entries = new ArrayList<>(lastSeenVersions.size());
         for (Map.Entry<String, Integer> seen : lastSeenVersions.entrySet()) {
             String secretRef = seen.getKey();
             int separator = secretRef.indexOf(':');
@@ -116,8 +117,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
                 continue;
             }
             int version = Math.max(seen.getValue(), refreshPoller.lastKnownVersion(secretRef));
-            entries.add(new BatchGetSecretsRequest.Entry(
-                    secretRef.substring(0, separator), secretRef.substring(separator + 1), version));
+            entries.add(new HeartbeatRequest.HeldSecret(
+                    secretRef.substring(0, separator), secretRef.substring(separator + 1), version,
+                    refreshPoller.hasHook(secretRef)));
         }
         return entries;
     }

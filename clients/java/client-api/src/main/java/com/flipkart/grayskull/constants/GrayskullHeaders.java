@@ -17,11 +17,6 @@ public final class GrayskullHeaders {
      */
     public static final String USER_AGENT = "User-Agent";
 
-    /**
-     * Marks a periodic heartbeat call ({@code Grayskull-Heartbeat})
-     */
-    public static final String HEARTBEAT = "Grayskull-Heartbeat";
-
     private GrayskullHeaders() {
         throw new AssertionError("Cannot instantiate constants class");
     }

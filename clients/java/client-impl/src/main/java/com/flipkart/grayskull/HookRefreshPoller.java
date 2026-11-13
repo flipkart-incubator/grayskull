@@ -321,12 +321,17 @@ final class HookRefreshPoller {
         return state == null ? 0 : state.lastKnownVersion.get();
     }
 
+    /** Whether at least one refresh hook is registered for {@code secretRef}. */
+    boolean hasHook(String secretRef) {
+        return registry.containsKey(secretRef);
+    }
+
     void close() {
         shutdownExecutor(scheduler, "poller");
         shutdownExecutor(dispatcher, "dispatcher");
     }
 
-    static String buildBatchUrl(String baseUrl) {
+    private static String buildBatchUrl(String baseUrl) {
         HttpUrl parsed = HttpUrl.parse(baseUrl);
         if (parsed == null) {
             throw new IllegalStateException("Invalid baseUrl: " + baseUrl);

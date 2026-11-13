@@ -2,9 +2,8 @@ package com.flipkart.grayskull;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.flipkart.grayskull.constants.GrayskullHeaders;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
-import com.flipkart.grayskull.models.request.BatchGetSecretsRequest;
+import com.flipkart.grayskull.models.request.HeartbeatRequest;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -31,7 +30,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Unit tests for {@link HeartbeatScheduler}; private methods are reached through reflection. */
 class HeartbeatSchedulerTest {
 
-    private static final String OK_BODY = "{\"data\":{\"updatedCount\":0,\"updatedSecrets\":[]}}";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockWebServer server;
@@ -53,8 +51,7 @@ class HeartbeatSchedulerTest {
                 if (failFirst.getAndDecrement() > 0) {
                     return new MockResponse().setResponseCode(503).setBody("unavailable");
                 }
-                return new MockResponse().setResponseCode(200)
-                        .setHeader("Content-Type", "application/json").setBody(OK_BODY);
+                return new MockResponse().setResponseCode(204);
             }
         });
         server.start();
@@ -76,15 +73,15 @@ class HeartbeatSchedulerTest {
         MDC.clear();
     }
 
-    private static List<BatchGetSecretsRequest.Entry> entries(int n) {
-        List<BatchGetSecretsRequest.Entry> out = new ArrayList<>();
+    private static List<HeartbeatRequest.HeldSecret> entries(int n) {
+        List<HeartbeatRequest.HeldSecret> out = new ArrayList<>();
         for (int i = 0; i < n; i++) {
-            out.add(new BatchGetSecretsRequest.Entry("p", "s" + i, i + 1));
+            out.add(new HeartbeatRequest.HeldSecret("p", "s" + i, i + 1, i % 2 == 0));
         }
         return out;
     }
 
-    private HeartbeatScheduler newScheduler(int intervalSeconds, Supplier<List<BatchGetSecretsRequest.Entry>> held) {
+    private HeartbeatScheduler newScheduler(int intervalSeconds, Supplier<List<HeartbeatRequest.HeldSecret>> held) {
         return new HeartbeatScheduler(httpClient, objectMapper, baseUrl, intervalSeconds, held);
     }
 
@@ -109,20 +106,23 @@ class HeartbeatSchedulerTest {
     }
 
     @Test
-    void beatOnce_sendsAllSecretsWithHeartbeatHeader() throws Exception {
+    void beatOnce_postsHeldSecretsToHeartbeatApi() throws Exception {
         scheduler = newScheduler(60, () -> entries(3));
 
         assertTrue(beatOnce(scheduler));
 
         RecordedRequest request = server.takeRequest(1, TimeUnit.SECONDS);
         assertEquals("POST", request.getMethod());
-        assertEquals("/v1/secrets/batch", request.getPath());
-        assertEquals("true", request.getHeader(GrayskullHeaders.HEARTBEAT));
+        assertEquals("/v1/heartbeat", request.getPath());
+        assertEquals(null, request.getHeader("Grayskull-Instance"));
         assertEquals("Bearer test-token", request.getHeader("Authorization"));
         JsonNode secrets = objectMapper.readTree(request.getBody().readUtf8()).get("secrets");
         assertEquals(3, secrets.size());
         assertEquals("s0", secrets.get(0).get("secretName").asText());
-        assertEquals(1, secrets.get(0).get("lastKnownVersion").asInt());
+        assertEquals(1, secrets.get(0).get("version").asInt());
+        assertTrue(secrets.get(0).get("refreshHook").asBoolean());
+        assertFalse(secrets.get(1).get("refreshHook").asBoolean());
+        assertFalse(secrets.get(0).has("lastKnownVersion"));
     }
 
     @Test

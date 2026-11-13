@@ -41,10 +41,12 @@ class GrayskullClientImplHeartbeatTest {
                 if ("GET".equals(request.getMethod()) && path.endsWith("/data")) {
                     return json("{\"data\":{\"dataVersion\":7,\"publicPart\":\"pub\",\"privatePart\":\"priv\"},\"message\":\"ok\"}");
                 }
+                if ("POST".equals(request.getMethod()) && path.equals("/v1/heartbeat")) {
+                    heartbeats.add(request);
+                    return new MockResponse().setResponseCode(204);
+                }
                 if ("POST".equals(request.getMethod()) && path.equals("/v1/secrets/batch")) {
-                    if (request.getHeader(GrayskullHeaders.HEARTBEAT) != null) {
-                        heartbeats.add(request);
-                    } else if (pollVersion > 0) {
+                    if (pollVersion > 0) {
                         return json("{\"data\":{\"updatedCount\":1,\"updatedSecrets\":[{\"projectId\":\"proj\","
                                 + "\"secretName\":\"db-password\",\"dataVersion\":" + pollVersion
                                 + ",\"publicPart\":\"pub\"}]}}");
@@ -104,14 +106,14 @@ class GrayskullClientImplHeartbeatTest {
         assertTrue(heartbeats.size() >= 1, "expected a heartbeat");
         RecordedRequest hb = heartbeats.get(0);
 
-        assertEquals("true", hb.getHeader(GrayskullHeaders.HEARTBEAT));
         assertEquals("v1::c::ns::ReplicaSetOwned::app", hb.getHeader(GrayskullHeaders.WORKLOAD));
         assertTrue(hb.getHeader("User-Agent").startsWith("grayskull-java/"));
         JsonNode secrets = objectMapper.readTree(hb.getBody().readUtf8()).get("secrets");
         assertEquals(1, secrets.size());
         assertEquals("proj", secrets.get(0).get("projectId").asText());
         assertEquals("db-password", secrets.get(0).get("secretName").asText());
-        assertEquals(7, secrets.get(0).get("lastKnownVersion").asInt());
+        assertEquals(7, secrets.get(0).get("version").asInt());
+        assertEquals(false, secrets.get(0).get("refreshHook").asBoolean());
     }
 
     @Test
@@ -146,13 +148,16 @@ class GrayskullClientImplHeartbeatTest {
         // The poller delivers v8 to the hook; the heartbeat must then report v8, not the fetched v7.
         long deadline = System.currentTimeMillis() + 8_000;
         int reported = -1;
+        boolean hook = false;
         while (System.currentTimeMillis() < deadline && reported != 8) {
             for (RecordedRequest hb : heartbeats) {
                 JsonNode secrets = objectMapper.readTree(hb.getBody().clone().readUtf8()).get("secrets");
-                reported = secrets.get(0).get("lastKnownVersion").asInt();
+                reported = secrets.get(0).get("version").asInt();
+                hook = secrets.get(0).get("refreshHook").asBoolean();
             }
             Thread.sleep(50);
         }
         assertEquals(8, reported);
+        assertTrue(hook, "refreshHook is true once a hook is registered");
     }
 }
