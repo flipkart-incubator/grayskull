@@ -15,6 +15,7 @@ import jakarta.persistence.QueryTimeoutException;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -37,19 +38,23 @@ public class MysqlAuditStore {
     static final int MAX_OFFSET = 10_000;
 
     private static final String QUERY_TIMEOUT_HINT = "jakarta.persistence.query.timeout";
+
+    /**
+     * Longest a cursor-API page query may run. Pages are index range scans, so this only stops filter combinations
+     * that match almost nothing in a large index range; the caller is asked to narrow the query instead.
+     */
+    private static final int PAGE_QUERY_TIMEOUT_MS = 5_000;
+
     private final AuditEntryRowRepository repository;
     private final AuditQueryConfiguration auditConfig;
-    private final MysqlAuditProperties properties;
     private final AuditEntryRowMapper rowMapper;
 
     @PersistenceContext(unitName = MysqlAuditConfiguration.PERSISTENCE_UNIT)
     private EntityManager entityManager;
 
-    public MysqlAuditStore(AuditEntryRowRepository repository, AuditQueryConfiguration auditConfig, MysqlAuditProperties properties,
-                           AuditEntryRowMapper rowMapper) {
+    public MysqlAuditStore(AuditEntryRowRepository repository, AuditQueryConfiguration auditConfig, AuditEntryRowMapper rowMapper) {
         this.repository = repository;
         this.auditConfig = auditConfig;
-        this.properties = properties;
         this.rowMapper = rowMapper;
     }
 
@@ -78,7 +83,7 @@ public class MysqlAuditStore {
     /**
      * One page, newest first ({@code ts desc, rowId desc}; the row id breaks timestamp ties), starting after {@code cursor}.
      *
-     * @throws BadRequestException if the query runs longer than {@code page-query-timeout}
+     * @throws BadRequestException if the query runs longer than {@link #PAGE_QUERY_TIMEOUT_MS}
      */
     public AuditPage findPage(AuditQuery query, AuditCursor cursor, int limit) {
         Specification<AuditEntryRow> spec = matching(query);
@@ -88,7 +93,7 @@ public class MysqlAuditStore {
         List<AuditEntryRow> rows;
         try {
             rows = newestFirst(spec).setMaxResults(limit + 1)
-                    .setHint(QUERY_TIMEOUT_HINT, Math.toIntExact(properties.getPageQueryTimeout().toMillis()))
+                    .setHint(QUERY_TIMEOUT_HINT, PAGE_QUERY_TIMEOUT_MS)
                     .getResultList();
         } catch (QueryTimeoutException e) {
             // not IllegalArgumentException: the @Repository adapter would translate that into a 500
@@ -121,7 +126,11 @@ public class MysqlAuditStore {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<AuditEntryRow> criteriaQuery = cb.createQuery(AuditEntryRow.class);
         Root<AuditEntryRow> root = criteriaQuery.from(AuditEntryRow.class);
-        criteriaQuery.where(spec.toPredicate(root, criteriaQuery, cb));
+        Predicate predicate = spec.toPredicate(root, criteriaQuery, cb);
+        // null when no filter is given (Hibernate rejects where(null))
+        if (predicate != null) {
+            criteriaQuery.where(predicate);
+        }
         criteriaQuery.orderBy(cb.desc(root.get(TS)), cb.desc(root.get(ROW_ID)));
         return entityManager.createQuery(criteriaQuery);
     }
