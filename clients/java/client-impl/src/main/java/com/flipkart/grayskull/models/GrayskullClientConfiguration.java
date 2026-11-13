@@ -114,6 +114,23 @@ public final class GrayskullClientConfiguration {
     private int pollingIntervalSeconds = 60;
 
     /**
+     * Whether the client sends a periodic heartbeat reporting the secrets and versions it holds.
+     * <p>
+     * Default: true
+     * </p>
+     */
+    @Setter
+    private boolean heartbeatEnabled = true;
+
+    /**
+     * Interval in seconds between heartbeats. Each delay gets random jitter of 1/24 of it.
+     * <p>
+     * Default: 86400 (24 hours)
+     * </p>
+     */
+    private int heartbeatIntervalSeconds = 86400;
+
+    /**
      * Resolver for the workload identity advertised via the {@code Grayskull-Workload} header.
      * <p>
      * Defaults to {@link DefaultWorkloadIdentityResolver} (hostname). Downstream distributions
@@ -239,5 +256,19 @@ public final class GrayskullClientConfiguration {
                     "Polling interval must be positive, got: " + pollingIntervalSeconds);
         }
         this.pollingIntervalSeconds = pollingIntervalSeconds;
+    }
+
+    /**
+     * Sets the heartbeat interval in seconds.
+     *
+     * @param heartbeatIntervalSeconds the heartbeat interval in seconds (must be positive)
+     * @throws IllegalArgumentException if {@code heartbeatIntervalSeconds} is not positive
+     */
+    public void setHeartbeatIntervalSeconds(int heartbeatIntervalSeconds) {
+        if (heartbeatIntervalSeconds <= 0) {
+            throw new IllegalArgumentException(
+                    "Heartbeat interval must be positive, got: " + heartbeatIntervalSeconds);
+        }
+        this.heartbeatIntervalSeconds = heartbeatIntervalSeconds;
     }
 }
