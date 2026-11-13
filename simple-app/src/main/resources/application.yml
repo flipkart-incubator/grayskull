@@ -6,6 +6,20 @@ spring:
       database: grayskull
       uri: mongodb://admin:password@host.docker.internal:37017/admin?maxLifeTimeMs=3600000&maxIdleTimeMs=600000&maxConnecting=100&readPreference=secondaryPreferred&w=majority
       auto-index-creation: true
+  # audit store; Flyway creates the tables on start-up
+  datasource:
+    url: jdbc:mysql://host.docker.internal:3306/grayskull_audit?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+    username: grayskull
+    password: password
+  flyway:
+    locations: classpath:db/audit
+  jpa:
+    open-in-view: false
+  # audit jobs (relayer, Derby flush, metrics, partitions) run in parallel instead of queueing on one thread
+  task:
+    scheduling:
+      pool:
+        size: 4
 
 server:
   read-only:

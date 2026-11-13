@@ -3,7 +3,7 @@ package com.flipkart.grayskull.app.audit;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.spi.models.AuditEntry;
-import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
+import com.flipkart.grayskull.spi.AuditFlushStore;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,9 +12,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.*;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
+
 
 import static com.flipkart.grayskull.app.audit.DerbyAsyncAuditLogger.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,8 +28,7 @@ class DerbyAsyncAuditLoggerTest {
     private final Connection connection = mock();
     private final ObjectMapper objectMapper = mock();
     private final MeterRegistry meterRegistry = mock();
-    private final AuditEntryRepository auditEntryRepository = mock();
-    private final AuditCheckpointRepository auditCheckpointRepository = mock();
+    private final AuditFlushStore auditFlushStore = mock();
     private final Statement statement = mock();
     private final PreparedStatement preparedStatement = mock();
     private final ResultSet resultSet = mock();
@@ -38,7 +38,7 @@ class DerbyAsyncAuditLoggerTest {
 
     @BeforeEach
     void setUp() throws SQLException {
-        logger = new DerbyAsyncAuditLogger(auditProperties, objectMapper, meterRegistry, auditEntryRepository, auditCheckpointRepository);
+        logger = new DerbyAsyncAuditLogger(auditProperties, objectMapper, meterRegistry, auditFlushStore);
         ReflectionTestUtils.setField(logger, "connection", connection);
     }
 
@@ -97,13 +97,10 @@ class DerbyAsyncAuditLoggerTest {
 
     @Test
     void testCommitBatchToDb_Success() throws SQLException, JsonProcessingException {
-        AuditCheckpoint checkpoint = new AuditCheckpoint("test-node");
-        checkpoint.setLogId(0L);
-
         PreparedStatement selectStatement = mock();
         PreparedStatement deleteStatement = mock();
 
-        when(auditCheckpointRepository.findByNodeName("test-node")).thenReturn(Optional.of(checkpoint));
+        when(auditFlushStore.lastFlushedId("test-node")).thenReturn(0L);
         when(connection.prepareStatement("SELECT id, event FROM audits WHERE id > ? ORDER BY id FETCH FIRST ? ROWS ONLY")).thenReturn(selectStatement);
         when(connection.prepareStatement("DELETE FROM audits WHERE id <= ?")).thenReturn(deleteStatement);
         when(selectStatement.getResultSet()).thenReturn(resultSet);
@@ -115,18 +112,16 @@ class DerbyAsyncAuditLoggerTest {
         int result = logger.commitBatchToDb();
 
         assertEquals(1, result);
-        verify(auditEntryRepository).saveAll(anyList());
-        verify(auditCheckpointRepository).save(checkpoint);
+        verify(auditFlushStore).commitBatch(eq("test-node"), anyList(), eq(1L));
+        verify(deleteStatement).setLong(1, 1L);
+        verify(deleteStatement).execute();
     }
 
     @Test
     void testCommitBatchToDb_NoEntries() throws SQLException, JsonProcessingException {
-        AuditCheckpoint checkpoint = new AuditCheckpoint("test-node");
-        checkpoint.setLogId(0L);
-
         PreparedStatement selectStatement = mock();
 
-        when(auditCheckpointRepository.findByNodeName("test-node")).thenReturn(Optional.of(checkpoint));
+        when(auditFlushStore.lastFlushedId("test-node")).thenReturn(0L);
         when(connection.prepareStatement("SELECT id, event FROM audits WHERE id > ? ORDER BY id FETCH FIRST ? ROWS ONLY")).thenReturn(selectStatement);
         when(selectStatement.getResultSet()).thenReturn(resultSet);
         when(resultSet.next()).thenReturn(false);
@@ -134,8 +129,36 @@ class DerbyAsyncAuditLoggerTest {
         int result = logger.commitBatchToDb();
 
         assertEquals(0, result);
-        verify(auditEntryRepository, never()).saveAll(anyList());
+        verify(auditFlushStore, never()).commitBatch(anyString(), anyList(), anyLong());
         verify(connection, never()).prepareStatement("DELETE FROM audits WHERE id <= ?");
+    }
+
+    @Test
+    void testCommitBatchToDb_StoreFails_DerbyRowsAreKept() throws SQLException, JsonProcessingException {
+        PreparedStatement selectStatement = mock();
+
+        when(auditFlushStore.lastFlushedId("test-node")).thenReturn(4L);
+        when(connection.prepareStatement("SELECT id, event FROM audits WHERE id > ? ORDER BY id FETCH FIRST ? ROWS ONLY")).thenReturn(selectStatement);
+        when(selectStatement.getResultSet()).thenReturn(resultSet);
+        when(resultSet.next()).thenReturn(true).thenReturn(false);
+        when(resultSet.getLong(1)).thenReturn(5L);
+        when(resultSet.getString(2)).thenReturn("{\"test\":\"data\"}");
+        when(objectMapper.readValue(anyString(), eq(AuditEntry.class))).thenReturn(createTestAuditEntry());
+        doThrow(new IllegalStateException("store down")).when(auditFlushStore).commitBatch(anyString(), anyList(), anyLong());
+
+        assertThrows(IllegalStateException.class, () -> logger.commitBatchToDb());
+
+        verify(selectStatement).setLong(1, 4L);
+        verify(connection, never()).prepareStatement("DELETE FROM audits WHERE id <= ?");
+    }
+
+    @Test
+    void testMarkDrained_DelegatesToStore() {
+        Instant startedAt = Instant.now();
+
+        logger.markDrained(startedAt);
+
+        verify(auditFlushStore).markDrained("test-node", startedAt);
     }
 
     private AuditEntry createTestAuditEntry() {

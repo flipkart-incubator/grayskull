@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.app.audit;
 
+import com.flipkart.grayskull.spi.AuditFlushStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,11 +16,11 @@ import static org.mockito.Mockito.*;
 
 class DerbyStaleDataCleanerTest {
 
-    private final AuditCheckpointRepository auditCheckpointRepository = mock();
+    private final AuditFlushStore auditFlushStore = mock();
 
     private final AuditProperties auditProperties = new AuditProperties();
 
-    private final DerbyStaleDataCleaner derbyStaleDataCleaner = new DerbyStaleDataCleaner(auditCheckpointRepository, auditProperties);
+    private final DerbyStaleDataCleaner derbyStaleDataCleaner = new DerbyStaleDataCleaner(auditFlushStore, auditProperties);
 
     private final String testNodeName = "test-node";
     private Path testDerbyFolder = null;
@@ -36,63 +37,54 @@ class DerbyStaleDataCleanerTest {
     @Test
     void cleanStaleData_WhenNoCheckpointExists_ShouldNotDeleteAnything() throws IOException {
         // Arrange
-        when(auditCheckpointRepository.findByNodeName(testNodeName)).thenReturn(Optional.empty());
+        when(auditFlushStore.lastCheckpointUpdate(testNodeName)).thenReturn(Optional.empty());
 
         // Act
         derbyStaleDataCleaner.cleanStaleData();
 
         // Assert
-        verify(auditCheckpointRepository, never()).deleteByNodeName(anyString());
+        verify(auditFlushStore, never()).deleteCheckpoint(anyString());
         assertTrue(Files.exists(testDerbyFolder));
     }
 
     @Test
     void cleanStaleData_WhenStalenessDurationIsZero_ShouldNotDeleteAnything() throws IOException {
         // Arrange
-        AuditCheckpoint checkpoint = new AuditCheckpoint(testNodeName);
-        checkpoint.setLastModifiedAt(Instant.now().minus(Duration.ofDays(2)));
-
-        when(auditCheckpointRepository.findByNodeName(testNodeName)).thenReturn(Optional.of(checkpoint));
+        when(auditFlushStore.lastCheckpointUpdate(testNodeName)).thenReturn(Optional.of(Instant.now().minus(Duration.ofDays(2))));
         auditProperties.setStalenessDuration(Duration.ZERO);
 
         // Act
         derbyStaleDataCleaner.cleanStaleData();
 
         // Assert
-        verify(auditCheckpointRepository, never()).deleteByNodeName(anyString());
+        verify(auditFlushStore, never()).deleteCheckpoint(anyString());
         assertTrue(Files.exists(testDerbyFolder));
     }
 
     @Test
     void cleanStaleData_WhenCheckpointIsNotStale_ShouldNotDeleteAnything() throws IOException {
         // Arrange
-        AuditCheckpoint checkpoint = new AuditCheckpoint(testNodeName);
-        checkpoint.setLastModifiedAt(Instant.now().minus(Duration.ofHours(12))); // Within staleness duration
-
-        when(auditCheckpointRepository.findByNodeName(testNodeName)).thenReturn(Optional.of(checkpoint));
+        when(auditFlushStore.lastCheckpointUpdate(testNodeName)).thenReturn(Optional.of(Instant.now().minus(Duration.ofHours(12)))); // Within staleness duration
 
         // Act
         derbyStaleDataCleaner.cleanStaleData();
 
         // Assert
-        verify(auditCheckpointRepository, never()).deleteByNodeName(anyString());
+        verify(auditFlushStore, never()).deleteCheckpoint(anyString());
         assertTrue(Files.exists(testDerbyFolder));
     }
 
     @Test
     void cleanStaleData_WhenCheckpointIsStale_ShouldDeleteCheckpointAndDerbyFolder() throws IOException {
         // Arrange
-        AuditCheckpoint checkpoint = new AuditCheckpoint(testNodeName);
-        checkpoint.setLastModifiedAt(Instant.now().minus(Duration.ofDays(2))); // Older than staleness duration
-
-        when(auditCheckpointRepository.findByNodeName(testNodeName)).thenReturn(Optional.of(checkpoint));
+        when(auditFlushStore.lastCheckpointUpdate(testNodeName)).thenReturn(Optional.of(Instant.now().minus(Duration.ofDays(2)))); // Older than staleness duration
 
 
         // Act
         derbyStaleDataCleaner.cleanStaleData();
 
         // Assert
-        verify(auditCheckpointRepository).deleteByNodeName(testNodeName);
+        verify(auditFlushStore).deleteCheckpoint(testNodeName);
         assertFalse(Files.exists(testDerbyFolder));
 
     }
