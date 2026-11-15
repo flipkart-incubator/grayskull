@@ -70,6 +70,13 @@ type GrayskullClientConfiguration struct {
 	// batch-refresh poll cycles.  Default: 60 (one minute)
 	PollingIntervalSeconds int `json:"pollingIntervalSeconds" yaml:"pollingIntervalSeconds" validate:"gte=0"`
 
+	// HeartbeatEnabled sends a periodic heartbeat listing the secrets and versions held. Default: true
+	HeartbeatEnabled bool `json:"heartbeatEnabled" yaml:"heartbeatEnabled"`
+
+	// HeartbeatIntervalSeconds is the delay between heartbeats (± 1/24 jitter). Zero means
+	// DefaultHeartbeatIntervalSeconds. Default: 86400 (24 hours)
+	HeartbeatIntervalSeconds int `json:"heartbeatIntervalSeconds" yaml:"heartbeatIntervalSeconds" validate:"gte=0"`
+
 	// WorkloadIdentityResolver resolves the workload identity for the Grayskull-Workload header.
 	// Defaults to DefaultWorkloadIdentityResolver (hostname). Can be customized for
 	// richer identity (e.g., Kubernetes pod name, ECS task ID, etc.).
@@ -135,6 +142,8 @@ func NewDefaultConfig() *GrayskullClientConfiguration {
 		MinRetryDelay:            100, // 100ms
 		MetricsEnabled:           true,
 		PollingIntervalSeconds:   constants.DefaultPollingIntervalSeconds,
+		HeartbeatEnabled:         true,
+		HeartbeatIntervalSeconds: constants.DefaultHeartbeatIntervalSeconds,
 		WorkloadIdentityResolver: workload.NewDefaultWorkloadIdentityResolver(),
 	}
 }

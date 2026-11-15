@@ -20,6 +20,7 @@ import (
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/constants"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal"
 	internalHooks "github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/hooks"
+	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/heartbeat"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/response"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/metrics"
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/models"
@@ -38,7 +39,8 @@ type GrayskullClientImpl struct {
 
 	registry         *internalHooks.Registry
 	poller           *internal.Poller
-	lastSeenVersions sync.Map
+	heartbeat        *internal.Heartbeat
+	lastSeenVersions sync.Map // secretRef -> latest fetched version (int)
 	closed           atomic.Bool
 }
 
@@ -121,8 +123,41 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 	})
 	client.poller.Start()
 
-	return client, nil
+	if config.HeartbeatEnabled {
+		client.heartbeat = internal.NewHeartbeat(internal.HeartbeatConfig{
+			BaseURL:         config.Host,
+			HTTPClient:      httpClient,
+			Interval:        time.Duration(config.HeartbeatIntervalSeconds) * time.Second,
+			HeldSecrets:     client.heldSecrets,
+			MetricsRecorder: metricsRecorder,
+			Logger:          logger.With("subcomponent", "heartbeat"),
+		})
+		client.heartbeat.Start()
+	}
 
+	return client, nil
+}
+
+// heldSecrets lists every fetched secret with the newest version held (fetched or
+// delivered to a refresh hook) and whether a refresh hook is registered for it.
+func (c *GrayskullClientImpl) heldSecrets() []heartbeat.HeldSecret {
+	var held []heartbeat.HeldSecret
+	c.lastSeenVersions.Range(func(key, value any) bool {
+		secretRef, version := key.(string), value.(int)
+		parts := c.splitSecretRef(secretRef)
+		state := c.registry.Get(secretRef)
+		if state != nil {
+			version = max(version, int(state.LastKnownVersion.Load()))
+		}
+		held = append(held, heartbeat.HeldSecret{
+			ProjectID:   parts[0],
+			SecretName:  parts[1],
+			Version:     version,
+			RefreshHook: state != nil,
+		})
+		return true
+	})
+	return held
 }
 
 // splitSecretRef splits "projectId:secretName" on the FIRST colon (secret
@@ -221,6 +256,9 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 func (c *GrayskullClientImpl) Close() error {
 	if !c.closed.CompareAndSwap(false, true) {
 		return nil
+	}
+	if c.heartbeat != nil {
+		c.heartbeat.Close()
 	}
 	var firstErr error
 	if c.poller != nil {
