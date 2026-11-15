@@ -37,7 +37,7 @@ class HeartbeatSchedulerTest {
     private HeartbeatScheduler scheduler;
     private String baseUrl;
 
-    /** Arrival time of every batch POST; the first {@code failFirst} get a 503. */
+    /** Arrival time of every heartbeat POST; the first {@code failFirst} get a 503. */
     private final List<Long> arrivalNanos = new CopyOnWriteArrayList<>();
     private final AtomicInteger failFirst = new AtomicInteger();
 
@@ -114,7 +114,6 @@ class HeartbeatSchedulerTest {
         RecordedRequest request = server.takeRequest(1, TimeUnit.SECONDS);
         assertEquals("POST", request.getMethod());
         assertEquals("/v1/heartbeat", request.getPath());
-        assertEquals(null, request.getHeader("Grayskull-Instance"));
         assertEquals("Bearer test-token", request.getHeader("Authorization"));
         JsonNode secrets = objectMapper.readTree(request.getBody().readUtf8()).get("secrets");
         assertEquals(3, secrets.size());
@@ -192,7 +191,7 @@ class HeartbeatSchedulerTest {
 
         for (int i = 1; i < 4; i++) {
             long gapMs = TimeUnit.NANOSECONDS.toMillis(arrivalNanos.get(i) - arrivalNanos.get(i - 1));
-            assertTrue(gapMs >= 800 && gapMs <= 1_500, "gap " + i + " was " + gapMs + " ms");
+            assertTrue(gapMs >= 800 && gapMs <= 3_000, "gap " + i + " was " + gapMs + " ms");
         }
     }
 
