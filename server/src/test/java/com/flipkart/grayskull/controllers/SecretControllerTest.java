@@ -82,7 +82,7 @@ class SecretControllerTest {
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
                 .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", "actor-name", expectedIps, null, expectedAuditMetadata));
-        verify(heartbeatService).recordFetch(null, null, PROJECT_ID, SECRET_NAME, 5);
+        verify(heartbeatService).recordFetch(null, null, null, PROJECT_ID, SECRET_NAME, 5);
     }
 
     @Test
@@ -93,10 +93,11 @@ class SecretControllerTest {
         request.addHeader("Grayskull-Workload", "v1::c::ns::Deployment::app");
         request.addHeader("User-Agent", "grayskull-java/0.3.0");
         when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME)).thenReturn(response);
+        when(requestUtils.getClientAddress()).thenReturn("10.1.2.3");
 
         secretController.readSecretValue(PROJECT_ID, SECRET_NAME, request);
 
-        verify(heartbeatService).recordFetch("v1::c::ns::Deployment::app", "grayskull-java/0.3.0", PROJECT_ID, SECRET_NAME, 7);
+        verify(heartbeatService).recordFetch("v1::c::ns::Deployment::app", "grayskull-java/0.3.0", "10.1.2.3", PROJECT_ID, SECRET_NAME, 7);
     }
 
     @ParameterizedTest

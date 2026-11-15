@@ -5,31 +5,38 @@ import com.flipkart.grayskull.models.dto.request.HeldSecret;
 import java.util.List;
 
 /**
- * Records which secrets, at which versions, running workload instances hold.
+ * Writes the delivery ledger: which client (workload and address) holds which secret version.
+ * <ul>
+ *   <li>Sightings: telemetry recorded from the SDK's own requests (secret fetch, refresh-hook poll), using the
+ *       workload headers sent with them (HLD: "Source headers ... are deduped and persisted").</li>
+ *   <li>Heartbeat: the SDK's 24-hour report, so long-lived processes stay in the ledger.</li>
+ * </ul>
  */
 public interface HeartbeatService {
 
     /**
-     * Upserts one record per held secret version for the calling workload and refreshes its {@code lastSeen}.
+     * Upserts one record per held secret version for the calling client and refreshes its {@code lastSeen}.
      * Reads no secret data and writes no audit entries.
      *
      * @param workload   workload identity ({@code Grayskull-Workload})
      * @param sdkVersion SDK name and version ({@code User-Agent}); may be null
+     * @param address    client address (pod or VM)
      * @param secrets    the held secrets
      */
-    void recordHeartbeat(String workload, String sdkVersion, List<HeldSecret> secrets);
+    void recordHeartbeat(String workload, String sdkVersion, String address, List<HeldSecret> secrets);
 
     /**
-     * Records that the calling workload was just served a secret version (a fetch sighting), so a workload is known
-     * from the moment it boots and fetches, not only from its first heartbeat. Best effort: the write runs off the
-     * request thread, happens at most once an hour per workload and secret version on this server, and never
-     * fails the fetch. Does nothing when {@code workload} is missing.
-     *
-     * @param workload   workload identity ({@code Grayskull-Workload}); may be null
-     * @param sdkVersion SDK name and version ({@code User-Agent}); may be null
-     * @param projectId  project of the served secret
-     * @param secretName name of the served secret
-     * @param version    the served version
+     * Sighting of a secret fetch: the client was just served {@code version}. Synchronous, deduplicated (written at
+     * most once an hour per client and secret version on this server) and best effort: a failed write is logged and
+     * never fails the fetch. Does nothing when {@code workload} is missing.
      */
-    void recordFetch(String workload, String sdkVersion, String projectId, String secretName, int version);
+    void recordFetch(String workload, String sdkVersion, String address, String projectId, String secretName,
+                     int version);
+
+    /**
+     * Sighting of a refresh-hook poll ({@code POST /v1/secrets/batch}): like {@link #recordFetch}, and the record
+     * also gets {@code refreshHook = true}.
+     */
+    void recordHookPoll(String workload, String sdkVersion, String address, String projectId, String secretName,
+                        int version);
 }

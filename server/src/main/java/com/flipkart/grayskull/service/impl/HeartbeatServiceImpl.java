@@ -5,7 +5,6 @@ import com.flipkart.grayskull.service.interfaces.HeartbeatService;
 import com.flipkart.grayskull.service.utils.AuthnUtil;
 import com.flipkart.grayskull.spi.models.WorkloadHeartbeat;
 import com.flipkart.grayskull.spi.repositories.WorkloadHeartbeatRepository;
-import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -16,11 +15,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -28,79 +23,78 @@ public class HeartbeatServiceImpl implements HeartbeatService {
 
     static final int MAX_SDK_VERSION_LENGTH = 64;
     static final int MAX_WORKLOAD_LENGTH = 512;
-    /** A fetch of the same workload and secret version is written at most once per this interval, per server. */
-    static final Duration FETCH_RECORD_INTERVAL = Duration.ofHours(1);
-    /** Bounds the throttle map; it is cleared when full, which only costs a few extra writes. */
-    static final int MAX_TRACKED_FETCHES = 100_000;
+    /** The same sighting (client and secret version) is written at most once per this interval, per server. */
+    static final Duration SIGHTING_DEDUP_INTERVAL = Duration.ofHours(1);
+    /** Bounds the dedup map; it is cleared when full, which only costs a few extra writes. */
+    static final int MAX_TRACKED_SIGHTINGS = 100_000;
 
     private final WorkloadHeartbeatRepository heartbeatRepository;
     private final AuthnUtil authnUtil;
     private final Clock clock;
-    private final ExecutorService fetchRecorder;
-    private final Map<String, Instant> lastFetchRecorded = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastSightingWritten = new ConcurrentHashMap<>();
 
     @Autowired
     public HeartbeatServiceImpl(WorkloadHeartbeatRepository heartbeatRepository, AuthnUtil authnUtil) {
-        // One background thread; when it falls behind, new fetch records are dropped rather than queued forever.
-        this(heartbeatRepository, authnUtil, Clock.systemUTC(), new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(10_000), r -> {
-                    Thread t = new Thread(r, "fetch-sighting-recorder");
-                    t.setDaemon(true);
-                    return t;
-                }, new ThreadPoolExecutor.DiscardPolicy()));
+        this(heartbeatRepository, authnUtil, Clock.systemUTC());
     }
 
-    HeartbeatServiceImpl(WorkloadHeartbeatRepository heartbeatRepository, AuthnUtil authnUtil, Clock clock,
-                         ExecutorService fetchRecorder) {
+    HeartbeatServiceImpl(WorkloadHeartbeatRepository heartbeatRepository, AuthnUtil authnUtil, Clock clock) {
         this.heartbeatRepository = heartbeatRepository;
         this.authnUtil = authnUtil;
         this.clock = clock;
-        this.fetchRecorder = fetchRecorder;
-    }
-
-    @PreDestroy
-    void shutdown() {
-        fetchRecorder.shutdown();
     }
 
     @Override
-    public void recordFetch(String workload, String sdkVersion, String projectId, String secretName, int version) {
+    public void recordFetch(String workload, String sdkVersion, String address, String projectId, String secretName,
+                            int version) {
+        // refreshHook null: a fetch does not know whether a hook is registered, so the stored value is kept
+        recordSighting(workload, sdkVersion, address, projectId, secretName, version, null);
+    }
+
+    @Override
+    public void recordHookPoll(String workload, String sdkVersion, String address, String projectId,
+                               String secretName, int version) {
+        recordSighting(workload, sdkVersion, address, projectId, secretName, version, true);
+    }
+
+    private void recordSighting(String workload, String sdkVersion, String address, String projectId,
+                                String secretName, int version, Boolean refreshHook) {
         if (workload == null || workload.isBlank() || workload.length() > MAX_WORKLOAD_LENGTH) {
             return;
         }
         Instant now = clock.instant();
-        String key = workload + '\n' + projectId + '\n' + secretName + '\n' + version;
-        Instant last = lastFetchRecorded.get(key);
-        if (last != null && now.isBefore(last.plus(FETCH_RECORD_INTERVAL))) {
+        String key = workload + '\n' + address + '\n' + projectId + '\n' + secretName + '\n' + version;
+        Instant last = lastSightingWritten.get(key);
+        if (last != null && now.isBefore(last.plus(SIGHTING_DEDUP_INTERVAL))) {
             return;
         }
-        if (lastFetchRecorded.size() >= MAX_TRACKED_FETCHES) {
-            lastFetchRecorded.clear();
+        if (lastSightingWritten.size() >= MAX_TRACKED_SIGHTINGS) {
+            lastSightingWritten.clear();
         }
-        lastFetchRecorded.put(key, now);
+        lastSightingWritten.put(key, now);
 
-        // Built on the request thread: the caller's identity lives in the request's security context.
         WorkloadHeartbeat record = WorkloadHeartbeat.builder()
                 .workload(workload)
                 .projectId(projectId)
                 .secretName(secretName)
                 .secretVersion(version)
+                .refreshHook(refreshHook)
                 .sdkVersion(truncate(sdkVersion, MAX_SDK_VERSION_LENGTH))
                 .userId(authnUtil.getCurrentUsername())
+                .address(address)
                 .lastSeen(now)
-                .build(); // refreshHook stays null: a fetch does not know it, so the stored value is kept
-        fetchRecorder.execute(() -> {
-            try {
-                heartbeatRepository.upsertAll(List.of(record));
-            } catch (RuntimeException e) {
-                lastFetchRecorded.remove(key); // let the next fetch try again
-                log.warn("Could not record fetch of {}:{} v{} by {}", projectId, secretName, version, workload, e);
-            }
-        });
+                .build();
+        try {
+            heartbeatRepository.upsertAll(List.of(record));
+        } catch (RuntimeException e) {
+            lastSightingWritten.remove(key); // let the next request try again
+            log.warn("Could not record sighting of {}:{} v{} by {} at {}", projectId, secretName, version, workload,
+                    address, e);
+        }
     }
 
     @Override
-    public void recordHeartbeat(String workload, String sdkVersion, List<HeldSecret> secrets) {
+    public void recordHeartbeat(String workload, String sdkVersion, String address, List<HeldSecret> secrets) {
         Instant now = clock.instant();
         String userId = authnUtil.getCurrentUsername();
         String sdk = truncate(sdkVersion, MAX_SDK_VERSION_LENGTH);
@@ -121,6 +115,7 @@ public class HeartbeatServiceImpl implements HeartbeatService {
                         .refreshHook(secret.isRefreshHook())
                         .sdkVersion(sdk)
                         .userId(userId)
+                        .address(address)
                         .lastSeen(now)
                         .build())
                 .toList();

@@ -8,9 +8,9 @@ import lombok.experimental.SuperBuilder;
 import java.time.Instant;
 
 /**
- * One version of a secret held by a workload, as last reported by its SDK heartbeats.
- * Unique per {@code (workload, projectId, secretName, secretVersion)}: all instances of a workload on the same
- * version refresh one record, and a workload with instances on two versions has two records.
+ * Delivery ledger entry: one version of a secret held by one client (pod or VM) of a workload, as last seen in a
+ * secret fetch, a refresh-hook poll or an SDK heartbeat. Unique per
+ * {@code (workload, projectId, secretName, secretVersion, address)}.
  * <p>
  * This is a plain POJO contract that the server module will implement with framework-specific annotations.
  */
@@ -36,9 +36,12 @@ public class WorkloadHeartbeat {
     /** SDK name and version from the {@code User-Agent} header. */
     private String sdkVersion;
 
-    /** Authenticated caller. */
+    /** Authenticated caller (principal). */
     private String userId;
 
-    /** Time of the latest heartbeat that reported this secret version. */
+    /** Client address (pod or VM IP) as seen by the server. */
+    private String address;
+
+    /** Time of the latest sighting or heartbeat that reported this secret version. */
     private Instant lastSeen;
 }

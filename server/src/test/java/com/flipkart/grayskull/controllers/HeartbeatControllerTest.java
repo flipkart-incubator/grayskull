@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.controllers;
 
+import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.HeartbeatRequest;
 import com.flipkart.grayskull.models.dto.request.HeldSecret;
 import com.flipkart.grayskull.service.interfaces.HeartbeatService;
@@ -16,7 +17,8 @@ import static org.mockito.Mockito.*;
 class HeartbeatControllerTest {
 
     private final HeartbeatService heartbeatService = mock(HeartbeatService.class);
-    private final HeartbeatController controller = new HeartbeatController(heartbeatService);
+    private final RequestUtils requestUtils = mock(RequestUtils.class);
+    private final HeartbeatController controller = new HeartbeatController(heartbeatService, requestUtils);
 
     private static final String WORKLOAD = "v1::hyd-prod::payments::Deployment::payment-api";
 
@@ -24,11 +26,12 @@ class HeartbeatControllerTest {
     @DisplayName("Records the heartbeat and returns 204 with no body")
     void recordHeartbeat_returnsNoContent() {
         List<HeldSecret> secrets = List.of(new HeldSecret("payments", "db-password", 7, true));
+        when(requestUtils.getClientAddress()).thenReturn("10.1.2.3");
 
         var response = controller.recordHeartbeat(WORKLOAD, "grayskull-java/0.3.0", new HeartbeatRequest(secrets));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(response.getBody()).isNull();
-        verify(heartbeatService).recordHeartbeat(WORKLOAD, "grayskull-java/0.3.0", secrets);
+        verify(heartbeatService).recordHeartbeat(WORKLOAD, "grayskull-java/0.3.0", "10.1.2.3", secrets);
     }
 }

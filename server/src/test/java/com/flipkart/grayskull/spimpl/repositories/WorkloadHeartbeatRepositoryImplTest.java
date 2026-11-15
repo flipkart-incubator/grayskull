@@ -26,14 +26,14 @@ class WorkloadHeartbeatRepositoryImplTest {
     private final WorkloadHeartbeatRepositoryImpl repository = new WorkloadHeartbeatRepositoryImpl(mongoTemplate);
 
     @Test
-    @DisplayName("Upserts each record on (workload, projectId, secretName, secretVersion) in one unordered bulk")
+    @DisplayName("Upserts each record on (workload, projectId, secretName, secretVersion, address) in one unordered bulk")
     void upsertAll_upsertsOnUniqueKey() {
         when(mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, WorkloadHeartbeatEntity.class)).thenReturn(bulk);
         Instant now = Instant.parse("2026-11-12T10:15:00Z");
         WorkloadHeartbeat heartbeat = WorkloadHeartbeat.builder()
                 .workload("wl")
                 .projectId("payments").secretName("db-password").secretVersion(7).refreshHook(true)
-                .sdkVersion("grayskull-java/0.3.0").userId("service:payment-api").lastSeen(now)
+                .sdkVersion("grayskull-java/0.3.0").userId("service:payment-api").address("10.1.2.3").lastSeen(now)
                 .build();
 
         repository.upsertAll(List.of(heartbeat, heartbeat.toBuilder().secretVersion(6).build()));
@@ -45,7 +45,7 @@ class WorkloadHeartbeatRepositoryImplTest {
 
         assertThat(query.getAllValues().get(0).getQueryObject()).isEqualTo(new Document()
                 .append("workload", "wl").append("projectId", "payments")
-                .append("secretName", "db-password").append("secretVersion", 7));
+                .append("secretName", "db-password").append("secretVersion", 7).append("address", "10.1.2.3"));
         assertThat(query.getAllValues().get(1).getQueryObject().get("secretVersion")).isEqualTo(6);
         Document set = (Document) update.getAllValues().get(0).getUpdateObject().get("$set");
         assertThat(set).containsEntry("refreshHook", true)

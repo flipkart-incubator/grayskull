@@ -38,7 +38,8 @@ public class WorkloadHeartbeatRepositoryImpl implements WorkloadHeartbeatReposit
         return Query.query(Criteria.where("workload").is(heartbeat.getWorkload())
                 .and("projectId").is(heartbeat.getProjectId())
                 .and("secretName").is(heartbeat.getSecretName())
-                .and("secretVersion").is(heartbeat.getSecretVersion()));
+                .and("secretVersion").is(heartbeat.getSecretVersion())
+                .and("address").is(heartbeat.getAddress()));
     }
 
     private static Update updateOf(WorkloadHeartbeat heartbeat) {

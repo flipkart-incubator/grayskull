@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.controllers;
 
+import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.HeartbeatRequest;
 import com.flipkart.grayskull.service.interfaces.HeartbeatService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,7 @@ public class HeartbeatController {
     static final String USER_AGENT_HEADER = "User-Agent";
 
     private final HeartbeatService heartbeatService;
+    private final RequestUtils requestUtils;
 
     @Operation(summary = "Records the secrets, and their versions, that a workload holds.")
     @PostMapping
@@ -39,7 +41,7 @@ public class HeartbeatController {
             @RequestHeader(value = USER_AGENT_HEADER, required = false) String userAgent,
             @Valid @RequestBody HeartbeatRequest request) {
 
-        heartbeatService.recordHeartbeat(workload, userAgent, request.getSecrets());
+        heartbeatService.recordHeartbeat(workload, userAgent, requestUtils.getClientAddress(), request.getSecrets());
         return ResponseEntity.noContent().build();
     }
 }

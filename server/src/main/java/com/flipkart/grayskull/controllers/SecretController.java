@@ -84,7 +84,7 @@ public class SecretController {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
         // Fetch sighting: SDK consumers are known from the fetch itself; the 24h heartbeat covers long-lived ones.
         heartbeatService.recordFetch(request.getHeader("Grayskull-Workload"), request.getHeader("User-Agent"),
-                projectId, secretName, response.getDataVersion());
+                requestUtils.getClientAddress(), projectId, secretName, response.getDataVersion());
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadataEnhancers.stream()
                 .map(enhancer -> enhancer.getAdditionalMetadata(request))
