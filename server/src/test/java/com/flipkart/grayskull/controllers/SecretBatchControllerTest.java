@@ -7,6 +7,7 @@ import com.flipkart.grayskull.models.dto.request.BatchGetSecretsRequest;
 import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.models.dto.response.BatchGetSecretsResponse;
 import com.flipkart.grayskull.models.dto.response.BatchSecretItem;
+import com.flipkart.grayskull.service.interfaces.HeartbeatService;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
@@ -27,11 +28,12 @@ class SecretBatchControllerTest {
     private final SecretService secretService = mock(SecretService.class);
     private final AsyncAuditLogger asyncAuditLogger = mock(AsyncAuditLogger.class);
     private final RequestUtils requestUtils = mock(RequestUtils.class);
+    private final HeartbeatService heartbeatService = mock(HeartbeatService.class);
     private SecretBatchController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new SecretBatchController(secretService, asyncAuditLogger, requestUtils);
+        controller = new SecretBatchController(secretService, asyncAuditLogger, requestUtils, heartbeatService);
         SecurityContextHolder.setContext(new SecurityContextImpl(new GrayskullAuthentication("user", "actor-name")));
     }
 
@@ -62,7 +64,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(expectedIps);
 
-        var result = controller.batchGetSecrets(request);
+        var result = controller.batchGetSecrets(request, null, null);
 
         assertThat(result.getData().getUpdatedCount()).isEqualTo(1);
 
@@ -89,7 +91,7 @@ class SecretBatchControllerTest {
 
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
 
-        var result = controller.batchGetSecrets(request);
+        var result = controller.batchGetSecrets(request, null, null);
 
         assertThat(result.getData().getUpdatedCount()).isZero();
         assertThat(result.getData().getUpdatedSecrets()).isEmpty();
@@ -110,7 +112,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request);
+        controller.batchGetSecrets(request, null, null);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger, times(2)).log(captor.capture());
@@ -143,7 +145,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request);
+        controller.batchGetSecrets(request, null, null);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(captor.capture());
@@ -166,7 +168,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request);
+        controller.batchGetSecrets(request, null, null);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger).log(captor.capture());
@@ -190,7 +192,7 @@ class SecretBatchControllerTest {
         when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
         when(requestUtils.getRemoteIPs()).thenReturn(Map.of());
 
-        controller.batchGetSecrets(request);
+        controller.batchGetSecrets(request, null, null);
 
         ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.captor();
         verify(asyncAuditLogger, times(2)).log(captor.capture());
@@ -200,5 +202,28 @@ class SecretBatchControllerTest {
         // ... but each entry carries only its own publicPart.
         assertThat(captor.getAllValues().get(0).getMetadata()).containsEntry("publicPart", "pubA");
         assertThat(captor.getAllValues().get(1).getMetadata()).containsEntry("publicPart", "pubB");
+    }
+
+    @Test
+    @DisplayName("Records a hook-poll sighting for each held version and each newer version served")
+    void batchGet_recordsHookPollSightings() {
+        BatchGetSecretsRequest request = new BatchGetSecretsRequest(List.of(
+                new SecretVersionEntry("proj-a", "db-password", 4),   // unchanged: holds v4
+                new SecretVersionEntry("proj-b", "api-key", 2),       // holds v2, server hands it v3
+                new SecretVersionEntry("proj-c", "new-hook", 0)));    // hook registered before any fetch: holds nothing yet
+        BatchGetSecretsResponse serviceResponse = new BatchGetSecretsResponse(2, List.of(
+                item("proj-b", "api-key", 3, "pub"), item("proj-c", "new-hook", 1, "pub")));
+        when(secretService.batchGetSecrets(request.getSecrets())).thenReturn(serviceResponse);
+        when(requestUtils.getClientAddress()).thenReturn("10.1.2.3");
+
+        controller.batchGetSecrets(request, "v1::c::ns::Deployment::app", "grayskull-java/0.3.0");
+
+        String wl = "v1::c::ns::Deployment::app";
+        String sdk = "grayskull-java/0.3.0";
+        verify(heartbeatService).recordHookPoll(wl, sdk, "10.1.2.3", "proj-a", "db-password", 4);
+        verify(heartbeatService).recordHookPoll(wl, sdk, "10.1.2.3", "proj-b", "api-key", 2);
+        verify(heartbeatService).recordHookPoll(wl, sdk, "10.1.2.3", "proj-b", "api-key", 3);
+        verify(heartbeatService).recordHookPoll(wl, sdk, "10.1.2.3", "proj-c", "new-hook", 1);
+        verifyNoMoreInteractions(heartbeatService);
     }
 }

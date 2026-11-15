@@ -11,6 +11,7 @@ import com.flipkart.grayskull.spi.MetadataValidator;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
+import com.flipkart.grayskull.service.interfaces.HeartbeatService;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +40,7 @@ public class SecretController {
     private final RequestUtils requestUtils;
     private final List<MetadataValidator> metadataValidators;
     private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
+    private final HeartbeatService heartbeatService;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -80,6 +82,9 @@ public class SecretController {
             @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName,
             HttpServletRequest request) {
         SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
+        // Fetch sighting: SDK consumers are known from the fetch itself; the 24h heartbeat covers long-lived ones.
+        heartbeatService.recordFetch(request.getHeader("Grayskull-Workload"), request.getHeader("User-Agent"),
+                requestUtils.getClientAddress(), projectId, secretName, response.getDataVersion());
         Map<String, String> auditMetadata = new HashMap<>();
         auditMetadataEnhancers.stream()
                 .map(enhancer -> enhancer.getAdditionalMetadata(request))

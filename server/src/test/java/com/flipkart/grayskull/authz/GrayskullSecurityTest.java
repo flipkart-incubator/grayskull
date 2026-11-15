@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.authz;
 
+import com.flipkart.grayskull.models.dto.request.HeldSecret;
 import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
@@ -319,5 +320,37 @@ class GrayskullSecurityTest {
         assertTrue(grayskullSecurity.hasPermissionForSecrets(entries, "secrets.read.value"));
         verify(authorizationProvider, times(1))
                 .bulkAuthorize(any(), eq("secrets.read.value"));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void hasPermissionForHeldSecrets_PassesAllSecretsToBulkApi_AndMakesNoDbCalls() {
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        ArgumentCaptor<List<AuthorizationContext>> captor = ArgumentCaptor.forClass((Class) List.class);
+        when(authorizationProvider.bulkAuthorize(captor.capture(), eq("secrets.read.value"))).thenReturn(true);
+
+        List<HeldSecret> secrets = List.of(
+                new HeldSecret("proj-a", "secret-1", 1, true),
+                new HeldSecret("proj-b", "secret-2", 2, false));
+
+        assertTrue(grayskullSecurity.hasPermissionForHeldSecrets(secrets, "secrets.read.value"));
+
+        List<AuthorizationContext> forwarded = captor.getValue();
+        assertEquals(2, forwarded.size());
+        assertEquals("proj-a", forwarded.get(0).getProjectId());
+        assertEquals(Optional.of("secret-1"), forwarded.get(0).getSecretName());
+        assertEquals("proj-b", forwarded.get(1).getProjectId());
+        assertEquals(Optional.of("secret-2"), forwarded.get(1).getSecretName());
+        verifyNoInteractions(projectRepository);
+        verifyNoInteractions(secretRepository);
+    }
+
+    @Test
+    void hasPermissionForHeldSecrets_WhenBulkDenies_ReturnsFalse() {
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        when(authorizationProvider.bulkAuthorize(any(), eq("secrets.read.value"))).thenReturn(false);
+
+        assertFalse(grayskullSecurity.hasPermissionForHeldSecrets(
+                List.of(new HeldSecret("proj-a", "s1", 1, false)), "secrets.read.value"));
     }
 }

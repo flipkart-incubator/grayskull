@@ -15,6 +15,21 @@ public class RequestUtils {
     private final HttpServletRequest request;
     private final List<AuditMetadataEnhancer> auditMetadataEnhancers;
 
+    /**
+     * Address of the calling client (pod or VM): the first {@code X-Forwarded-For} hop when a proxy set it,
+     * otherwise the address of the connection's peer.
+     */
+    public String getClientAddress() {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null) {
+            String first = forwardedFor.split(",", 2)[0].trim();
+            if (!first.isEmpty()) {
+                return first;
+            }
+        }
+        return request.getRemoteAddr();
+    }
+
     public Map<String, String> getRemoteIPs() {
         Map<String, String> ips = new HashMap<>();
         ips.put("Remote-Conn-Addr", request.getRemoteAddr());
