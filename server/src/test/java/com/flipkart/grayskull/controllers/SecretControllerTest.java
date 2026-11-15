@@ -8,6 +8,7 @@ import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.response.SecretDataResponse;
 import com.flipkart.grayskull.models.dto.response.SecretDataVersionResponse;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
+import com.flipkart.grayskull.service.interfaces.HeartbeatService;
 import com.flipkart.grayskull.service.interfaces.SecretService;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.MetadataValidator;
@@ -39,12 +40,13 @@ class SecretControllerTest {
     private final RequestUtils requestUtils = mock(RequestUtils.class);
     private final List<MetadataValidator> plugins = new ArrayList<>();
     private final List<AuditMetadataEnhancer> auditMetadataEnhancers = new ArrayList<>();
+    private final HeartbeatService heartbeatService = mock(HeartbeatService.class);
 
     private SecretController secretController;
 
     @BeforeEach
     void setUp() {
-        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins, auditMetadataEnhancers);
+        secretController = new SecretController(secretService, asyncAuditLogger, requestUtils, plugins, auditMetadataEnhancers, heartbeatService);
         SecurityContextHolder.setContext(new SecurityContextImpl(new GrayskullAuthentication("user", "actor-name")));
     }
 
@@ -80,6 +82,21 @@ class SecretControllerTest {
                 .usingRecursiveComparison()
                 .ignoringFields("timestamp")
                 .isEqualTo(new AuditEntry(null, PROJECT_ID, AuditConstants.RESOURCE_TYPE_SECRET, SECRET_NAME, 5, AuditAction.READ_SECRET.name(), "user", "actor-name", expectedIps, null, expectedAuditMetadata));
+        verify(heartbeatService).recordFetch(null, null, PROJECT_ID, SECRET_NAME, 5);
+    }
+
+    @Test
+    @DisplayName("Should record the fetch with the workload and SDK headers")
+    void shouldRecordFetchSighting() {
+        SecretDataResponse response = SecretDataResponse.builder().publicPart("pub").dataVersion(7).build();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Grayskull-Workload", "v1::c::ns::Deployment::app");
+        request.addHeader("User-Agent", "grayskull-java/0.3.0");
+        when(secretService.readSecretValue(PROJECT_ID, SECRET_NAME)).thenReturn(response);
+
+        secretController.readSecretValue(PROJECT_ID, SECRET_NAME, request);
+
+        verify(heartbeatService).recordFetch("v1::c::ns::Deployment::app", "grayskull-java/0.3.0", PROJECT_ID, SECRET_NAME, 7);
     }
 
     @ParameterizedTest

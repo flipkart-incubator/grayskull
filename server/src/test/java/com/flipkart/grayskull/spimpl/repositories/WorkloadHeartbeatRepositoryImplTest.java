@@ -57,6 +57,23 @@ class WorkloadHeartbeatRepositoryImplTest {
     }
 
     @Test
+    @DisplayName("A fetch record (refreshHook null) leaves the stored refreshHook untouched")
+    void upsertAll_nullRefreshHookIsNotSet() {
+        when(mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, WorkloadHeartbeatEntity.class)).thenReturn(bulk);
+        WorkloadHeartbeat fetch = WorkloadHeartbeat.builder()
+                .workload("wl").projectId("p").secretName("s").secretVersion(1)
+                .lastSeen(Instant.parse("2026-11-12T10:15:00Z"))
+                .build();
+
+        repository.upsertAll(List.of(fetch));
+
+        ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+        verify(bulk).upsert(any(Query.class), update.capture());
+        Document set = (Document) update.getValue().getUpdateObject().get("$set");
+        assertThat(set).doesNotContainKey("refreshHook").containsKey("lastSeen");
+    }
+
+    @Test
     @DisplayName("Does nothing for an empty list")
     void upsertAll_emptyIsNoop() {
         repository.upsertAll(List.of());

@@ -42,11 +42,15 @@ public class WorkloadHeartbeatRepositoryImpl implements WorkloadHeartbeatReposit
     }
 
     private static Update updateOf(WorkloadHeartbeat heartbeat) {
-        return new Update()
-                .set("refreshHook", heartbeat.getRefreshHook())
+        Update update = new Update()
                 .set("sdkVersion", heartbeat.getSdkVersion())
                 .set("userId", heartbeat.getUserId())
                 .set("lastSeen", heartbeat.getLastSeen())
                 .setOnInsert("firstSeen", heartbeat.getLastSeen());
+        // Only heartbeats know whether a refresh hook is registered; a fetch record (null) keeps the stored value.
+        if (heartbeat.getRefreshHook() != null) {
+            update.set("refreshHook", heartbeat.getRefreshHook());
+        }
+        return update;
     }
 }
