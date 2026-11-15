@@ -312,16 +312,12 @@ final class HookRefreshPoller {
         }
     }
 
-    /**
-     * The version last delivered to hooks for {@code secretRef}, or 0 when no hook is registered.
-     * Used by the heartbeat to report hook-delivered versions.
-     */
+    /** Version last delivered to hooks, or 0. */
     int lastKnownVersion(String secretRef) {
         SecretState state = registry.get(secretRef);
         return state == null ? 0 : state.lastKnownVersion.get();
     }
 
-    /** Whether at least one refresh hook is registered for {@code secretRef}. */
     boolean hasHook(String secretRef) {
         return registry.containsKey(secretRef);
     }

@@ -21,12 +21,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Heartbeat behaviour of {@link GrayskullClientImpl} against a fake server. */
 class GrayskullClientImplHeartbeatTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final List<RecordedRequest> heartbeats = new CopyOnWriteArrayList<>();
-    /** When > 0, refresh-hook polls (not heartbeats) report proj:db-password updated to this version. */
+    /** When > 0, batch polls return this version. */
     private volatile int pollVersion;
     private MockWebServer server;
     private GrayskullClientImpl client;
@@ -145,7 +144,7 @@ class GrayskullClientImplHeartbeatTest {
         client.getSecret("proj:db-password"); // v7
         client.registerRefreshHook("proj:db-password", secret -> { });
 
-        // The poller delivers v8 to the hook; the heartbeat must then report v8, not the fetched v7.
+        // hook gets v8; heartbeat must report 8
         long deadline = System.currentTimeMillis() + 8_000;
         int reported = -1;
         boolean hook = false;

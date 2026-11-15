@@ -113,21 +113,11 @@ public final class GrayskullClientConfiguration {
      */
     private int pollingIntervalSeconds = 60;
 
-    /**
-     * Whether the client sends a periodic heartbeat reporting the secrets and versions it holds.
-     * <p>
-     * Default: true
-     * </p>
-     */
+    /** Send periodic heartbeats. Default: true. */
     @Setter
     private boolean heartbeatEnabled = true;
 
-    /**
-     * Interval in seconds between heartbeats. Each delay gets random jitter of 1/24 of it.
-     * <p>
-     * Default: 86400 (24 hours)
-     * </p>
-     */
+    /** Seconds between heartbeats (± 1/24 jitter). Default: 86400. */
     private int heartbeatIntervalSeconds = 86400;
 
     /**
@@ -258,12 +248,7 @@ public final class GrayskullClientConfiguration {
         this.pollingIntervalSeconds = pollingIntervalSeconds;
     }
 
-    /**
-     * Sets the heartbeat interval in seconds.
-     *
-     * @param heartbeatIntervalSeconds the heartbeat interval in seconds (must be positive)
-     * @throws IllegalArgumentException if {@code heartbeatIntervalSeconds} is not positive
-     */
+    /** @throws IllegalArgumentException if not positive */
     public void setHeartbeatIntervalSeconds(int heartbeatIntervalSeconds) {
         if (heartbeatIntervalSeconds <= 0) {
             throw new IllegalArgumentException(

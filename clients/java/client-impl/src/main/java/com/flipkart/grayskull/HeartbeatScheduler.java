@@ -20,12 +20,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-/**
- * Sends a heartbeat to {@code POST /v1/heartbeat} every interval (default 24h, ± 1/24 jitter) listing the
- * secrets and versions this client holds, so the server knows which workloads run which versions.
- * The heartbeat only records presence: it never fetches secret values. On failure it retries later with
- * capped exponential backoff instead of retrying inline.
- */
+/** Sends the held secrets to {@code POST /v1/heartbeat} every interval (default 24h). */
 final class HeartbeatScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatScheduler.class);
@@ -58,12 +53,12 @@ final class HeartbeatScheduler {
         this.intervalMillis = TimeUnit.SECONDS.toMillis(intervalSeconds);
     }
 
-    /** The first heartbeat goes one interval from now: the fetches at startup are already visible. */
+    /** First heartbeat after one interval; startup fetches are recorded by the server. */
     void start() {
         scheduleNext();
     }
 
-    /** Stops the heartbeat, interrupting an in-flight call. Idempotent. */
+    /** Idempotent. */
     void close() {
         scheduler.shutdownNow();
         try {
@@ -77,7 +72,7 @@ final class HeartbeatScheduler {
         try {
             scheduler.schedule(this::run, nextDelayMillis(failures), TimeUnit.MILLISECONDS);
         } catch (RejectedExecutionException closed) {
-            // close() raced with this run; nothing to schedule.
+            // closed
         }
     }
 
@@ -92,7 +87,7 @@ final class HeartbeatScheduler {
         }
     }
 
-    /** Sends every held secret in chunks of 50; true when all chunks succeeded (or nothing is held). */
+    /** True when all chunks succeeded. */
     private boolean beatOnce() {
         List<HeartbeatRequest.HeldSecret> held = heldSecrets.get();
         boolean ok = true;
@@ -126,7 +121,7 @@ final class HeartbeatScheduler {
         }
     }
 
-    /** Interval ±1/24 after a success; capped exponential backoff ±10% after {@code failures} failures. */
+    /** Interval ± 1/24 on success; 5–60 min backoff ± 10% on failure. */
     private long nextDelayMillis(int failures) {
         long delay = failures == 0
                 ? intervalMillis

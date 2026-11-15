@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Unit tests for {@link HeartbeatScheduler}; private methods are reached through reflection. */
 class HeartbeatSchedulerTest {
 
 
@@ -37,7 +36,7 @@ class HeartbeatSchedulerTest {
     private HeartbeatScheduler scheduler;
     private String baseUrl;
 
-    /** Arrival time of every heartbeat POST; the first {@code failFirst} get a 503. */
+    /** The first {@code failFirst} requests get 503. */
     private final List<Long> arrivalNanos = new CopyOnWriteArrayList<>();
     private final AtomicInteger failFirst = new AtomicInteger();
 
@@ -182,7 +181,7 @@ class HeartbeatSchedulerTest {
 
     @Test
     void schedule_keepsSendingAfterFailures() throws Exception {
-        // With a 1 s interval the backoff is capped at 1 s, so failures are retried and then succeed.
+        // 1 s interval caps backoff at 1 s
         failFirst.set(2);
         scheduler = newScheduler(1, () -> entries(1));
 

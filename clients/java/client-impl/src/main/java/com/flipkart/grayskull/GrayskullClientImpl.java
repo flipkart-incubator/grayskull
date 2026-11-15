@@ -103,11 +103,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
         }
     }
 
-    /**
-     * Every secret fetched through {@link #getSecret} with the latest version received, for the heartbeat:
-     * the fetched version, or the version the refresh-hook poller delivered since, whichever is newer;
-     * plus whether a refresh hook is registered for it.
-     */
+    /** Fetched secrets with the newest version held (fetched or hook-delivered). */
     private List<HeartbeatRequest.HeldSecret> heldSecrets() {
         List<HeartbeatRequest.HeldSecret> entries = new ArrayList<>(lastSeenVersions.size());
         for (Map.Entry<String, Integer> seen : lastSeenVersions.entrySet()) {
