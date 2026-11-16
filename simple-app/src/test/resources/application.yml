@@ -1,4 +1,7 @@
 spring:
+  # creates the audit tables in the test MySQL container
+  flyway:
+    locations: classpath:db/audit
   data:
     mongodb:
       database: grayskull-test

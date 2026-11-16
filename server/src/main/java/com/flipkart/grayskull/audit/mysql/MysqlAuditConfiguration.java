@@ -6,9 +6,7 @@ import jakarta.persistence.EntityManagerFactory;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.provider.mongo.MongoLockProvider;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
-import org.flywaydb.core.api.Location;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.flyway.FlywayConfigurationCustomizer;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,9 +17,6 @@ import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import javax.sql.DataSource;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -29,7 +24,6 @@ import java.util.Map;
  * <ul>
  *     <li>its own entity manager and {@value #TRANSACTION_MANAGER} (MongoDB's transaction manager stays primary),</li>
  *     <li>Spring Data JPA repositories for the audit tables,</li>
- *     <li>the {@code classpath:db/audit} Flyway migrations,</li>
  *     <li>ShedLock with a MongoDB lock provider, so scheduled audit jobs run on one pod at a time.</li>
  * </ul>
  * The {@link DataSource} itself comes from Spring Boot ({@code spring.datasource.*}, HikariCP).
@@ -45,7 +39,6 @@ public class MysqlAuditConfiguration {
     public static final String PERSISTENCE_UNIT = "audit";
     public static final String ENTITY_MANAGER_FACTORY = "auditEntityManagerFactory";
     public static final String TRANSACTION_MANAGER = "auditTransactionManager";
-    public static final String MIGRATIONS_LOCATION = "classpath:db/audit";
 
     @Bean(ENTITY_MANAGER_FACTORY)
     LocalContainerEntityManagerFactoryBean auditEntityManagerFactory(EntityManagerFactoryBuilder builder, DataSource dataSource,
@@ -54,7 +47,7 @@ public class MysqlAuditConfiguration {
                 .packages(AuditEntryRow.class)
                 .persistenceUnit(PERSISTENCE_UNIT)
                 .properties(Map.of(
-                        // the schema is owned by Flyway
+                        // the tables are created outside the application (DDL in classpath:db/audit)
                         "hibernate.hbm2ddl.auto", "none",
                         "hibernate.jdbc.batch_size", properties.getInsertBatchSize(),
                         "hibernate.order_inserts", true,
@@ -65,19 +58,6 @@ public class MysqlAuditConfiguration {
     @Bean(TRANSACTION_MANAGER)
     JpaTransactionManager auditTransactionManager(@Qualifier(ENTITY_MANAGER_FACTORY) EntityManagerFactory entityManagerFactory) {
         return new JpaTransactionManager(entityManagerFactory);
-    }
-
-    /** Adds the audit migrations to whatever locations the application already uses. */
-    @Bean
-    FlywayConfigurationCustomizer auditMigrationsCustomizer() {
-        return configuration -> {
-            List<Location> locations = new ArrayList<>(Arrays.asList(configuration.getLocations()));
-            Location auditLocation = new Location(MIGRATIONS_LOCATION);
-            if (!locations.contains(auditLocation)) {
-                locations.add(auditLocation);
-            }
-            configuration.locations(locations.toArray(Location[]::new));
-        };
     }
 
     /** Lock documents live in the {@code shedLock} collection of the application's MongoDB database. */
