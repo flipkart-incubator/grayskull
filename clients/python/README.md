@@ -6,25 +6,7 @@ The Python client for the Grayskull secret management service. Its behaviour mat
 [Go](../go/README.md) and [Java](../java/README.md) SDKs: the wire protocol, retry rules,
 hook semantics, heartbeat schedule and metric names are all the same.
 
-## Grayskull features
-
-Server capabilities (REST, `/v1`) are listed below. **SDK** marks what this client wraps.
-
-| Area | Capability | Endpoint | SDK |
-|------|------------|----------|-----|
-| Secrets | Read the current value | `GET /v1/projects/{p}/secrets/{s}/data` | ✅ `get_secret` |
-| Secrets | Batch-refresh changed secrets | `POST /v1/secrets/batch` | ✅ refresh hooks |
-| Secrets | Workload heartbeat (held versions) | `POST /v1/heartbeat` | ✅ automatic |
-| Secrets | Create a secret | `POST /v1/projects/{p}/secrets` | admin SDK |
-| Secrets | Add a new data version | `POST /v1/projects/{p}/secrets/{s}/data` | admin SDK |
-| Secrets | Soft delete / destroy | `DELETE /v1/projects/{p}/secrets/{s}?destroy=` | admin SDK |
-| Secrets | List secrets, read metadata, read a specific version | `GET …/secrets`, `GET …/secrets/{s}`, `GET …/versions/{v}` | — |
-| Providers | List / get / create / update secret providers | `/v1/providers` | — |
-| Audit | Project and global audit trails | `/v1/audit` | — |
-| Rotation | Rotation policies, rotation status, version revoke | `/v1/projects/{p}/rotation-policy`, rotor APIs | — |
-| Platform | Pluggable authN/authZ, async audit, read-only mode, rate limiting | server-side | — |
-
-SDK features:
+## Features
 
 - **Simple API**: `get_secret`, `register_refresh_hook`, `close`, and context-manager support.
 - **Refresh hooks**: a background poller batches 50 secrets per request. Updates coalesce to the newest version, delivery is at-most-once and never re-entrant for a given secret, and a 5-worker pool keeps a slow hook from blocking other secrets.
