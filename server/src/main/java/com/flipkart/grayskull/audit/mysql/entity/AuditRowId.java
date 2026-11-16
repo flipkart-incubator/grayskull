@@ -9,8 +9,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Primary key of {@link AuditEntryRow}: the row id plus the timestamp, because MySQL requires the partitioning
- * column ({@code ts}) in every unique key.
+ * Primary key of {@link AuditEntryRow}: the row id plus the timestamp. The row id alone is unique; keeping {@code ts}
+ * in the key lets the table be partitioned by time later without changing the key.
  */
 @Data
 @NoArgsConstructor
