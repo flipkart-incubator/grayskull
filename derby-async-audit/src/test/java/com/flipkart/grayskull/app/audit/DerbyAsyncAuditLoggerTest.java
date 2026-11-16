@@ -12,7 +12,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.*;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -152,14 +151,6 @@ class DerbyAsyncAuditLoggerTest {
         verify(connection, never()).prepareStatement("DELETE FROM audits WHERE id <= ?");
     }
 
-    @Test
-    void testMarkDrained_DelegatesToStore() {
-        Instant startedAt = Instant.now();
-
-        logger.markDrained(startedAt);
-
-        verify(auditFlushStore).markDrained("test-node", startedAt);
-    }
 
     private AuditEntry createTestAuditEntry() {
         Map<String, String> metadata = new HashMap<>();

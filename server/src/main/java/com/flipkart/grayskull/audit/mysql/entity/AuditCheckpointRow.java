@@ -28,10 +28,6 @@ public class AuditCheckpointRow {
     @Column(name = "last_log_id")
     private Long lastLogId;
 
-    /** Start of the last flush that emptied the pod's buffer; feeds the read-flush lag alert. */
-    @Column(name = "flushed_at")
-    private Instant flushedAt;
-
     @Column(name = "updated_at")
     private Instant updatedAt;
 

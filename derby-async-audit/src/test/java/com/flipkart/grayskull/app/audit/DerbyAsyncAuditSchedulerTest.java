@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
-import java.time.Instant;
 
 import static com.flipkart.grayskull.app.audit.DerbyAsyncAuditLogger.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,7 +26,6 @@ class DerbyAsyncAuditSchedulerTest {
         scheduler.run();
 
         verify(derbyAsyncAuditLogger, times(3)).commitBatchToDb();
-        verify(derbyAsyncAuditLogger).markDrained(any(Instant.class));
     }
 
     @Test
@@ -39,7 +37,6 @@ class DerbyAsyncAuditSchedulerTest {
         scheduler.run();
 
         verify(counter).increment();
-        verify(derbyAsyncAuditLogger, never()).markDrained(any());
     }
 
     @Test

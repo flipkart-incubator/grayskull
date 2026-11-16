@@ -36,17 +36,9 @@ public class MysqlAuditFlushStore implements AuditFlushStore {
     @Transactional(transactionManager = MysqlAuditConfiguration.TRANSACTION_MANAGER)
     public void commitBatch(String nodeName, List<AuditEntry> entries, long maxId) {
         store.insertMissing(entries);
-        AuditCheckpointRow checkpoint = checkpoint(nodeName);
+        String name = CHECKPOINT_PREFIX + nodeName;
+        AuditCheckpointRow checkpoint = checkpointRepository.findById(name).orElseGet(() -> new AuditCheckpointRow(name));
         checkpoint.setLastLogId(maxId);
-        checkpoint.setUpdatedAt(Instant.now());
-        checkpointRepository.save(checkpoint);
-    }
-
-    @Override
-    @Transactional(transactionManager = MysqlAuditConfiguration.TRANSACTION_MANAGER)
-    public void markDrained(String nodeName, Instant flushStartedAt) {
-        AuditCheckpointRow checkpoint = checkpoint(nodeName);
-        checkpoint.setFlushedAt(flushStartedAt);
         checkpoint.setUpdatedAt(Instant.now());
         checkpointRepository.save(checkpoint);
     }
@@ -59,14 +51,5 @@ public class MysqlAuditFlushStore implements AuditFlushStore {
     @Override
     public void deleteCheckpoint(String nodeName) {
         checkpointRepository.deleteById(CHECKPOINT_PREFIX + nodeName);
-    }
-
-    private AuditCheckpointRow checkpoint(String nodeName) {
-        AuditCheckpointRow checkpoint = checkpointRepository.findById(CHECKPOINT_PREFIX + nodeName)
-                .orElseGet(() -> new AuditCheckpointRow(CHECKPOINT_PREFIX + nodeName));
-        if (checkpoint.getLastLogId() == null) {
-            checkpoint.setLastLogId(0L);
-        }
-        return checkpoint;
     }
 }

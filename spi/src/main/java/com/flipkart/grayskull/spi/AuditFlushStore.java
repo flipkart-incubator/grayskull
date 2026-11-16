@@ -29,16 +29,6 @@ public interface AuditFlushStore {
     void commitBatch(String nodeName, List<AuditEntry> entries, long maxId);
 
     /**
-     * Records that the node's buffer was fully drained by a flush that started at {@code flushStartedAt}:
-     * every entry of this node created before that time is stored.
-     *
-     * @param nodeName       node (pod) whose local buffer is flushed
-     * @param flushStartedAt start time of the flush run that emptied the buffer
-     */
-    default void markDrained(String nodeName, Instant flushStartedAt) {
-    }
-
-    /**
      * @param nodeName node (pod) whose local buffer is flushed
      * @return when the node's checkpoint last changed, if a checkpoint exists
      */

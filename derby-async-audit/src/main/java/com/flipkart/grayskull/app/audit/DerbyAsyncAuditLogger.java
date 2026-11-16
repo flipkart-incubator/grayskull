@@ -11,7 +11,6 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.*;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -106,12 +105,5 @@ public class DerbyAsyncAuditLogger implements AsyncAuditLogger {
             }
         }
         return auditEntries.size();
-    }
-
-    /**
-     * Records that a flush run starting at {@code flushStartedAt} emptied the buffer.
-     */
-    public void markDrained(Instant flushStartedAt) {
-        auditFlushStore.markDrained(auditProperties.getNodeName(), flushStartedAt);
     }
 }
