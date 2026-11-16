@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "grayskull-client"
+dynamic = ["version"]
+description = "Python client SDK for the Grayskull secret management service"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+authors = [{ name = "Flipkart" }]
+keywords = ["grayskull", "secrets", "secret-management", "sdk"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+    "Topic :: Security",
+]
+dependencies = ["httpx>=0.24,<1"]
+
+[project.optional-dependencies]
+prometheus = ["prometheus-client>=0.17"]
+test = ["pytest>=7", "prometheus-client>=0.17"]
+
+[project.urls]
+Homepage = "https://github.com/flipkart-incubator/grayskull"
+Source = "https://github.com/flipkart-incubator/grayskull/tree/main/clients/python"
+
+[tool.hatch.version]
+path = "src/grayskull/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/grayskull"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
