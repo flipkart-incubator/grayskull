@@ -39,6 +39,8 @@ public class AuditOutboxRelayer {
             log.debug("Audit outbox relayer is disabled");
             return;
         }
+        // counted only on the pod holding the lock; sum across pods to alert when no pod has run the relayer
+        meterRegistry.counter("audit.relayer.runs").increment();
 
         try {
             drainPending();

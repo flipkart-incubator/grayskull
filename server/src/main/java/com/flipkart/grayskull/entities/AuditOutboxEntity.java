@@ -12,7 +12,11 @@ import java.time.Instant;
 
 /**
  * A write audit saved in the same MongoDB transaction as the secret change, waiting to be copied to the audit store.
- * Indexes are created by {@code AuditOutboxIndexes}.
+ * The indexes are created outside the application:
+ * <pre>
+ * db.auditOutbox.createIndex({timestamp: 1}, {name: "pending_idx", partialFilterExpression: {syncStatus: "PENDING"}})
+ * db.auditOutbox.createIndex({syncedAt: 1}, {name: "synced_idx", partialFilterExpression: {syncStatus: "SYNCED"}})
+ * </pre>
  */
 @SuperBuilder(toBuilder = true)
 @Getter

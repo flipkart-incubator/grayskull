@@ -17,8 +17,6 @@ import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 import java.util.ArrayList;
@@ -47,7 +45,6 @@ public class MysqlAuditConfiguration {
     public static final String PERSISTENCE_UNIT = "audit";
     public static final String ENTITY_MANAGER_FACTORY = "auditEntityManagerFactory";
     public static final String TRANSACTION_MANAGER = "auditTransactionManager";
-    public static final String TRANSACTION_TEMPLATE = "auditTransactionTemplate";
     public static final String MIGRATIONS_LOCATION = "classpath:db/audit";
 
     @Bean(ENTITY_MANAGER_FACTORY)
@@ -68,11 +65,6 @@ public class MysqlAuditConfiguration {
     @Bean(TRANSACTION_MANAGER)
     JpaTransactionManager auditTransactionManager(@Qualifier(ENTITY_MANAGER_FACTORY) EntityManagerFactory entityManagerFactory) {
         return new JpaTransactionManager(entityManagerFactory);
-    }
-
-    @Bean(TRANSACTION_TEMPLATE)
-    TransactionTemplate auditTransactionTemplate(@Qualifier(TRANSACTION_MANAGER) PlatformTransactionManager transactionManager) {
-        return new TransactionTemplate(transactionManager);
     }
 
     /** Adds the audit migrations to whatever locations the application already uses. */
