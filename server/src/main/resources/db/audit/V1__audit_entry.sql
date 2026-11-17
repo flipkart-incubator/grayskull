@@ -2,6 +2,7 @@
 -- id is assigned by the application (derived from event_id), which makes inserts idempotent.
 -- Every index ends in (ts, id) so a page of the cursor API is one index range scan, with no sort.
 -- utf8mb4_bin keeps matching exact and case-sensitive, like MongoDB.
+
 CREATE TABLE audit_entry (
   id               BINARY(16)   NOT NULL,
   ts               DATETIME(6)  NOT NULL,
