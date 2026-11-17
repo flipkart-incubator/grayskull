@@ -81,7 +81,7 @@ func (l *UsageLedger) Snapshot() []heartbeat.HeldSecret {
 			continue // holds no version yet
 		}
 		var applied *int
-		if e.hookRegistered && e.hookAppliedVersion > 0 {
+		if e.hookRegistered {
 			v := e.hookAppliedVersion
 			applied = &v
 		}

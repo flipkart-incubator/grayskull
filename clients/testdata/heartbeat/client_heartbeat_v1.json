@@ -1,7 +1,7 @@
 {
   "secrets": [
     { "projectId": "p", "secretName": "s", "version": 5, "refreshHookAppliedVersion": 5 },
-    { "projectId": "p", "secretName": "hook-pending", "version": 3 },
+    { "projectId": "p", "secretName": "hook-pending", "version": 3, "refreshHookAppliedVersion": 0 },
     { "projectId": "p", "secretName": "no-hook", "version": 2 }
   ]
 }

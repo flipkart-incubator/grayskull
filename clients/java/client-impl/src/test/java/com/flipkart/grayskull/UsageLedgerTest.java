@@ -60,7 +60,7 @@ class UsageLedgerTest {
     void appliedVersion_isAbsentUntilAHookSucceeds() {
         ledger.recordFetch("p", "s", 3);
         ledger.setHookRegistered("p", "s", true);
-        assertNull(only().getRefreshHookAppliedVersion());
+        assertEquals(0, only().getRefreshHookAppliedVersion(), "present while a hook is registered");
         ledger.recordHookApplied("p", "s", 3);
         assertEquals(3, only().getRefreshHookAppliedVersion());
     }
@@ -83,7 +83,7 @@ class UsageLedgerTest {
         ledger.setHookRegistered("p", "s", false);
         assertNull(only().getRefreshHookAppliedVersion(), "no hook: field is absent");
         ledger.setHookRegistered("p", "s", true);
-        assertNull(only().getRefreshHookAppliedVersion(), "a new hook must apply a version itself");
+        assertEquals(0, only().getRefreshHookAppliedVersion(), "a new hook must apply a version itself");
     }
 
     @Test
@@ -133,6 +133,6 @@ class UsageLedgerTest {
         ledger.recordHookApplied("p", "s", 7);
         assertEquals(7, only().getRefreshHookAppliedVersion());
         ledger.recordHookAdded("p", "s");
-        assertNull(only().getRefreshHookAppliedVersion(), "the new hook has not applied v7");
+        assertEquals(0, only().getRefreshHookAppliedVersion(), "the new hook has not applied v7");
     }
 }

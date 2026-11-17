@@ -273,7 +273,7 @@ class GrayskullClientImplHeartbeatTest {
         JsonNode entry = awaitEntryAtVersion("db-password", 8);
         assertNotNull(entry);
         assertEquals(8, entry.get("version").asInt(), "version advances before the hook runs (at-most-once)");
-        assertFalse(entry.has("refreshHookAppliedVersion"), "only a successful hook run counts");
+        assertEquals(0, entry.get("refreshHookAppliedVersion").asInt(), "only a successful hook run counts");
     }
 
     @Test
@@ -330,6 +330,6 @@ class GrayskullClientImplHeartbeatTest {
 
         JsonNode entry = awaitEntryAtVersion("db-password", 8);
         assertNotNull(entry);
-        assertFalse(entry.has("refreshHookAppliedVersion"), "one consumer failed, so v8 was not applied");
+        assertEquals(0, entry.get("refreshHookAppliedVersion").asInt(), "one consumer failed, so v8 was not applied");
     }
 }

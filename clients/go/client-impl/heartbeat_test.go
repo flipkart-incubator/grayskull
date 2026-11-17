@@ -43,7 +43,7 @@ func TestRegisterRefreshHook_SeedsFromLedgerAndCountsHook(t *testing.T) {
 	ref, err := c.RegisterRefreshHook(context.Background(), "proj:db-password", noopHook)
 	require.NoError(t, err)
 	assert.EqualValues(t, 7, c.registry.Get("proj:db-password").LastKnownVersion.Load(), "seeded from the ledger")
-	assert.Nil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion, "absent until a hook succeeds")
+	assert.Equal(t, 0, *entryFor(t, c, "db-password").RefreshHookAppliedVersion, "0 until a hook succeeds")
 	c.ledger.RecordHookApplied("proj", "db-password", 7)
 	assert.NotNil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion)
 	assert.Equal(t, "proj:db-password", ref.GetSecretRef())
@@ -66,7 +66,8 @@ func TestRegisterRefreshHook_HookOnlySecretIsReportedOnceAVersionIsHeld(t *testi
 	e := entryFor(t, c, "api:key")
 	assert.Equal(t, "proj", e.ProjectID)
 	assert.Equal(t, 2, e.Version)
-	assert.Nil(t, e.RefreshHookAppliedVersion, "absent until the hook succeeds")
+	require.NotNil(t, e.RefreshHookAppliedVersion, "a registered hook is always reported")
+	assert.Equal(t, 0, *e.RefreshHookAppliedVersion, "0 until the hook succeeds")
 }
 
 func TestGetSecret_FailureIsReturnedUnchangedAndNotRecorded(t *testing.T) {
@@ -182,8 +183,9 @@ func TestHeartbeat_EndToEnd_ReportsFetchedHookedAndFailedSecrets(t *testing.T) {
 		bySecret[s.SecretName] = s
 	}
 	require.Len(t, bySecret, 1, "a failed fetch and a hook that holds no version add no entry")
-	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "db-password", Version: 7},
-		bySecret["db-password"], "no hook has succeeded yet, so no applied version")
+	zero := 0
+	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "db-password", Version: 7, RefreshHookAppliedVersion: &zero},
+		bySecret["db-password"], "a registered hook that has not succeeded reports 0")
 }
 
 func TestHeartbeat_EndToEnd_UnsupportedServerNeverReachesCaller(t *testing.T) {

@@ -65,11 +65,11 @@ func TestUsageLedger_HookRegisteredBeforeAnyFetchIsNotReported(t *testing.T) {
 	assert.Equal(t, 0, l.Version("p", "s"))
 }
 
-func TestUsageLedger_AppliedVersionIsAbsentUntilAHookSucceeds(t *testing.T) {
+func TestUsageLedger_AppliedVersionIsZeroUntilAHookSucceeds(t *testing.T) {
 	var l UsageLedger
 	l.RecordFetch("p", "s", 3)
 	l.SetHookRegistered("p", "s", true)
-	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion)
+	assert.Equal(t, 0, applied(t, only(t, &l)), "present while a hook is registered")
 	l.RecordHookApplied("p", "s", 3)
 	assert.Equal(t, 3, applied(t, only(t, &l)))
 }
@@ -92,7 +92,7 @@ func TestUsageLedger_HookRegistrationTogglesPresence(t *testing.T) {
 	l.SetHookRegistered("p", "s", false)
 	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion, "no hook: field is absent")
 	l.SetHookRegistered("p", "s", true)
-	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion, "a new hook must apply a version itself")
+	assert.Equal(t, 0, applied(t, only(t, &l)), "a new hook must apply a version itself")
 }
 
 func TestUsageLedger_SnapshotIsACopy(t *testing.T) {
@@ -145,5 +145,5 @@ func TestUsageLedger_AddingAHookClearsTheAppliedVersionUntilItRuns(t *testing.T)
 	l.RecordHookApplied("p", "s", 7)
 	assert.Equal(t, 7, applied(t, only(t, &l)))
 	l.RecordHookAdded("p", "s")
-	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion, "the new hook has not applied v7")
+	assert.Equal(t, 0, applied(t, only(t, &l)), "the new hook has not applied v7")
 }

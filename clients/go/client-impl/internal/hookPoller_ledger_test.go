@@ -90,7 +90,7 @@ func TestRunHooksFor_AppliedOnlyWhenEveryHookSucceeds(t *testing.T) {
 		runDelivery(t, mixed, 5, ok, bad)
 		e := only(t, mixed)
 		assert.Equal(t, 5, e.Version, "version advances before hooks run")
-		assert.Nil(t, e.RefreshHookAppliedVersion, "one failing hook means the version was not applied")
+		assert.Equal(t, 0, applied(t, e), "one failing hook means the version was not applied")
 	}
 }
 
