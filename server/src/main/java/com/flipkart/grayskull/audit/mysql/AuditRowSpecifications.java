@@ -7,7 +7,6 @@ import lombok.experimental.UtilityClass;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -20,19 +19,14 @@ public class AuditRowSpecifications {
     public static final String TS = "ts";
     public static final String ROW_ID = "rowId";
 
-    private static final Set<String> KNOWN_USER_TYPES = Set.of("SERVICE", "HUMAN");
-
+    /** The user type filter is SERVICE or HUMAN (the API's {@code UserType}); rows store SERVICE, HUMAN or OTHER. */
     public static Specification<AuditEntryRow> matching(AuditQuery query) {
-        String userType = query.userType() != null && KNOWN_USER_TYPES.contains(query.userType())
-                ? query.userType()
-                : null;
-
         return Specification.allOf(
                 equalIfPresent("projectId", query.projectId()),
                 equalIfPresent("resourceName", query.resourceName()),
                 equalIfPresent("resourceType", query.resourceType()),
                 equalIfPresent("action", query.action()),
-                equalIfPresent("userType", userType),
+                equalIfPresent("userType", query.userType()),
                 query.from() == null ? null : (root, q, cb) -> cb.greaterThanOrEqualTo(root.get(TS), query.from()),
                 query.to() == null ? null : (root, q, cb) -> cb.lessThan(root.get(TS), query.to())
         );

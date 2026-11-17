@@ -34,10 +34,6 @@ public class AuditOutboxMongoRepositoryImpl implements AuditOutboxMongoRepositor
 
     @Override
     public long markSynced(Collection<String> ids, Instant syncedAt) {
-        if (ids.isEmpty()) {
-            return 0;
-        }
-
         Query query = Query.query(where("id").in(ids).and(SYNC_STATUS).is(AuditSyncStatus.PENDING));
         Update update = new Update().set(SYNC_STATUS, AuditSyncStatus.SYNCED).set(SYNCED_AT, syncedAt);
         return mongoTemplate.updateMulti(query, update, AuditOutboxEntity.class).getModifiedCount();

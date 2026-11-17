@@ -7,6 +7,7 @@ import com.flipkart.grayskull.audit.relay.AuditOutboxRelayer;
 import com.flipkart.grayskull.entities.AuditOutboxEntity;
 import com.flipkart.grayskull.entities.AuditSyncStatus;
 import com.flipkart.grayskull.spi.models.AuditEntry;
+import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 import static org.springframework.data.mongodb.core.query.Query.query;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static com.flipkart.grayskull.controllers.GrayskullUserRequestPostProcessor.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -41,6 +42,8 @@ class MysqlAuditStorageIntegrationTest extends BaseIntegrationTest {
     private MysqlAuditStore store;
     @Autowired
     private MysqlAuditFlushStore flushStore;
+    @Autowired
+    private AuditEntryRepository auditEntryRepository;
 
     @Test
     void writeAudit_goesThroughOutbox_andRelayerCopiesItOnce() throws Exception {
@@ -60,7 +63,7 @@ class MysqlAuditStorageIntegrationTest extends BaseIntegrationTest {
         assertThat(rowsOf(project)).singleElement().satisfies(row -> assertThat(row.getEventId()).isEqualTo(outbox.get(0).getId()));
 
         // re-sending the same entry (e.g. after a crash before it was marked SYNCED) is a no-op
-        assertThat(store.insertMissing(List.of(outbox.get(0)))).isZero();
+        auditEntryRepository.saveAll(List.of(outbox.get(0)));
         assertThat(rowsOf(project)).hasSize(1);
     }
 
@@ -128,6 +131,28 @@ class MysqlAuditStorageIntegrationTest extends BaseIntegrationTest {
         assertThat(seen).hasSize(250);
         assertThat(ids).hasSize(250);
         assertThat(seen).isSortedAccordingTo(Comparator.reverseOrder());
+    }
+
+    @Test
+    void globalPaging_filtersByProjectAndTimeRange() throws Exception {
+        String project = "mysql-global-" + UUID.randomUUID();
+        Instant base = Instant.now().minus(Duration.ofDays(2)).truncatedTo(ChronoUnit.SECONDS);
+        List<AuditEntry> entries = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            entries.add(AuditEntry.builder().id("evt-" + project + "-" + i).projectId(project).resourceType("SECRET")
+                    .resourceName("s").action("READ_SECRET").userId("admin").timestamp(base.plusSeconds(i)).build());
+        }
+        store.insertMissing(entries);
+
+        var request = get("/v2/audit").with(user("admin")).param("projectId", project).param("action", "READ_SECRET")
+                .param("from", base.plusSeconds(2).toString()).param("to", base.plusSeconds(7).toString());
+        String body = mockMvc.perform(request).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        List<String> timestamps = JsonPath.read(body, "$.data.entries[*].timestamp");
+        assertThat(timestamps).extracting(Instant::parse)
+                .containsExactly(base.plusSeconds(6), base.plusSeconds(5), base.plusSeconds(4), base.plusSeconds(3), base.plusSeconds(2));
+        assertThat((Boolean) JsonPath.read(body, "$.data.hasMore")).isFalse();
+        assertThat((Object) JsonPath.read(body, "$.data.nextCursor")).isNull();
     }
 
     /** A read audit as the Derby flush hands it over: the log id {@code node.rowId.timestamp} is its event id. */

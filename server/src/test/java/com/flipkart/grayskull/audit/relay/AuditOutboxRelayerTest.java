@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -71,6 +72,16 @@ class AuditOutboxRelayerTest {
         verify(outboxRepository, never()).markSynced(anyCollection(), any());
         verify(outboxRepository).deleteSyncedBefore(any());
         assertThat(meterRegistry.counter("audit.relayer.failures").count()).isEqualTo(1);
+    }
+
+    @Test
+    void tick_maxRuntimeReached_leavesTheRestForTheNextRun() {
+        properties.setMaxRuntime(Duration.ZERO);
+
+        relayer.tick();
+
+        verify(outboxRepository, never()).findPending(anyInt());
+        verify(outboxRepository).deleteSyncedBefore(any());
     }
 
     @Test

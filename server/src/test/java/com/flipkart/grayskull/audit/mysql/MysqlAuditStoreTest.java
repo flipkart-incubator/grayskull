@@ -7,9 +7,14 @@ import com.flipkart.grayskull.exception.BadRequestException;
 import com.flipkart.grayskull.mappers.AuditEntryRowMapper;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.models.AuditQuery;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.QueryTimeoutException;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.criteria.CriteriaQuery;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -57,18 +62,35 @@ class MysqlAuditStoreTest {
     void insertMissing_derivesRowIdFromLogId_andUserTypeFromPrefix() {
         AuditEntry readAudit = AuditEntry.builder().projectId("p").userId("svc:job").metadata(Map.of("logId", "n.1.t")).build();
         AuditEntry other = AuditEntry.builder().id("o").projectId("p").userId("other").build();
+        AuditEntry anonymous = AuditEntry.builder().id("a").projectId("p").build();
 
-        store.insertMissing(List.of(readAudit, other));
+        store.insertMissing(List.of(readAudit, other, anonymous));
 
         ArgumentCaptor<List<AuditEntryRow>> captor = ArgumentCaptor.forClass(List.class);
         verify(repository).saveAll(captor.capture());
-        assertThat(captor.getValue()).hasSize(2);
+        assertThat(captor.getValue()).hasSize(3);
+        assertThat(captor.getValue().get(2).getUserType()).isEqualTo("OTHER");
         AuditEntryRow row = captor.getValue().get(0);
         assertThat(row.getEventId()).isEqualTo("n.1.t");
         assertThat(row.getRowId()).isEqualTo(AuditEventIds.rowId("n.1.t"));
         assertThat(row.getUserType()).isEqualTo("SERVICE");
         assertThat(row.getMetadata()).containsEntry("logId", "n.1.t");
         assertThat(captor.getValue().get(1).getUserType()).isEqualTo("OTHER");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void findPage_queryTimeout_asksTheCallerToNarrowTheQuery() {
+        EntityManager entityManager = mock(EntityManager.class, RETURNS_DEEP_STUBS);
+        TypedQuery<AuditEntryRow> pageQuery = mock();
+        when(entityManager.createQuery(any(CriteriaQuery.class))).thenReturn(pageQuery);
+        when(pageQuery.setMaxResults(anyInt())).thenReturn(pageQuery);
+        when(pageQuery.setHint(anyString(), any())).thenReturn(pageQuery);
+        when(pageQuery.getResultList()).thenThrow(new QueryTimeoutException("statement cancelled"));
+        ReflectionTestUtils.setField(store, "entityManager", entityManager);
+        AuditQuery query = new AuditQuery("p", null, null, "READ_SECRET", null, null, null);
+
+        assertThrows(BadRequestException.class, () -> store.findPage(query, null, 50));
     }
 
     @Test

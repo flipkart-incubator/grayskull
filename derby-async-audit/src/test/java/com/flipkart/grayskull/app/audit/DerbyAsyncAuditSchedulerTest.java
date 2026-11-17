@@ -51,6 +51,17 @@ class DerbyAsyncAuditSchedulerTest {
     }
 
     @Test
+    void testRun_AuditStoreFailure_IsCountedAndLeavesEntriesForTheNextRun() throws SQLException, JsonProcessingException {
+        when(derbyAsyncAuditLogger.commitBatchToDb()).thenThrow(new IllegalStateException("mysql down"));
+        when(meterRegistry.counter(AUDIT_ERROR_METRIC, ACTION_TAG, "flush", EXCEPTION_TAG, "IllegalStateException")).thenReturn(counter);
+
+        scheduler.run();
+
+        verify(counter).increment();
+        verify(derbyAsyncAuditLogger, times(1)).commitBatchToDb();
+    }
+
+    @Test
     void testRun_NoEntries() throws SQLException, JsonProcessingException {
         when(derbyAsyncAuditLogger.commitBatchToDb()).thenReturn(0);
 

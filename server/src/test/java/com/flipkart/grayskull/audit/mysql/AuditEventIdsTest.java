@@ -30,5 +30,6 @@ class AuditEventIdsTest {
     void storedTimestamp_isTruncatedToMicros() {
         assertThat(AuditEventIds.toStoredTimestamp(Instant.parse("2026-10-15T07:03:32.553594615Z")))
                 .isEqualTo(Instant.parse("2026-10-15T07:03:32.553594Z"));
+        assertThat(AuditEventIds.toStoredTimestamp(null)).isNotNull();
     }
 }

@@ -30,5 +30,7 @@ class AuditCursorCodecTest {
     @Test
     void decode_rejectsGarbage() {
         assertThrows(IllegalArgumentException.class, () -> AuditCursorCodec.decode("not-a-cursor"));
+        String withoutId = AuditCursorCodec.encode(new AuditCursor(Instant.parse("2026-10-15T07:03:32Z"), ""));
+        assertThrows(IllegalArgumentException.class, () -> AuditCursorCodec.decode(withoutId));
     }
 }
