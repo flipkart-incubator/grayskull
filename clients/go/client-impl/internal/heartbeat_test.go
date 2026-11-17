@@ -22,15 +22,16 @@ type heartbeatCall struct {
 	at        time.Time
 }
 
-// recordingClient records heartbeat POSTs; failFirst calls fail with a 503, block holds calls until ctx ends.
+// recordingClient records POSTs; the first failFirst fail with failStatus (503).
 type recordingClient struct {
-	mu        sync.Mutex
-	calls     []heartbeatCall
-	failFirst int
-	block     bool
+	mu         sync.Mutex
+	calls      []heartbeatCall
+	failFirst  int
+	failStatus int
+	block      bool
 }
 
-func (c *recordingClient) DoPostWithRetry(ctx context.Context, url string, body []byte, _ any) (int, error) {
+func (c *recordingClient) DoPost(ctx context.Context, url string, body []byte) (int, error) {
 	var req heartbeat.Request
 	if err := json.Unmarshal(body, &req); err != nil {
 		return 0, err
@@ -38,19 +39,20 @@ func (c *recordingClient) DoPostWithRetry(ctx context.Context, url string, body 
 	c.mu.Lock()
 	c.calls = append(c.calls, heartbeatCall{url: url, requestID: ctx.Value(constants.GrayskullRequestID), body: req, at: time.Now()})
 	fail := len(c.calls) <= c.failFirst
+	status := c.failStatus
 	c.mu.Unlock()
 	if c.block {
 		<-ctx.Done()
 		return 0, ctx.Err()
 	}
 	if fail {
-		return 503, errors.New("unavailable")
+		if status == 0 {
+			status = 503
+		}
+		return status, errors.New("request failed")
 	}
 	return 204, nil
 }
-
-func (c *recordingClient) DoGetWithRetry(context.Context, string, any) (int, error) { return 200, nil }
-func (c *recordingClient) Close() error                                             { return nil }
 
 func (c *recordingClient) snapshot() []heartbeatCall {
 	c.mu.Lock()
@@ -68,39 +70,64 @@ func held(n int) func() []heartbeat.HeldSecret {
 	}
 }
 
-func newTestHeartbeat(client GrayskullHTTPClientInterface, interval time.Duration, secrets func() []heartbeat.HeldSecret) *Heartbeat {
-	return NewHeartbeat(HeartbeatConfig{BaseURL: "http://gs", HTTPClient: client, Interval: interval, HeldSecrets: secrets})
+func newTestHeartbeat(client HeartbeatPoster, interval time.Duration, secrets func() []heartbeat.HeldSecret) *Heartbeat {
+	return NewHeartbeat(HeartbeatConfig{BaseURL: "http://gs", HTTPClient: client, Interval: interval, SDKVersion: "0.3.0", HeldSecrets: secrets})
 }
 
 func TestHeartbeatBeat_NothingHeld_SendsNothing(t *testing.T) {
 	c := &recordingClient{}
-	assert.True(t, newTestHeartbeat(c, time.Hour, held(0)).Beat(context.Background()))
+	assert.Equal(t, beatSent, newTestHeartbeat(c, time.Hour, held(0)).beat(context.Background()))
 	assert.Empty(t, c.snapshot())
 }
 
-func TestHeartbeatBeat_PostsHeldSecrets(t *testing.T) {
+func TestHeartbeatBeat_PostsV2Payload(t *testing.T) {
 	c := &recordingClient{}
-	require.True(t, newTestHeartbeat(c, time.Hour, held(2)).Beat(context.Background()))
+	require.Equal(t, beatSent, newTestHeartbeat(c, time.Hour, held(2)).beat(context.Background()))
 
 	calls := c.snapshot()
 	require.Len(t, calls, 1)
-	assert.Equal(t, "http://gs/v1/heartbeat", calls[0].url)
+	assert.Equal(t, "http://gs/v1/client/heartbeat", calls[0].url)
 	assert.NotEmpty(t, calls[0].requestID)
+	body := calls[0].body
+	assert.Equal(t, 1, body.SchemaVersion)
+	assert.Equal(t, "PERIODIC", body.Trigger)
+	assert.Equal(t, heartbeat.SDK{Language: "go", Version: "0.3.0"}, body.SDK)
+	assert.Positive(t, body.SentAt)
 	assert.Equal(t, []heartbeat.HeldSecret{
 		{ProjectID: "p", SecretName: "s0", Version: 1, RefreshHook: true},
 		{ProjectID: "p", SecretName: "s1", Version: 2, RefreshHook: false},
-	}, calls[0].body.Secrets)
+	}, body.Secrets)
 }
 
 func TestHeartbeatBeat_ChunksAtBatchSizeAndReportsFailure(t *testing.T) {
 	c := &recordingClient{failFirst: 1}
-	ok := newTestHeartbeat(c, time.Hour, held(120)).Beat(context.Background())
+	outcome := newTestHeartbeat(c, time.Hour, held(120)).beat(context.Background())
 
-	assert.False(t, ok, "a failed chunk fails the round")
+	assert.Equal(t, beatFailed, outcome, "a failed chunk fails the round")
 	calls := c.snapshot()
 	require.Len(t, calls, 3, "remaining chunks are still sent")
 	for i, want := range []int{50, 50, 20} {
 		assert.Len(t, calls[i].body.Secrets, want)
+	}
+	assert.Equal(t, calls[0].body.SentAt, calls[2].body.SentAt, "chunks of one beat share sentAt")
+}
+
+func TestHeartbeatBeat_UnsupportedStatusStopsTheRound(t *testing.T) {
+	for _, status := range []int{404, 405, 501} {
+		c := &recordingClient{failFirst: 1000, failStatus: status}
+		h := newTestHeartbeat(c, time.Hour, held(120))
+		assert.Equal(t, beatUnsupported, h.beat(context.Background()), "status %d", status)
+		assert.Len(t, c.snapshot(), 1, "status %d: remaining chunks are not sent", status)
+		assert.Equal(t, beatUnsupported, h.beat(context.Background()), "logged once, still unsupported")
+	}
+}
+
+func TestIsHeartbeatUnsupported(t *testing.T) {
+	for _, s := range []int{404, 405, 501} {
+		assert.True(t, isHeartbeatUnsupported(s), "%d", s)
+	}
+	for _, s := range []int{0, 400, 403, 500, 503} {
+		assert.False(t, isHeartbeatUnsupported(s), "%d", s)
 	}
 }
 
@@ -139,6 +166,20 @@ func TestHeartbeatLoop_FirstBeatAfterIntervalAndKeepsGoingAfterFailures(t *testi
 	}
 }
 
+func TestHeartbeatLoop_UnsupportedWaitsFullInterval(t *testing.T) {
+	// Unsupported (404) rounds wait the full interval, not the backoff.
+	c := &recordingClient{failFirst: 1000, failStatus: 404}
+	h := newTestHeartbeat(c, 200*time.Millisecond, held(1))
+	h.Start()
+	defer h.Close()
+
+	require.Eventually(t, func() bool { return len(c.snapshot()) >= 3 }, 5*time.Second, 10*time.Millisecond)
+	calls := c.snapshot()
+	for i := 1; i < 3; i++ {
+		assert.GreaterOrEqual(t, calls[i].at.Sub(calls[i-1].at), 150*time.Millisecond, "gap %d", i)
+	}
+}
+
 func TestHeartbeatClose_InterruptsInFlightAndIsIdempotent(t *testing.T) {
 	c := &recordingClient{block: true}
 	h := newTestHeartbeat(c, 20*time.Millisecond, held(1))
@@ -161,4 +202,62 @@ func TestHeartbeatClose_WithoutStartReturns(t *testing.T) {
 	h.Close()
 	h.Start() // no-op after Close
 	h.Close()
+}
+
+// heartbeatMetricsSpy records RecordRequest calls.
+type heartbeatMetricsSpy struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (m *heartbeatMetricsSpy) RecordRequest(name string, statusCode int, _ time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = append(m.calls, fmt.Sprintf("%s:%d", name, statusCode))
+}
+
+func (m *heartbeatMetricsSpy) RecordRetry(string, int, bool) {}
+
+func (m *heartbeatMetricsSpy) snapshot() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.calls...)
+}
+
+func TestNewHeartbeat_DefaultsIntervalAndLogger(t *testing.T) {
+	h := NewHeartbeat(HeartbeatConfig{BaseURL: "http://gs", HTTPClient: &recordingClient{}})
+	defer h.Close()
+
+	assert.Equal(t, time.Duration(constants.DefaultHeartbeatIntervalSeconds)*time.Second, h.interval)
+	assert.NotNil(t, h.logger)
+}
+
+func TestHeartbeatSafeBeat_PanicIsRecoveredAsFailure(t *testing.T) {
+	h := newTestHeartbeat(&recordingClient{}, time.Hour, func() []heartbeat.HeldSecret { panic("store unavailable") })
+
+	assert.NotPanics(t, func() { assert.Equal(t, beatFailed, h.safeBeat()) })
+}
+
+func TestHeartbeatSend_RecordsMetricWhenRecorderConfigured(t *testing.T) {
+	spy := &heartbeatMetricsSpy{}
+	h := NewHeartbeat(HeartbeatConfig{
+		BaseURL: "http://gs", HTTPClient: &recordingClient{}, Interval: time.Hour,
+		HeldSecrets: held(1), MetricsRecorder: spy,
+	})
+	defer h.Close()
+
+	assert.Equal(t, beatSent, h.beat(context.Background()))
+	assert.Equal(t, []string{"heartbeat:204"}, spy.snapshot())
+}
+
+func TestHeartbeatSend_RecordsFailureStatusInMetric(t *testing.T) {
+	spy := &heartbeatMetricsSpy{}
+	h := NewHeartbeat(HeartbeatConfig{
+		BaseURL: "http://gs", HTTPClient: &recordingClient{failFirst: 1}, Interval: time.Hour,
+		HeldSecrets: held(1), MetricsRecorder: spy,
+	})
+	defer h.Close()
+
+	assert.Equal(t, beatFailed, h.beat(context.Background()))
+	assert.Equal(t, []string{"heartbeat:503"}, spy.snapshot())
 }

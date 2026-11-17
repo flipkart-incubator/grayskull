@@ -17,20 +17,39 @@ import (
 )
 
 const (
+	heartbeatPath        = "/v1/client/heartbeat"
+	heartbeatSDKLanguage = "go"
 	heartbeatBackoffBase = 5 * time.Minute
 	heartbeatBackoffCap  = time.Hour
 )
 
-// Heartbeat periodically reports the secrets held by the client to POST /v1/heartbeat.
-// Delay is interval ± 1/24 after a successful round and capped exponential backoff
-// (5m doubling to 1h, ± 10%, never above interval) after a failed one.
+// beatOutcome is the result of one heartbeat round.
+type beatOutcome int
+
+const (
+	beatSent beatOutcome = iota
+	beatFailed
+	beatUnsupported
+)
+
+// HeartbeatPoster sends one POST without retries.
+type HeartbeatPoster interface {
+	DoPost(ctx context.Context, url string, jsonBody []byte) (int, error)
+}
+
+// Heartbeat sends the usage-ledger snapshot to POST /v1/client/heartbeat
+// every interval (± 1/24), starting one interval after Start. Failures back
+// off 5m doubling to 1h (± 10%); 404/405/501 wait the full interval.
 type Heartbeat struct {
-	httpClient      GrayskullHTTPClientInterface
+	httpClient      HeartbeatPoster
 	url             string
+	sdk             heartbeat.SDK
 	interval        time.Duration
 	heldSecrets     func() []heartbeat.HeldSecret
 	metricsRecorder metrics.MetricsRecorder
 	logger          *slog.Logger
+
+	unsupportedLogged sync.Once
 
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -41,8 +60,9 @@ type Heartbeat struct {
 // HeartbeatConfig configures a new Heartbeat.
 type HeartbeatConfig struct {
 	BaseURL         string
-	HTTPClient      GrayskullHTTPClientInterface
+	HTTPClient      HeartbeatPoster
 	Interval        time.Duration
+	SDKVersion      string
 	HeldSecrets     func() []heartbeat.HeldSecret
 	MetricsRecorder metrics.MetricsRecorder
 	Logger          *slog.Logger
@@ -61,7 +81,8 @@ func NewHeartbeat(cfg HeartbeatConfig) *Heartbeat {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Heartbeat{
 		httpClient:      cfg.HTTPClient,
-		url:             cfg.BaseURL + "/v1/heartbeat",
+		url:             cfg.BaseURL + heartbeatPath,
+		sdk:             heartbeat.SDK{Language: heartbeatSDKLanguage, Version: cfg.SDKVersion},
 		interval:        interval,
 		heldSecrets:     cfg.HeldSecrets,
 		metricsRecorder: cfg.MetricsRecorder,
@@ -72,12 +93,12 @@ func NewHeartbeat(cfg HeartbeatConfig) *Heartbeat {
 	}
 }
 
-// Start launches the heartbeat loop; the first round runs one interval from now. Idempotent.
+// Start launches the loop. Idempotent.
 func (h *Heartbeat) Start() {
 	h.startOnce.Do(func() { go h.run() })
 }
 
-// Close stops the loop, cancelling an in-flight request, and waits for it to exit. Idempotent.
+// Close stops the loop and waits for it to exit. Idempotent.
 func (h *Heartbeat) Close() {
 	h.cancel()
 	h.startOnce.Do(func() { close(h.done) }) // never started: nothing to wait for
@@ -95,39 +116,47 @@ func (h *Heartbeat) run() {
 			return
 		case <-timer.C:
 		}
-		if h.safeBeat() {
-			failures = 0
-		} else {
+		if h.safeBeat() == beatFailed {
 			failures++
+		} else {
+			failures = 0
 		}
 		timer.Reset(h.nextDelay(failures))
 	}
 }
 
 // safeBeat keeps the loop alive across panics; a panic counts as a failed round.
-func (h *Heartbeat) safeBeat() (ok bool) {
+func (h *Heartbeat) safeBeat() (outcome beatOutcome) {
 	defer func() {
 		if r := recover(); r != nil {
 			h.logger.Error("panic in heartbeat; suppressing", "panic", r, "stack", string(debug.Stack()))
-			ok = false
+			outcome = beatFailed
 		}
 	}()
-	return h.Beat(h.ctx)
+	return h.beat(h.ctx)
 }
 
-// Beat sends every held secret in chunks of maxBatchSize. Reports whether all chunks
-// succeeded; true when nothing is held.
-func (h *Heartbeat) Beat(ctx context.Context) bool {
+// beat sends the snapshot in chunks of maxBatchSize; nothing when empty.
+func (h *Heartbeat) beat(ctx context.Context) beatOutcome {
 	held := h.heldSecrets()
-	ok := true
+	if len(held) == 0 {
+		return beatSent
+	}
+	sentAt := time.Now().UnixMilli()
+	result := beatSent
 	for from := 0; from < len(held); from += maxBatchSize {
 		to := min(from+maxBatchSize, len(held))
-		ok = h.send(ctx, held[from:to]) && ok
+		switch h.send(ctx, held[from:to], sentAt) {
+		case beatUnsupported:
+			return beatUnsupported
+		case beatFailed:
+			result = beatFailed
+		}
 	}
-	return ok
+	return result
 }
 
-func (h *Heartbeat) send(ctx context.Context, chunk []heartbeat.HeldSecret) bool {
+func (h *Heartbeat) send(ctx context.Context, chunk []heartbeat.HeldSecret, sentAt int64) beatOutcome {
 	start := time.Now()
 	status := http.StatusInternalServerError
 	defer func() {
@@ -136,23 +165,37 @@ func (h *Heartbeat) send(ctx context.Context, chunk []heartbeat.HeldSecret) bool
 		}
 	}()
 
-	body, err := json.Marshal(heartbeat.Request{Secrets: chunk})
-	if err != nil {
-		h.logger.Error("failed to marshal heartbeat", "err", err)
-		return false
-	}
+	// Marshal cannot fail for this type.
+	body, _ := json.Marshal(heartbeat.Request{
+		SchemaVersion: heartbeat.SchemaVersion,
+		Trigger:       heartbeat.TriggerPeriodic,
+		SDK:           h.sdk,
+		SentAt:        sentAt,
+		Secrets:       chunk,
+	})
 	ctx = context.WithValue(ctx, constants.GrayskullRequestID, uuid.NewString())
-	code, err := h.httpClient.DoPostWithRetry(ctx, h.url, body, nil)
+	code, err := h.httpClient.DoPost(ctx, h.url, body)
 	if code != 0 {
 		status = code
 	}
-	if err != nil {
-		if ctx.Err() == nil {
-			h.logger.Warn("heartbeat failed; retrying with backoff", "secrets", len(chunk), "status", status, "err", err)
-		}
-		return false
+	if err == nil {
+		return beatSent
 	}
-	return true
+	if isHeartbeatUnsupported(status) {
+		h.unsupportedLogged.Do(func() {
+			h.logger.Info("Grayskull server does not support client heartbeats yet; retrying after the full interval",
+				"status", status)
+		})
+		return beatUnsupported
+	}
+	if ctx.Err() == nil {
+		h.logger.Warn("heartbeat failed; retrying with backoff", "secrets", len(chunk), "status", status, "err", err)
+	}
+	return beatFailed
+}
+
+func isHeartbeatUnsupported(status int) bool {
+	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status == http.StatusNotImplemented
 }
 
 // nextDelay returns interval ± 1/24 when failures == 0, else capped exponential backoff ± 10%.
