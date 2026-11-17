@@ -1,0 +1,203 @@
+openapi: 3.0.3
+info:
+  title: Grayskull Heartbeat API
+  version: 1.0.0
+  description: |
+    Lets SDK clients report which secrets, at which versions, a running workload holds.
+    The server only records the report: it reads no secret data, decrypts nothing and
+    writes no audit entries. Records expire 7 days after the workload's last heartbeat.
+
+servers:
+  - url: https://service.grayskull-prod.fkcloud.in
+    description: Production
+
+tags:
+  - name: Heartbeat
+    description: Workload presence reporting
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/heartbeat:
+    post:
+      tags: [Heartbeat]
+      operationId: recordHeartbeat
+      summary: Record the secrets a workload currently holds
+      description: |
+        Upserts one record per `(workload, projectId, secretName)` and refreshes its
+        `lastSeen` time. The call is idempotent: repeating it only refreshes `lastSeen`.
+        Secrets that do not exist are recorded as reported; they are not an error.
+
+        Clients send at most 50 secrets per call and split larger sets into several calls.
+      parameters:
+        - $ref: '#/components/parameters/WorkloadHeader'
+        - $ref: '#/components/parameters/UserAgentHeader'
+        - $ref: '#/components/parameters/RequestIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+            example:
+              secrets:
+                - projectId: payments
+                  secretName: db-password
+                  version: 7
+                - projectId: payments
+                  secretName: api-key
+                  version: 3
+      responses:
+        '204':
+          description: Heartbeat recorded.
+        '400':
+          description: The request failed validation or a required header is missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                tooManySecrets:
+                  summary: More than 50 secrets
+                  value:
+                    message: Validation failed
+                    code: BAD_REQUEST
+                    violations:
+                      - field: secrets
+                        message: Must contain between 1 and 50 entries
+                missingWorkload:
+                  summary: Grayskull-Workload header missing
+                  value:
+                    message: Required header 'Grayskull-Workload' is not present
+                    code: BAD_REQUEST
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '405':
+          description: The server is in read-only mode and is not accepting writes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                message: The application server is read only. The specified operation is not allowed.
+                code: METHOD_NOT_ALLOWED
+        '429':
+          description: Too many requests. Clients back off before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Same credentials as the other Grayskull endpoints.
+
+  parameters:
+    WorkloadHeader:
+      name: Grayskull-Workload
+      in: header
+      required: true
+      description: Identity of the calling workload, as sent by the SDK on every request.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+      example: v1::hyd-prod::payments::Deployment::payment-api
+    UserAgentHeader:
+      name: User-Agent
+      in: header
+      required: true
+      description: SDK name and version, stored as the client's SDK version.
+      schema:
+        type: string
+        maxLength: 64
+      example: grayskull-java/0.3.0
+    RequestIdHeader:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Correlation id for logs.
+      schema:
+        type: string
+        maxLength: 128
+
+  schemas:
+    HeartbeatRequest:
+      type: object
+      additionalProperties: false
+      required: [secrets]
+      properties:
+        secrets:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/HeldSecret'
+
+    HeldSecret:
+      type: object
+      additionalProperties: false
+      required: [projectId, secretName, version]
+      properties:
+        projectId:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: payments
+        secretName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: db-password
+        version:
+          type: integer
+          format: int32
+          minimum: 1
+          description: The newest version of the secret the workload holds.
+          example: 7
+
+    ErrorResponse:
+      type: object
+      description: Standard Grayskull error envelope.
+      required: [message]
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+          description: HTTP status name, e.g. BAD_REQUEST.
+        violations:
+          type: array
+          description: Present only for validation errors.
+          items:
+            $ref: '#/components/schemas/Violation'
+
+    Violation:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: secrets[0].version
+        message:
+          type: string
+          example: must be greater than or equal to 1
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials.
+    InternalError:
+      description: Unexpected server error. Clients back off before retrying.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: An unexpected error occurred
+            code: INTERNAL_SERVER_ERROR
