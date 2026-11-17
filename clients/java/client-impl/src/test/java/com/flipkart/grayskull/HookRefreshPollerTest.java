@@ -86,7 +86,7 @@ class HookRefreshPollerTest {
                 "http://localhost:9999", 60, new UsageLedger());
 
         // Registry is empty – pollOnce() should return at the first isEmpty() guard
-        poller.pollOnce();
+        pollOnce(poller);
 
         verify(mockHttpClient, never()).doPostWithRetry(anyString(), anyString());
     }
@@ -105,7 +105,7 @@ class HookRefreshPollerTest {
         // Register a hook then immediately unregister it
         poller.register("proj", "sec", value -> {}, 0).unRegister();
 
-        poller.pollOnce();
+        pollOnce(poller);
 
         verify(mockHttpClient, never()).doPostWithRetry(anyString(), anyString());
     }
@@ -129,7 +129,7 @@ class HookRefreshPollerTest {
         ConcurrentHashMap<String, SecretState> lyingRegistry = new RegistryNonEmptyButYieldsNoValues();
         setRegistryField(poller, lyingRegistry);
 
-        poller.pollOnce();
+        pollOnce(poller);
 
         verify(mockHttpClient, never()).doPostWithRetry(anyString(), anyString());
     }
@@ -324,5 +324,25 @@ class HookRefreshPollerTest {
         modifiers.setAccessible(true);
         modifiers.setInt(f, f.getModifiers() & ~Modifier.FINAL);
         f.set(poller, value);
+    }
+
+    /** {@code HookRefreshPoller.pollOnce()} is private; invoke it reflectively. */
+    private static void pollOnce(HookRefreshPoller target) {
+        try {
+            java.lang.reflect.Method m = HookRefreshPoller.class.getDeclaredMethod("pollOnce");
+            m.setAccessible(true);
+            m.invoke(target);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException(cause);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

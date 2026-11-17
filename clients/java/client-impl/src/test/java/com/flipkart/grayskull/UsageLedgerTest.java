@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UsageLedgerTest {
 
     private final AtomicLong now = new AtomicLong(1_000);
-    private final UsageLedger ledger = new UsageLedger(now::get);
+    private final UsageLedger ledger = ledgerWithClock(now::get);
 
     private HeartbeatRequest.HeldSecret only() {
         List<HeartbeatRequest.HeldSecret> snapshot = ledger.snapshot();
@@ -103,14 +103,14 @@ class UsageLedgerTest {
 
     @Test
     void describe_truncatesAndHandlesNullMessage() {
-        assertNull(UsageLedger.describe(null));
-        assertEquals("java.lang.RuntimeException", UsageLedger.describe(new RuntimeException()));
+        assertNull(describe(null));
+        assertEquals("java.lang.RuntimeException", describe(new RuntimeException()));
         StringBuilder longMessage = new StringBuilder();
         for (int i = 0; i < 1_000; i++) {
             longMessage.append('x');
         }
-        String described = UsageLedger.describe(new RuntimeException(longMessage.toString()));
-        assertEquals(UsageLedger.MAX_ERROR_LENGTH, described.length());
+        String described = describe(new RuntimeException(longMessage.toString()));
+        assertEquals(maxErrorLength(), described.length());
         assertTrue(described.startsWith("java.lang.RuntimeException: xxx"));
     }
 
@@ -152,5 +152,55 @@ class UsageLedgerTest {
         assertEquals((long) threads / 2 * perThread, e.getGetCount());
         assertEquals((long) threads / 2 * perThread, e.getErrorCount());
         assertEquals(perThread - 1, e.getVersion());
+    }
+
+    /** The clock-injecting constructor is private; build the ledger reflectively. */
+    private static UsageLedger ledgerWithClock(java.util.function.LongSupplier clock) {
+        try {
+            java.lang.reflect.Constructor<UsageLedger> c =
+                    UsageLedger.class.getDeclaredConstructor(java.util.function.LongSupplier.class);
+            c.setAccessible(true);
+            return c.newInstance(clock);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException(cause);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String describe(Throwable error) {
+        try {
+            java.lang.reflect.Method m = UsageLedger.class.getDeclaredMethod("describe", Throwable.class);
+            m.setAccessible(true);
+            return (String) m.invoke(null, error);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException(cause);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static int maxErrorLength() {
+        try {
+            java.lang.reflect.Field f = UsageLedger.class.getDeclaredField("MAX_ERROR_LENGTH");
+            f.setAccessible(true);
+            return f.getInt(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

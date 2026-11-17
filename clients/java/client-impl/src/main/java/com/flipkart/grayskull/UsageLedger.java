@@ -22,16 +22,16 @@ import java.util.function.LongSupplier;
 final class UsageLedger {
 
     /** Max length of {@code lastHookError} (exception class plus message). */
-    static final int MAX_ERROR_LENGTH = 256;
+    private static final int MAX_ERROR_LENGTH = 256;
 
     private final ConcurrentHashMap<String, Entry> entries = new ConcurrentHashMap<>();
     private final LongSupplier clock;
 
-    UsageLedger() {
+    public UsageLedger() {
         this(System::currentTimeMillis);
     }
 
-    UsageLedger(LongSupplier clock) {
+    private UsageLedger(LongSupplier clock) {
         this.clock = clock;
     }
 
@@ -40,7 +40,7 @@ final class UsageLedger {
      *
      * @param version the fetched version, or {@code null} when the call failed
      */
-    void recordGet(String projectId, String secretName, Integer version) {
+    public void recordGet(String projectId, String secretName, Integer version) {
         long now = clock.getAsLong();
         Entry e = entry(projectId, secretName);
         synchronized (e) {
@@ -58,35 +58,35 @@ final class UsageLedger {
     }
 
     /** A newer version seen by the hook poller (recorded before the hooks run). */
-    void recordVersion(String projectId, String secretName, int version) {
+    public void recordVersion(String projectId, String secretName, int version) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
             e.version = Math.max(e.version, version);
         }
     }
 
-    void recordHookRegistered(String projectId, String secretName) {
+    public void recordHookRegistered(String projectId, String secretName) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
             e.hookCount++;
         }
     }
 
-    void recordHookUnregistered(String projectId, String secretName) {
+    public void recordHookUnregistered(String projectId, String secretName) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
             e.hookCount = Math.max(0, e.hookCount - 1);
         }
     }
 
-    void recordHookApplied(String projectId, String secretName, int version) {
+    public void recordHookApplied(String projectId, String secretName, int version) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
             e.hookAppliedVersion = Math.max(e.hookAppliedVersion, version);
         }
     }
 
-    void recordHookFailed(String projectId, String secretName, Throwable error) {
+    public void recordHookFailed(String projectId, String secretName, Throwable error) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
             e.hookFailureCount++;
@@ -95,7 +95,7 @@ final class UsageLedger {
     }
 
     /** Newest version held for {@code projectId:secretName}, or 0. Used to seed hook registration. */
-    int version(String projectId, String secretName) {
+    public int version(String projectId, String secretName) {
         Entry e = entries.get(key(projectId, secretName));
         if (e == null) {
             return 0;
@@ -106,7 +106,7 @@ final class UsageLedger {
     }
 
     /** A consistent copy of every entry, in no particular order. */
-    List<HeartbeatRequest.HeldSecret> snapshot() {
+    public List<HeartbeatRequest.HeldSecret> snapshot() {
         List<HeartbeatRequest.HeldSecret> out = new ArrayList<>(entries.size());
         for (Entry e : entries.values()) {
             synchronized (e) {
@@ -128,7 +128,7 @@ final class UsageLedger {
     }
 
     /** Exception class plus message, truncated. Diagnostics only. */
-    static String describe(Throwable error) {
+    private static String describe(Throwable error) {
         if (error == null) {
             return null;
         }
@@ -139,19 +139,19 @@ final class UsageLedger {
 
     /** Mutable state for one secret; guarded by its own monitor. */
     private static final class Entry {
-        final String projectId;
-        final String secretName;
-        long getCount;
-        long errorCount;
-        long firstAccessAt;
-        long lastAccessAt;
-        int version;
-        int hookCount;
-        int hookAppliedVersion;
-        long hookFailureCount;
-        String lastHookError;
+        private final String projectId;
+        private final String secretName;
+        private long getCount;
+        private long errorCount;
+        private long firstAccessAt;
+        private long lastAccessAt;
+        private int version;
+        private int hookCount;
+        private int hookAppliedVersion;
+        private long hookFailureCount;
+        private String lastHookError;
 
-        Entry(String projectId, String secretName) {
+        private Entry(String projectId, String secretName) {
             this.projectId = projectId;
             this.secretName = secretName;
         }

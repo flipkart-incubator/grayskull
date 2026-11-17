@@ -100,11 +100,11 @@ final class HookRefreshPoller {
      * @param ledger receives hook registrations, versions seen and hook outcomes; it only
      *               records them and never changes delivery
      */
-    HookRefreshPoller(GrayskullHttpClient httpClient,
-                      ObjectMapper objectMapper,
-                      String baseUrl,
-                      int intervalSeconds,
-                      UsageLedger ledger) {
+    public HookRefreshPoller(GrayskullHttpClient httpClient,
+                             ObjectMapper objectMapper,
+                             String baseUrl,
+                             int intervalSeconds,
+                             UsageLedger ledger) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.batchUrl = buildBatchUrl(baseUrl);
@@ -133,8 +133,8 @@ final class HookRefreshPoller {
      * since the bulk poll is already advancing it correctly.
      * </p>
      */
-    RefreshHandlerRef register(String projectId, String secretName,
-                               SecretRefreshHook hook, int initialKnownVersion) {
+    public RefreshHandlerRef register(String projectId, String secretName,
+                                      SecretRefreshHook hook, int initialKnownVersion) {
         String secretRef = projectId + ":" + secretName;
         SecretState state = registry.compute(secretRef, (k, existing) -> {
             if (existing != null) {
@@ -171,7 +171,7 @@ final class HookRefreshPoller {
     /**
      * One scheduled poll cycle. Runs on the single-threaded {@link #scheduler}.
      */
-    void pollOnce() {
+    private void pollOnce() {
         if (registry.isEmpty()) {
             return;
         }
@@ -330,7 +330,7 @@ final class HookRefreshPoller {
         }
     }
 
-    void close() {
+    public void close() {
         shutdownExecutor(scheduler, "poller");
         shutdownExecutor(dispatcher, "dispatcher");
     }

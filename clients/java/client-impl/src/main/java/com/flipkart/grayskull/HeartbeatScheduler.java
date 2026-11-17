@@ -34,15 +34,15 @@ final class HeartbeatScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatScheduler.class);
 
-    static final String HEARTBEAT_PATH = "v1/client/heartbeat";
-    static final String SDK_LANGUAGE = "java";
+    private static final String HEARTBEAT_PATH = "v1/client/heartbeat";
+    private static final String SDK_LANGUAGE = "java";
 
     private static final long BACKOFF_BASE_MILLIS = TimeUnit.MINUTES.toMillis(5);
     private static final long BACKOFF_CAP_MILLIS = TimeUnit.MINUTES.toMillis(60);
     private static final int MAX_BATCH_SECRETS = 50;
 
     /** Result of one beat. */
-    enum Outcome { SENT, FAILED, UNSUPPORTED }
+    private enum Outcome { SENT, FAILED, UNSUPPORTED }
 
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -59,9 +59,9 @@ final class HeartbeatScheduler {
     private int failures;
     private boolean unsupportedLogged;
 
-    HeartbeatScheduler(GrayskullHttpClient httpClient, ObjectMapper objectMapper, String baseUrl,
-                       int intervalSeconds, String sdkVersion,
-                       Supplier<List<HeartbeatRequest.HeldSecret>> heldSecrets) {
+    public HeartbeatScheduler(GrayskullHttpClient httpClient, ObjectMapper objectMapper, String baseUrl,
+                              int intervalSeconds, String sdkVersion,
+                              Supplier<List<HeartbeatRequest.HeldSecret>> heldSecrets) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.heartbeatUrl = buildHeartbeatUrl(baseUrl);
@@ -71,12 +71,12 @@ final class HeartbeatScheduler {
     }
 
     /** First heartbeat after one interval. */
-    void start() {
+    public void start() {
         scheduleNext();
     }
 
     /** Idempotent. */
-    void close() {
+    public void close() {
         scheduler.shutdownNow();
         try {
             scheduler.awaitTermination(10, TimeUnit.SECONDS);
@@ -108,7 +108,7 @@ final class HeartbeatScheduler {
      * Sends one full snapshot in chunks of {@value #MAX_BATCH_SECRETS}. Sends nothing when the
      * ledger is empty. Stops at the first chunk the server reports as unsupported.
      */
-    Outcome beatOnce() {
+    private Outcome beatOnce() {
         List<HeartbeatRequest.HeldSecret> held = heldSecrets.get();
         if (held.isEmpty()) {
             return Outcome.SENT;
@@ -160,7 +160,7 @@ final class HeartbeatScheduler {
         }
     }
 
-    static boolean isUnsupported(int status) {
+    private static boolean isUnsupported(int status) {
         return status == 404 || status == 405 || status == 501;
     }
 
