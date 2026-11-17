@@ -1,5 +1,6 @@
 package com.flipkart.grayskull.authz;
 
+import com.flipkart.grayskull.models.dto.request.HeldSecret;
 import com.flipkart.grayskull.models.dto.request.SecretVersionEntry;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
 import com.flipkart.grayskull.spi.models.Project;
@@ -126,14 +127,34 @@ public class GrayskullSecurity {
      * @return {@code true} if authorized for all entries, {@code false} on first denial.
      */
     public boolean hasPermissionForSecrets(List<SecretVersionEntry> entries, String action) {
+        return bulkAuthorize(entries.stream()
+                .map(entry -> new String[]{entry.getProjectId(), entry.getSecretName()})
+                .toList(), action);
+    }
+
+    /**
+     * Batch authorization for the secrets reported in a heartbeat: the caller may report only
+     * secrets it is allowed to read.
+     *
+     * @param secrets the reported secrets.
+     * @param action  The action to authorize.
+     * @return {@code true} if authorized for all secrets, {@code false} on first denial.
+     */
+    public boolean hasPermissionForHeldSecrets(List<HeldSecret> secrets, String action) {
+        return bulkAuthorize(secrets.stream()
+                .map(secret -> new String[]{secret.getProjectId(), secret.getSecretName()})
+                .toList(), action);
+    }
+
+    private boolean bulkAuthorize(List<String[]> projectAndSecretNames, String action) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        List<AuthorizationContext> contexts = entries.stream()
-                .map(entry -> AuthorizationContext.forSecret(
+        List<AuthorizationContext> contexts = projectAndSecretNames.stream()
+                .map(ref -> AuthorizationContext.forSecret(
                         authentication,
-                        Project.builder().id(entry.getProjectId()).build(),
+                        Project.builder().id(ref[0]).build(),
                         Secret.builder()
-                                .projectId(entry.getProjectId())
-                                .name(entry.getSecretName())
+                                .projectId(ref[0])
+                                .name(ref[1])
                                 .build()))
                 .toList();
         return authorizationProvider.bulkAuthorize(contexts, action);
