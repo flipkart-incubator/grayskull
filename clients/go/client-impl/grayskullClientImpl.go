@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,10 +35,11 @@ type GrayskullClientImpl struct {
 	httpClient         internal.GrayskullHTTPClientInterface
 	metricsRecorder    metrics.MetricsRecorder
 
-	registry         *internalHooks.Registry
-	poller           *internal.Poller
-	lastSeenVersions sync.Map
-	closed           atomic.Bool
+	registry  *internalHooks.Registry
+	poller    *internal.Poller
+	heartbeat *internal.Heartbeat
+	ledger    internal.UsageLedger
+	closed    atomic.Bool
 }
 
 var validate = validator.New()
@@ -118,11 +118,42 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 		Interval:        interval,
 		MetricsRecorder: metricsRecorder,
 		Logger:          logger.With("subcomponent", "poller"),
+		Ledger:          &client.ledger,
 	})
 	client.poller.Start()
 
-	return client, nil
+	// The heartbeat needs single-attempt POSTs.
+	if poster, ok := httpClient.(internal.HeartbeatPoster); ok && config.HeartbeatEnabled {
+		client.heartbeat = internal.NewHeartbeat(internal.HeartbeatConfig{
+			BaseURL:         config.Host,
+			HTTPClient:      poster,
+			Interval:        time.Duration(config.HeartbeatIntervalSeconds) * time.Second,
+			SDKVersion:      GetVersion(),
+			HeldSecrets:     client.ledger.Snapshot,
+			MetricsRecorder: metricsRecorder,
+			Logger:          logger.With("subcomponent", "heartbeat"),
+		})
+		client.heartbeat.Start()
+	}
 
+	return client, nil
+}
+
+// ledgerHandlerRef uncounts the hook in the ledger on the first Unregister.
+type ledgerHandlerRef struct {
+	Client_API_Hooks.RefreshHandlerRef
+	ledger     *internal.UsageLedger
+	projectID  string
+	secretName string
+	active     atomic.Bool
+}
+
+func (r *ledgerHandlerRef) Unregister() {
+	if !r.active.CompareAndSwap(true, false) {
+		return
+	}
+	r.RefreshHandlerRef.Unregister()
+	r.ledger.RecordHookUnregistered(r.projectID, r.secretName)
 }
 
 // splitSecretRef splits "projectId:secretName" on the FIRST colon (secret
@@ -161,6 +192,10 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 		return nil, errors.NewGrayskullError(http.StatusBadRequest, fmt.Sprintf("projectId and secretName cannot be empty in secretRef: %s", secretRef))
 	}
 
+	// Record every validated call, success or failure.
+	fetchedVersion, fetched := 0, false
+	defer func() { g.ledger.RecordGet(projectID, secretName, fetchedVersion, fetched) }()
+
 	encodedProjectID := url.PathEscape(projectID)
 	encodedSecretName := url.PathEscape(secretName)
 	getSecretUrl := fmt.Sprintf("%s/v1/projects/%s/secrets/%s/data", g.baseURL, encodedProjectID, encodedSecretName)
@@ -181,9 +216,8 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 
 	g.metricsRecorder.RecordRequest("get_secret", statusCode, time.Since(startTime))
 
-	// Track latest observed version so a later RegisterRefreshHook can seed
-	// the poller and skip versions the app has already seen.
-	g.lastSeenVersions.Store(secretRef, data.DataVersion)
+	// Lets a later RegisterRefreshHook skip versions already seen.
+	fetchedVersion, fetched = data.DataVersion, true
 
 	return &data, nil
 }
@@ -206,13 +240,12 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 			fmt.Sprintf("invalid secretRef format. Expected 'projectId:secretName', got: %s", secretRef))
 	}
 
-	seed := 0
-	if v, ok := c.lastSeenVersions.Load(secretRef); ok {
-		if iv, ok := v.(int); ok {
-			seed = iv
-		}
-	}
-	return c.registry.Register(parts[0], parts[1], hook, seed), nil
+	seed := c.ledger.Version(parts[0], parts[1])
+	ref := c.registry.Register(parts[0], parts[1], hook, seed)
+	c.ledger.RecordHookRegistered(parts[0], parts[1])
+	wrapped := &ledgerHandlerRef{RefreshHandlerRef: ref, ledger: &c.ledger, projectID: parts[0], secretName: parts[1]}
+	wrapped.active.Store(true)
+	return wrapped, nil
 }
 
 // Close stops the poller and releases HTTP transport resources. Returns the
@@ -221,6 +254,9 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 func (c *GrayskullClientImpl) Close() error {
 	if !c.closed.CompareAndSwap(false, true) {
 		return nil
+	}
+	if c.heartbeat != nil {
+		c.heartbeat.Close()
 	}
 	var firstErr error
 	if c.poller != nil {

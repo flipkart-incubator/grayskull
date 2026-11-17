@@ -12,4 +12,7 @@ const (
 
 	// DefaultPollingIntervalSeconds is the default batch refresh poll interval.
 	DefaultPollingIntervalSeconds = 60
+
+	// DefaultHeartbeatIntervalSeconds is the default heartbeat interval (24h).
+	DefaultHeartbeatIntervalSeconds = 24 * 60 * 60
 )

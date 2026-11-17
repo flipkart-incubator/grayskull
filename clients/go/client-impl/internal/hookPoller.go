@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +34,8 @@ type Poller struct {
 	metricsRecorder metrics.MetricsRecorder
 	logger          *slog.Logger
 	marshalRequest  func(v any) ([]byte, error)
+	// ledger records versions and hook outcomes; may be nil.
+	ledger *UsageLedger
 
 	dispatchCh chan dispatchJob
 
@@ -82,6 +85,9 @@ type PollerConfig struct {
 
 	// MarshalRequest defaults to json.Marshal. Test seam.
 	MarshalRequest func(v any) ([]byte, error)
+
+	// Ledger records versions and hook outcomes. Optional.
+	Ledger *UsageLedger
 }
 
 // NewPoller constructs a Poller. Call Start to begin polling, Close to stop.
@@ -113,6 +119,7 @@ func NewPoller(cfg PollerConfig) *Poller {
 		metricsRecorder: cfg.MetricsRecorder,
 		logger:          logger,
 		marshalRequest:  marshal,
+		ledger:          cfg.Ledger,
 		dispatchCh:      make(chan dispatchJob, dispatcherWorkers*4),
 		hookCtx:         hookCtx,
 		cancelHookCtx:   cancelHookCtx,
@@ -308,6 +315,7 @@ func (p *Poller) runHooksFor(secretRef string, state *hooks.SecretState, request
 			return
 		}
 		state.LastKnownVersion.Store(int32(value.DataVersion))
+		p.ledger.RecordVersion(state.ProjectID, state.SecretName, value.DataVersion)
 		for _, hook := range state.SnapshotHooks() {
 			p.invokeHookSafe(ctx, secretRef, hook, *value)
 		}
@@ -334,11 +342,20 @@ func (p *Poller) resubmitIfPending(secretRef string, state *hooks.SecretState, r
 func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiHooks.SecretRefreshHook, value apiModels.SecretValue) {
 	startTime := time.Now()
 	success := true
+	failure := ""
 	defer func() {
 		if r := recover(); r != nil {
 			success = false
+			failure = fmt.Sprintf("panic: %v", r)
 			p.logger.Error("consumer hook panicked",
 				"secretRef", secretRef, "panic", r, "stack", string(debug.Stack()))
+		}
+		if projectID, secretName, ok := strings.Cut(secretRef, ":"); ok {
+			if success {
+				p.ledger.RecordHookApplied(projectID, secretName, value.DataVersion)
+			} else {
+				p.ledger.RecordHookFailed(projectID, secretName, failure)
+			}
 		}
 		if p.metricsRecorder != nil {
 			code := http.StatusOK
@@ -352,6 +369,7 @@ func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiH
 	}()
 	if err := hook(ctx, value); err != nil {
 		success = false
+		failure = err.Error()
 		p.logger.Error("consumer hook returned error", "secretRef", secretRef, "err", err)
 	}
 }
