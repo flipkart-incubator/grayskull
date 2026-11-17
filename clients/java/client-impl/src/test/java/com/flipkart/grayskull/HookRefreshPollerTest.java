@@ -83,7 +83,7 @@ class HookRefreshPollerTest {
     void pollOnce_emptyRegistry_returnsWithoutMakingHttpCall() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         // Registry is empty – pollOnce() should return at the first isEmpty() guard
         poller.pollOnce();
@@ -100,7 +100,7 @@ class HookRefreshPollerTest {
     void pollOnce_afterAllHooksUnregistered_returnsWithoutMakingHttpCall() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         // Register a hook then immediately unregister it
         poller.register("proj", "sec", value -> {}, 0).unRegister();
@@ -124,7 +124,7 @@ class HookRefreshPollerTest {
     void pollOnce_nonEmptyRegistryButEmptyEntryList_returnsAtEntriesGuard() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         ConcurrentHashMap<String, SecretState> lyingRegistry = new RegistryNonEmptyButYieldsNoValues();
         setRegistryField(poller, lyingRegistry);
@@ -188,7 +188,7 @@ class HookRefreshPollerTest {
     void runHooksFor_secondUpdateArrivesWhileExecuting_bothUpdatesDelivered() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         CountDownLatch firstHookStarted    = new CountDownLatch(1);
         CountDownLatch allowFirstToFinish  = new CountDownLatch(1);
@@ -247,7 +247,7 @@ class HookRefreshPollerTest {
     void scheduleFollowUpIfPending_whenPending_submitsRunHooksFor() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         setFinalField(poller, "dispatcher", newSameThreadExecutor());
 

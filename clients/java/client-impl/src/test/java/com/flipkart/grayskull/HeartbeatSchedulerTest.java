@@ -36,6 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HeartbeatSchedulerTest {
 
+    private static final String SDK_VERSION = "0.3.0-test";
+
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockWebServer server;
@@ -83,19 +85,17 @@ class HeartbeatSchedulerTest {
     private static List<HeartbeatRequest.HeldSecret> entries(int n) {
         List<HeartbeatRequest.HeldSecret> out = new ArrayList<>();
         for (int i = 0; i < n; i++) {
-            out.add(new HeartbeatRequest.HeldSecret("p", "s" + i, i + 1, i % 2 == 0));
+            out.add(new HeartbeatRequest.HeldSecret("p", "s" + i, i + 1, i % 2 == 0, 0, 0, 0, 0, 0, 0, null));
         }
         return out;
     }
 
     private HeartbeatScheduler newScheduler(int intervalSeconds, Supplier<List<HeartbeatRequest.HeldSecret>> held) {
-        return new HeartbeatScheduler(httpClient, objectMapper, baseUrl, intervalSeconds, held);
+        return new HeartbeatScheduler(httpClient, objectMapper, baseUrl, intervalSeconds, SDK_VERSION, held);
     }
 
-    private static boolean beatOnce(HeartbeatScheduler s) throws Exception {
-        Method m = HeartbeatScheduler.class.getDeclaredMethod("beatOnce");
-        m.setAccessible(true);
-        return (boolean) m.invoke(s);
+    private static HeartbeatScheduler.Outcome beatOnce(HeartbeatScheduler s) {
+        return s.beatOnce();
     }
 
     private static long nextDelayMillis(HeartbeatScheduler s, int failures) throws Exception {
@@ -108,7 +108,7 @@ class HeartbeatSchedulerTest {
     void beatOnce_nothingFetched_sendsNothing() throws Exception {
         scheduler = newScheduler(60, Collections::emptyList);
 
-        assertTrue(beatOnce(scheduler));
+        assertEquals(HeartbeatScheduler.Outcome.SENT, beatOnce(scheduler));
         assertEquals(0, server.getRequestCount());
     }
 
@@ -116,11 +116,11 @@ class HeartbeatSchedulerTest {
     void beatOnce_postsHeldSecretsToHeartbeatApi() throws Exception {
         scheduler = newScheduler(60, () -> entries(3));
 
-        assertTrue(beatOnce(scheduler));
+        assertEquals(HeartbeatScheduler.Outcome.SENT, beatOnce(scheduler));
 
         RecordedRequest request = server.takeRequest(1, TimeUnit.SECONDS);
         assertEquals("POST", request.getMethod());
-        assertEquals("/v1/heartbeat", request.getPath());
+        assertEquals("/v1/client/heartbeat", request.getPath());
         assertEquals("Bearer test-token", request.getHeader("Authorization"));
         JsonNode secrets = objectMapper.readTree(request.getBody().readUtf8()).get("secrets");
         assertEquals(3, secrets.size());
@@ -135,7 +135,7 @@ class HeartbeatSchedulerTest {
     void beatOnce_chunksAt50() throws Exception {
         scheduler = newScheduler(60, () -> entries(120));
 
-        assertTrue(beatOnce(scheduler));
+        assertEquals(HeartbeatScheduler.Outcome.SENT, beatOnce(scheduler));
 
         assertEquals(3, server.getRequestCount());
         int[] sizes = new int[3];
@@ -152,7 +152,7 @@ class HeartbeatSchedulerTest {
         failFirst.set(1);
         scheduler = newScheduler(60, () -> entries(1));
 
-        assertFalse(beatOnce(scheduler));
+        assertEquals(HeartbeatScheduler.Outcome.FAILED, beatOnce(scheduler));
         assertEquals(1, server.getRequestCount(), "a failed heartbeat is not retried inline");
     }
 
@@ -265,9 +265,9 @@ class HeartbeatSchedulerTest {
                     }
                 });
         ObjectMapper failingMapper = new ObjectMapper().registerModule(failing);
-        scheduler = new HeartbeatScheduler(httpClient, failingMapper, baseUrl, 60, () -> entries(1));
+        scheduler = new HeartbeatScheduler(httpClient, failingMapper, baseUrl, 60, SDK_VERSION, () -> entries(1));
 
-        assertFalse(beatOnce(scheduler));
+        assertEquals(HeartbeatScheduler.Outcome.FAILED, beatOnce(scheduler));
         assertEquals(0, server.getRequestCount());
     }
 
@@ -304,16 +304,77 @@ class HeartbeatSchedulerTest {
         failStatus = 400;
         scheduler = newScheduler(60, () -> entries(1));
 
-        assertFalse(beatOnce(scheduler));
+        assertEquals(HeartbeatScheduler.Outcome.FAILED, beatOnce(scheduler));
         assertEquals(1, server.getRequestCount());
     }
 
     @Test
     void constructor_invalidBaseUrl_throws() {
         assertThrows(IllegalStateException.class,
-                () -> new HeartbeatScheduler(httpClient, objectMapper, "not a url", 60, Collections::emptyList));
+                () -> new HeartbeatScheduler(httpClient, objectMapper, "not a url", 60, SDK_VERSION, Collections::emptyList));
     }
 
+    @Test
+    void beatOnce_postsV2Envelope() throws Exception {
+        scheduler = newScheduler(60, () -> entries(60));
+        assertEquals(HeartbeatScheduler.Outcome.SENT, beatOnce(scheduler));
+        JsonNode first = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
+        JsonNode second = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
+        for (JsonNode body : new JsonNode[]{first, second}) {
+            assertEquals(1, body.get("schemaVersion").asInt());
+            assertEquals("PERIODIC", body.get("trigger").asText());
+            assertEquals("java", body.get("sdk").get("language").asText());
+            assertEquals(SDK_VERSION, body.get("sdk").get("version").asText());
+            assertTrue(body.get("sentAt").asLong() > 0);
+        }
+        assertEquals(first.get("sentAt").asLong(), second.get("sentAt").asLong(), "chunks of one beat share sentAt");
+    }
+
+    @Test
+    void beatOnce_unsupportedStatus_returnsUnsupportedAndStopsSending() throws Exception {
+        for (int status : new int[]{404, 405, 501}) {
+            arrivalNanos.clear();
+            failFirst.set(Integer.MAX_VALUE);
+            failStatus = status;
+            HeartbeatScheduler s = newScheduler(60, () -> entries(120));
+            try {
+                assertEquals(HeartbeatScheduler.Outcome.UNSUPPORTED, beatOnce(s), "status " + status);
+                assertEquals(1, arrivalNanos.size(), "status " + status + ": remaining chunks must not be sent");
+            } finally {
+                s.close();
+            }
+        }
+    }
+
+    @Test
+    void run_unsupported_waitsFullIntervalAndLogsOnce() throws Exception {
+        failFirst.set(Integer.MAX_VALUE);
+        failStatus = 404;
+        scheduler = newScheduler(60, () -> entries(1));
+        Method run = HeartbeatScheduler.class.getDeclaredMethod("run");
+        run.setAccessible(true);
+        run.invoke(scheduler);
+        run.invoke(scheduler);
+
+        Field failures = HeartbeatScheduler.class.getDeclaredField("failures");
+        failures.setAccessible(true);
+        assertEquals(0, failures.getInt(scheduler), "unsupported is not a failure: no 5-60 min backoff");
+        Field logged = HeartbeatScheduler.class.getDeclaredField("unsupportedLogged");
+        logged.setAccessible(true);
+        assertTrue(logged.getBoolean(scheduler));
+        long d = nextDelayMillis(scheduler, failures.getInt(scheduler));
+        assertTrue(d >= 57_500 && d <= 62_500, "full interval expected, got " + d);
+    }
+
+    @Test
+    void isUnsupported_onlyFor404_405_501() {
+        assertTrue(HeartbeatScheduler.isUnsupported(404));
+        assertTrue(HeartbeatScheduler.isUnsupported(405));
+        assertTrue(HeartbeatScheduler.isUnsupported(501));
+        assertFalse(HeartbeatScheduler.isUnsupported(400));
+        assertFalse(HeartbeatScheduler.isUnsupported(500));
+        assertFalse(HeartbeatScheduler.isUnsupported(503));
+    }
     private void waitForRequests(int count, long timeoutMillis) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMillis;
         while (arrivalNanos.size() < count && System.currentTimeMillis() < deadline) {

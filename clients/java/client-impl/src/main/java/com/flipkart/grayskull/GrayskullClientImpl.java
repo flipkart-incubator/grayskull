@@ -13,7 +13,6 @@ import com.flipkart.grayskull.metrics.MetricsPublisher;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.SecretValue;
 import com.flipkart.grayskull.models.exceptions.GrayskullException;
-import com.flipkart.grayskull.models.request.HeartbeatRequest;
 import com.flipkart.grayskull.models.response.HttpResponse;
 import com.flipkart.grayskull.models.response.Response;
 import okhttp3.HttpUrl;
@@ -23,12 +22,8 @@ import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -49,9 +44,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private final ObjectMapper objectMapper;
     private final HookRefreshPoller refreshPoller;
     private final HeartbeatScheduler heartbeatScheduler;
-
-
-    private final ConcurrentHashMap<String, Integer> lastSeenVersions = new ConcurrentHashMap<>();
+    /** Per-secret usage reported by the heartbeat; also seeds hook registration. */
+    private final UsageLedger ledger = new UsageLedger();
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
@@ -90,34 +84,19 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
         this.refreshPoller = new HookRefreshPoller(
                 httpClient, objectMapper, baseUrl,
-                grayskullClientConfiguration.getPollingIntervalSeconds());
+                grayskullClientConfiguration.getPollingIntervalSeconds(),
+                ledger);
 
         if (grayskullClientConfiguration.isHeartbeatEnabled()) {
             this.heartbeatScheduler = new HeartbeatScheduler(
                     httpClient, objectMapper, baseUrl,
                     grayskullClientConfiguration.getHeartbeatIntervalSeconds(),
-                    this::heldSecrets);
+                    sdkVersion,
+                    ledger::snapshot);
             this.heartbeatScheduler.start();
         } else {
             this.heartbeatScheduler = null;
         }
-    }
-
-    /** Fetched secrets with the newest version held (fetched or hook-delivered). */
-    private List<HeartbeatRequest.HeldSecret> heldSecrets() {
-        List<HeartbeatRequest.HeldSecret> entries = new ArrayList<>(lastSeenVersions.size());
-        for (Map.Entry<String, Integer> seen : lastSeenVersions.entrySet()) {
-            String secretRef = seen.getKey();
-            int separator = secretRef.indexOf(':');
-            if (separator <= 0 || separator == secretRef.length() - 1) {
-                continue;
-            }
-            int version = Math.max(seen.getValue(), refreshPoller.lastKnownVersion(secretRef));
-            entries.add(new HeartbeatRequest.HeldSecret(
-                    secretRef.substring(0, separator), secretRef.substring(separator + 1), version,
-                    refreshPoller.hasHook(secretRef)));
-        }
-        return entries;
     }
 
     /**
@@ -139,6 +118,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
         long startTime = System.nanoTime();
         int statusCode = 0;
+        String projectId = null;
+        String secretName = null;
+        Integer fetchedVersion = null;
 
         try {
             if (secretRef == null || secretRef.isEmpty()) {
@@ -146,8 +128,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
             }
 
             String[] parts = parseSecretRef(secretRef);
-            String projectId = parts[0];
-            String secretName = parts[1];
+            projectId = parts[0];
+            secretName = parts[1];
 
             MDC.put(MDCKeys.PROJECT_ID, projectId);
             MDC.put(MDCKeys.SECRET_NAME, secretName);
@@ -163,7 +145,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             if (secretValue == null) {
                 throw new GrayskullException(500, "No data in response");
             }
-            lastSeenVersions.put(secretRef, secretValue.getDataVersion());
+            fetchedVersion = secretValue.getDataVersion();
             return secretValue;
         } catch (JsonProcessingException e) {
             throw new GrayskullException("Failed to parse response: ", e);
@@ -171,6 +153,10 @@ public final class GrayskullClientImpl implements GrayskullClient {
             statusCode = e.getStatusCode();
             throw e;
         } finally {
+            // Success and failure both count; a malformed secretRef has no ledger entry.
+            if (projectId != null) {
+                ledger.recordGet(projectId, secretName, fetchedVersion);
+            }
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
             MetricsPublisher.getInstance().recordRequest("getSecret." + secretRef, statusCode, durationMs);
             MDC.remove(MDCKeys.PROJECT_ID);
@@ -209,7 +195,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             throw new IllegalArgumentException("hook cannot be null");
         }
         String[] parts = parseSecretRef(secretRef);
-        int seed = lastSeenVersions.getOrDefault(secretRef, 0);
+        int seed = ledger.version(parts[0], parts[1]);
         return refreshPoller.register(parts[0], parts[1], hook, seed);
     }
 

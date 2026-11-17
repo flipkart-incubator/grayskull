@@ -20,20 +20,34 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-/** Sends the held secrets to {@code POST /v1/heartbeat} every interval (default 24h). */
+/**
+ * Sends the usage ledger snapshot to {@code POST /v1/client/heartbeat} every interval
+ * (default 24h, ± 1/24 jitter). The first beat goes out one interval after start; there is
+ * no boot-time beat.
+ * <p>
+ * One attempt per beat: failures back off 5 min doubling to 60 min (± 10%). A server that
+ * answers 404, 405 or 501 does not support heartbeats yet; that is logged once at info and
+ * the full interval is used, not the backoff.
+ * </p>
+ */
 final class HeartbeatScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatScheduler.class);
 
-    static final String HEARTBEAT_PATH = "v1/heartbeat";
+    static final String HEARTBEAT_PATH = "v1/client/heartbeat";
+    static final String SDK_LANGUAGE = "java";
 
     private static final long BACKOFF_BASE_MILLIS = TimeUnit.MINUTES.toMillis(5);
     private static final long BACKOFF_CAP_MILLIS = TimeUnit.MINUTES.toMillis(60);
     private static final int MAX_BATCH_SECRETS = 50;
 
+    /** Result of one beat. */
+    enum Outcome { SENT, FAILED, UNSUPPORTED }
+
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String heartbeatUrl;
+    private final HeartbeatRequest.Sdk sdk;
     private final Supplier<List<HeartbeatRequest.HeldSecret>> heldSecrets;
     private final long intervalMillis;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -43,17 +57,20 @@ final class HeartbeatScheduler {
     });
 
     private int failures;
+    private boolean unsupportedLogged;
 
     HeartbeatScheduler(GrayskullHttpClient httpClient, ObjectMapper objectMapper, String baseUrl,
-                       int intervalSeconds, Supplier<List<HeartbeatRequest.HeldSecret>> heldSecrets) {
+                       int intervalSeconds, String sdkVersion,
+                       Supplier<List<HeartbeatRequest.HeldSecret>> heldSecrets) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.heartbeatUrl = buildHeartbeatUrl(baseUrl);
+        this.sdk = new HeartbeatRequest.Sdk(SDK_LANGUAGE, sdkVersion);
         this.heldSecrets = heldSecrets;
         this.intervalMillis = TimeUnit.SECONDS.toMillis(intervalSeconds);
     }
 
-    /** First heartbeat after one interval; startup fetches are recorded by the server. */
+    /** First heartbeat after one interval. */
     void start() {
         scheduleNext();
     }
@@ -78,7 +95,7 @@ final class HeartbeatScheduler {
 
     private void run() {
         try {
-            failures = beatOnce() ? 0 : failures + 1;
+            failures = beatOnce() == Outcome.FAILED ? failures + 1 : 0;
         } catch (RuntimeException e) {
             failures++;
             log.warn("heartbeat failed", e);
@@ -87,38 +104,64 @@ final class HeartbeatScheduler {
         }
     }
 
-    /** True when all chunks succeeded. */
-    private boolean beatOnce() {
+    /**
+     * Sends one full snapshot in chunks of {@value #MAX_BATCH_SECRETS}. Sends nothing when the
+     * ledger is empty. Stops at the first chunk the server reports as unsupported.
+     */
+    Outcome beatOnce() {
         List<HeartbeatRequest.HeldSecret> held = heldSecrets.get();
-        boolean ok = true;
-        for (int from = 0; from < held.size(); from += MAX_BATCH_SECRETS) {
-            ok &= send(held.subList(from, Math.min(from + MAX_BATCH_SECRETS, held.size())));
+        if (held.isEmpty()) {
+            return Outcome.SENT;
         }
-        return ok;
+        long sentAt = System.currentTimeMillis();
+        Outcome result = Outcome.SENT;
+        for (int from = 0; from < held.size(); from += MAX_BATCH_SECRETS) {
+            Outcome chunk = send(held.subList(from, Math.min(from + MAX_BATCH_SECRETS, held.size())), sentAt);
+            if (chunk == Outcome.UNSUPPORTED) {
+                return Outcome.UNSUPPORTED;
+            }
+            if (chunk == Outcome.FAILED) {
+                result = Outcome.FAILED;
+            }
+        }
+        return result;
     }
 
-    private boolean send(List<HeartbeatRequest.HeldSecret> chunk) {
+    private Outcome send(List<HeartbeatRequest.HeldSecret> chunk, long sentAt) {
         MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, UUID.randomUUID().toString());
         long start = System.nanoTime();
         int status = 500;
         try {
-            String body = objectMapper.writeValueAsString(new HeartbeatRequest(chunk));
+            String body = objectMapper.writeValueAsString(new HeartbeatRequest(
+                    HeartbeatRequest.SCHEMA_VERSION, HeartbeatRequest.TRIGGER_PERIODIC, sdk, sentAt, chunk));
             status = httpClient.doPost(heartbeatUrl, body).getStatusCode();
-            return true;
+            return Outcome.SENT;
         } catch (Exception e) {
             if (e instanceof RetryableException) {
                 status = ((RetryableException) e).getStatusCode();
             } else if (e instanceof GrayskullException) {
                 status = ((GrayskullException) e).getStatusCode();
             }
+            if (isUnsupported(status)) {
+                if (!unsupportedLogged) {
+                    unsupportedLogged = true;
+                    log.info("Grayskull server does not support client heartbeats yet (status {}); "
+                            + "retrying after the full interval", status);
+                }
+                return Outcome.UNSUPPORTED;
+            }
             log.warn("heartbeat for {} secret(s) failed (status {}); retrying with backoff: {}",
                     chunk.size(), status, e.getMessage());
-            return false;
+            return Outcome.FAILED;
         } finally {
             MetricsPublisher.getInstance().recordRequest("heartbeat", status,
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
             MDC.remove(MDCKeys.GRAYSKULL_REQUEST_ID);
         }
+    }
+
+    static boolean isUnsupported(int status) {
+        return status == 404 || status == 405 || status == 501;
     }
 
     /** Interval ± 1/24 on success; 5–60 min backoff ± 10% on failure. */

@@ -94,14 +94,21 @@ final class HookRefreshPoller {
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String batchUrl;
+    private final UsageLedger ledger;
 
+    /**
+     * @param ledger receives hook registrations, versions seen and hook outcomes; it only
+     *               records them and never changes delivery
+     */
     HookRefreshPoller(GrayskullHttpClient httpClient,
                       ObjectMapper objectMapper,
                       String baseUrl,
-                      int intervalSeconds) {
+                      int intervalSeconds,
+                      UsageLedger ledger) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.batchUrl = buildBatchUrl(baseUrl);
+        this.ledger = ledger;
 
         this.scheduler = Executors.newSingleThreadScheduledExecutor(
                 daemonFactory("grayskull-poller-"));
@@ -139,19 +146,26 @@ final class HookRefreshPoller {
             s.lastKnownVersion.set(initialKnownVersion);
             return s;
         });
+        ledger.recordHookRegistered(projectId, secretName);
         log.debug("Registered refresh hook for secretRef:{} (totalHooks:{}, initialKnownVersion:{})",
                 secretRef, state.hooks.size(), initialKnownVersion);
         return new DefaultRefreshHandlerRef(secretRef, () -> unregister(secretRef, hook));
     }
 
     private void unregister(String secretRef, SecretRefreshHook hook) {
+        SecretState[] removedFrom = {null};
         registry.compute(secretRef, (k, state) -> {
             if (state == null) {
                 return null;
             }
-            state.hooks.remove(hook);
+            if (state.hooks.remove(hook)) {
+                removedFrom[0] = state;
+            }
             return state.hooks.isEmpty() ? null : state;
         });
+        if (removedFrom[0] != null) {
+            ledger.recordHookUnregistered(removedFrom[0].projectId, removedFrom[0].secretName);
+        }
     }
 
     /**
@@ -277,6 +291,7 @@ final class HookRefreshPoller {
             SecretValue value;
             while ((value = state.pendingUpdate.getAndSet(null)) != null) {
                 state.lastKnownVersion.set(value.getDataVersion());
+                ledger.recordVersion(state.projectId, state.secretName, value.getDataVersion());
                 deliverToHooks(secretRef, state, value);
             }
         } finally {
@@ -301,8 +316,11 @@ final class HookRefreshPoller {
             boolean success = true;
             try {
                 hook.onUpdate(value);
+                ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion());
             } catch (Exception e) {
                 success = false;
+                // Diagnostics only: no retry, no rollback of lastKnownVersion.
+                ledger.recordHookFailed(state.projectId, state.secretName, e);
                 log.error("Consumer hook failed for {}", secretRef, e);
             } finally {
                 long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
@@ -310,16 +328,6 @@ final class HookRefreshPoller {
                         "hook.execute." + secretRef, success ? 200 : 500, durationMs);
             }
         }
-    }
-
-    /** Version last delivered to hooks, or 0. */
-    int lastKnownVersion(String secretRef) {
-        SecretState state = registry.get(secretRef);
-        return state == null ? 0 : state.lastKnownVersion.get();
-    }
-
-    boolean hasHook(String secretRef) {
-        return registry.containsKey(secretRef);
     }
 
     void close() {

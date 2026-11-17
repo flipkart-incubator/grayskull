@@ -75,7 +75,7 @@ class HookRefreshPollerConcurrencyTest {
         }
 
         poller = new HookRefreshPoller(
-                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS);
+                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS, new UsageLedger());
     }
 
     @AfterEach
@@ -597,7 +597,7 @@ class HookRefreshPollerConcurrencyTest {
         // We use a SHORT-circuit by overriding SHUTDOWN_AWAIT_SECONDS via a
         // dedicated poller and a hook that blocks indefinitely.
         HookRefreshPoller localPoller = new HookRefreshPoller(
-                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS);
+                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS, new UsageLedger());
 
         try {
             CountDownLatch entered = new CountDownLatch(1);
@@ -649,7 +649,7 @@ class HookRefreshPollerConcurrencyTest {
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
     void close_whenInterrupted_propagatesInterruptAndShutsDown() throws Exception {
         HookRefreshPoller localPoller = new HookRefreshPoller(
-                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS);
+                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS, new UsageLedger());
 
         try {
             CountDownLatch entered = new CountDownLatch(1);
