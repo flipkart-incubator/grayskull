@@ -138,10 +138,11 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 	return client, nil
 }
 
-// ledgerHandlerRef uncounts the hook in the ledger on the first Unregister.
+// ledgerHandlerRef updates the ledger's hook flag on the first Unregister.
 type ledgerHandlerRef struct {
 	Client_API_Hooks.RefreshHandlerRef
 	ledger     *internal.UsageLedger
+	registry   *internalHooks.Registry
 	projectID  string
 	secretName string
 	active     atomic.Bool
@@ -152,7 +153,7 @@ func (r *ledgerHandlerRef) Unregister() {
 		return
 	}
 	r.RefreshHandlerRef.Unregister()
-	r.ledger.RecordHookUnregistered(r.projectID, r.secretName)
+	r.ledger.SetHookRegistered(r.projectID, r.secretName, r.registry.Get(r.projectID+":"+r.secretName) != nil)
 }
 
 // splitSecretRef splits "projectId:secretName" on the FIRST colon (secret
@@ -237,8 +238,8 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 
 	seed := c.ledger.Version(parts[0], parts[1])
 	ref := c.registry.Register(parts[0], parts[1], hook, seed)
-	c.ledger.RecordHookRegistered(parts[0], parts[1])
-	wrapped := &ledgerHandlerRef{RefreshHandlerRef: ref, ledger: &c.ledger, projectID: parts[0], secretName: parts[1]}
+	c.ledger.SetHookRegistered(parts[0], parts[1], true)
+	wrapped := &ledgerHandlerRef{RefreshHandlerRef: ref, ledger: &c.ledger, registry: c.registry, projectID: parts[0], secretName: parts[1]}
 	wrapped.active.Store(true)
 	return wrapped, nil
 }

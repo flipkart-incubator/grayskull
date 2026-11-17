@@ -7,8 +7,8 @@ type Request struct {
 
 // HeldSecret is one usage-ledger entry.
 type HeldSecret struct {
-	ProjectID  string `json:"projectId"`
-	SecretName string `json:"secretName"`
-	Version int `json:"version"`
-	RefreshHookAppliedVersion *int `json:"refreshHookAppliedVersion,omitempty"`
+	ProjectID                 string `json:"projectId"`
+	SecretName                string `json:"secretName"`
+	Version                   int    `json:"version"`
+	RefreshHookAppliedVersion *int   `json:"refreshHookAppliedVersion,omitempty"`
 }

@@ -6,10 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Per-secret usage reported by the heartbeat. One entry per secret, never removed;
- * holds no secret values.
- */
+/** Per-secret usage for the heartbeat; entries are never removed. */
 final class UsageLedger {
 
     private final ConcurrentHashMap<String, Entry> entries = new ConcurrentHashMap<>();
@@ -27,17 +24,11 @@ final class UsageLedger {
         }
     }
 
-    public void recordHookRegistered(String projectId, String secretName) {
+    /** Sets whether any refresh hook is still registered for the secret. */
+    public void setHookRegistered(String projectId, String secretName, boolean registered) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
-            e.hookCount++;
-        }
-    }
-
-    public void recordHookUnregistered(String projectId, String secretName) {
-        Entry e = entry(projectId, secretName);
-        synchronized (e) {
-            e.hookCount = Math.max(0, e.hookCount - 1);
+            e.hookRegistered = registered;
         }
     }
 
@@ -66,7 +57,7 @@ final class UsageLedger {
         for (Entry e : entries.values()) {
             synchronized (e) {
                 out.add(new HeartbeatRequest.HeldSecret(e.projectId, e.secretName, e.version,
-                        e.hookCount > 0 ? e.hookAppliedVersion : null));
+                        e.hookRegistered ? e.hookAppliedVersion : null));
             }
         }
         return out;
@@ -85,7 +76,7 @@ final class UsageLedger {
         private final String projectId;
         private final String secretName;
         private int version;
-        private int hookCount;
+        private boolean hookRegistered;
         private int hookAppliedVersion;
 
         private Entry(String projectId, String secretName) {

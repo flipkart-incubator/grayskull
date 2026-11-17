@@ -51,7 +51,7 @@ class UsageLedgerTest {
 
     @Test
     void registeredHook_reportsZeroUntilItSucceeds() {
-        ledger.recordHookRegistered("p", "s");
+        ledger.setHookRegistered("p", "s", true);
         HeartbeatRequest.HeldSecret e = only();
         assertEquals(0, e.getVersion());
         assertEquals(0, e.getRefreshHookAppliedVersion());
@@ -59,30 +59,27 @@ class UsageLedgerTest {
 
     @Test
     void hookApplied_advancesOnlyForward() {
-        ledger.recordHookRegistered("p", "s");
+        ledger.setHookRegistered("p", "s", true);
         ledger.recordHookApplied("p", "s", 7);
         ledger.recordHookApplied("p", "s", 6); // an older delivery never lowers it
         assertEquals(7, only().getRefreshHookAppliedVersion());
     }
 
     @Test
-    void hookCount_tracksRegisterAndUnregister_andEntryIsKept() {
-        ledger.recordHookRegistered("p", "s");
-        ledger.recordHookRegistered("p", "s");
+    void hookRegistration_togglesPresenceAndKeepsAppliedVersion() {
+        ledger.setHookRegistered("p", "s", true);
         ledger.recordHookApplied("p", "s", 4);
-        ledger.recordHookUnregistered("p", "s");
-        assertEquals(4, only().getRefreshHookAppliedVersion(), "one hook is still registered");
-        ledger.recordHookUnregistered("p", "s");
-        ledger.recordHookUnregistered("p", "s"); // never below zero
-        assertNull(only().getRefreshHookAppliedVersion(), "no hook left: field is absent");
-        ledger.recordHookRegistered("p", "s");
         assertEquals(4, only().getRefreshHookAppliedVersion());
+        ledger.setHookRegistered("p", "s", false);
+        assertNull(only().getRefreshHookAppliedVersion(), "no hook: field is absent");
+        ledger.setHookRegistered("p", "s", true);
+        assertEquals(4, only().getRefreshHookAppliedVersion(), "applied version survives re-registration");
     }
 
     @Test
     void secretsAreKeptApart() {
         ledger.recordFetch("p", "a", 1);
-        ledger.recordHookRegistered("p", "b");
+        ledger.setHookRegistered("p", "b", true);
         ledger.recordFetch("q", "a", 9);
         assertEquals(3, ledger.snapshot().size());
         assertEquals(1, ledger.version("p", "a"));
@@ -113,7 +110,7 @@ class UsageLedgerTest {
             pool.shutdown();
             assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS));
         }
-        ledger.recordHookRegistered("p", "s");
+        ledger.setHookRegistered("p", "s", true);
         HeartbeatRequest.HeldSecret e = only();
         assertEquals(perThread - 1, e.getVersion());
         assertEquals(perThread - 1, e.getRefreshHookAppliedVersion());

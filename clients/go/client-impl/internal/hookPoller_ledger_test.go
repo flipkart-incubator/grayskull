@@ -36,7 +36,7 @@ func TestInvokeHookSafe_RecordsOutcomeInLedger(t *testing.T) {
 	fails := func(context.Context, models.SecretValue) error { return errors.New("cannot reload pool") }
 	panics := func(context.Context, models.SecretValue) error { panic("nil pool") }
 
-	ledger.RecordHookRegistered("acme", "db")
+	ledger.SetHookRegistered("acme", "db", true)
 	p.invokeHookSafe(context.Background(), "acme:db", ok, models.SecretValue{DataVersion: 4})
 	p.invokeHookSafe(context.Background(), "acme:db", fails, models.SecretValue{DataVersion: 5})
 	p.invokeHookSafe(context.Background(), "acme:db", panics, models.SecretValue{DataVersion: 6})
@@ -66,7 +66,7 @@ func TestPollOnce_RecordsVersionSeenAndHookAppliedInLedger(t *testing.T) {
 	registry := hooks.NewRegistry()
 	registry.Register("acme", "db", func(context.Context, models.SecretValue) error { return nil }, 0)
 	ledger := &UsageLedger{}
-	ledger.RecordHookRegistered("acme", "db")
+	ledger.SetHookRegistered("acme", "db", true)
 	p := newLedgerPoller(client, registry, ledger)
 	defer p.Close()
 	p.Start()

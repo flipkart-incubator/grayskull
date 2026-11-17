@@ -6,9 +6,7 @@ import (
 	"github.com/flipkart-incubator/grayskull/clients/go/client-impl/internal/models/heartbeat"
 )
 
-// UsageLedger keeps per-secret usage for the heartbeat: one entry per secret,
-// never removed, no secret values. The zero value is ready to use; methods on
-// a nil *UsageLedger do nothing.
+// UsageLedger keeps per-secret usage for the heartbeat
 type UsageLedger struct {
 	mu      sync.Mutex
 	entries map[string]*ledgerEntry
@@ -18,7 +16,7 @@ type ledgerEntry struct {
 	projectID          string
 	secretName         string
 	version            int
-	hookCount          int
+	hookRegistered     bool
 	hookAppliedVersion int
 }
 
@@ -32,14 +30,9 @@ func (l *UsageLedger) RecordVersion(projectID, secretName string, version int) {
 	l.update(projectID, secretName, func(e *ledgerEntry) { e.version = max(e.version, version) })
 }
 
-// RecordHookRegistered counts a registered hook.
-func (l *UsageLedger) RecordHookRegistered(projectID, secretName string) {
-	l.update(projectID, secretName, func(e *ledgerEntry) { e.hookCount++ })
-}
-
-// RecordHookUnregistered uncounts a hook, never below zero.
-func (l *UsageLedger) RecordHookUnregistered(projectID, secretName string) {
-	l.update(projectID, secretName, func(e *ledgerEntry) { e.hookCount = max(0, e.hookCount-1) })
+// SetHookRegistered records whether any refresh hook is still registered for the secret.
+func (l *UsageLedger) SetHookRegistered(projectID, secretName string, registered bool) {
+	l.update(projectID, secretName, func(e *ledgerEntry) { e.hookRegistered = registered })
 }
 
 // RecordHookApplied records a successful hook run; failures are not recorded.
@@ -62,8 +55,7 @@ func (l *UsageLedger) Version(projectID, secretName string) int {
 	return 0
 }
 
-// Snapshot returns a copy of all entries; RefreshHookAppliedVersion is nil when
-// no hook is registered.
+// Snapshot returns a copy of all entries.
 func (l *UsageLedger) Snapshot() []heartbeat.HeldSecret {
 	if l == nil {
 		return nil
@@ -73,7 +65,7 @@ func (l *UsageLedger) Snapshot() []heartbeat.HeldSecret {
 	out := make([]heartbeat.HeldSecret, 0, len(l.entries))
 	for _, e := range l.entries {
 		var applied *int
-		if e.hookCount > 0 {
+		if e.hookRegistered {
 			v := e.hookAppliedVersion
 			applied = &v
 		}

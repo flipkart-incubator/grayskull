@@ -142,7 +142,7 @@ final class HookRefreshPoller {
             s.lastKnownVersion.set(initialKnownVersion);
             return s;
         });
-        ledger.recordHookRegistered(projectId, secretName);
+        ledger.setHookRegistered(projectId, secretName, true);
         log.debug("Registered refresh hook for secretRef:{} (totalHooks:{}, initialKnownVersion:{})",
                 secretRef, state.hooks.size(), initialKnownVersion);
         return new DefaultRefreshHandlerRef(secretRef, () -> unregister(secretRef, hook));
@@ -160,7 +160,8 @@ final class HookRefreshPoller {
             return state.hooks.isEmpty() ? null : state;
         });
         if (removedFrom[0] != null) {
-            ledger.recordHookUnregistered(removedFrom[0].projectId, removedFrom[0].secretName);
+            ledger.setHookRegistered(removedFrom[0].projectId, removedFrom[0].secretName,
+                    registry.containsKey(secretRef));
         }
     }
 

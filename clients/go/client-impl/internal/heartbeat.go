@@ -36,9 +36,7 @@ type HeartbeatPoster interface {
 	DoPost(ctx context.Context, url string, jsonBody []byte) (int, error)
 }
 
-// Heartbeat sends the usage-ledger snapshot to POST /v1/client/heartbeat
-// every interval (± 1/24), starting one interval after Start. Failures back
-// off 5m doubling to 1h (± 10%); 404/405/501 wait the full interval.
+// Heartbeat sends the usage-ledger snapshot to POST /v1/client/heartbeat.
 type Heartbeat struct {
 	httpClient      HeartbeatPoster
 	url             string
