@@ -137,3 +137,13 @@ func TestUsageLedger_ConcurrentRecordingKeepsNewestVersion(t *testing.T) {
 	assert.Equal(t, perWorker-1, e.Version)
 	assert.Equal(t, perWorker-1, applied(t, e))
 }
+
+func TestUsageLedger_AddingAHookClearsTheAppliedVersionUntilItRuns(t *testing.T) {
+	var l UsageLedger
+	l.RecordVersion("p", "s", 7)
+	l.RecordHookAdded("p", "s")
+	l.RecordHookApplied("p", "s", 7)
+	assert.Equal(t, 7, applied(t, only(t, &l)))
+	l.RecordHookAdded("p", "s")
+	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion, "the new hook has not applied v7")
+}

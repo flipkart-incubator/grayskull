@@ -35,6 +35,15 @@ final class UsageLedger {
         }
     }
 
+    /** Records a newly added hook; it has applied nothing yet, so the applied version is cleared. */
+    public void recordHookAdded(String projectId, String secretName) {
+        Entry e = entry(projectId, secretName);
+        synchronized (e) {
+            e.hookRegistered = true;
+            e.hookAppliedVersion = 0;
+        }
+    }
+
     /** Records a successful hook run; failures are not recorded. */
     public void recordHookApplied(String projectId, String secretName, int version) {
         Entry e = entry(projectId, secretName);

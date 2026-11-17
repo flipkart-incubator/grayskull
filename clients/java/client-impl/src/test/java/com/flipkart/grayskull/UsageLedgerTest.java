@@ -125,4 +125,14 @@ class UsageLedgerTest {
         assertEquals(perThread - 1, e.getVersion());
         assertEquals(perThread - 1, e.getRefreshHookAppliedVersion());
     }
+
+    @Test
+    void addingAHook_clearsTheAppliedVersionUntilItRuns() {
+        ledger.recordVersion("p", "s", 7);
+        ledger.recordHookAdded("p", "s");
+        ledger.recordHookApplied("p", "s", 7);
+        assertEquals(7, only().getRefreshHookAppliedVersion());
+        ledger.recordHookAdded("p", "s");
+        assertNull(only().getRefreshHookAppliedVersion(), "the new hook has not applied v7");
+    }
 }

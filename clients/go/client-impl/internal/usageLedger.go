@@ -40,6 +40,14 @@ func (l *UsageLedger) SetHookRegistered(projectID, secretName string, registered
 	})
 }
 
+// RecordHookAdded records a newly added hook; it has applied nothing yet, so the applied version is cleared.
+func (l *UsageLedger) RecordHookAdded(projectID, secretName string) {
+	l.update(projectID, secretName, func(e *ledgerEntry) {
+		e.hookRegistered = true
+		e.hookAppliedVersion = 0
+	})
+}
+
 // RecordHookApplied records a successful hook run; failures are not recorded.
 func (l *UsageLedger) RecordHookApplied(projectID, secretName string, version int) {
 	l.update(projectID, secretName, func(e *ledgerEntry) {

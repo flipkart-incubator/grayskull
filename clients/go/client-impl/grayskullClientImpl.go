@@ -246,7 +246,7 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 	c.hookMu.Lock()
 	seed := c.ledger.Version(parts[0], parts[1])
 	ref := c.registry.Register(parts[0], parts[1], hook, seed)
-	c.ledger.SetHookRegistered(parts[0], parts[1], true)
+	c.ledger.RecordHookAdded(parts[0], parts[1])
 	c.hookMu.Unlock()
 	wrapped := &ledgerHandlerRef{RefreshHandlerRef: ref, ledger: &c.ledger, registry: c.registry, mu: &c.hookMu,
 		projectID: parts[0], secretName: parts[1]}

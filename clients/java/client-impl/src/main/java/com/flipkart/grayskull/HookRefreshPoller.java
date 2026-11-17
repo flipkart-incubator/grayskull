@@ -140,7 +140,7 @@ final class HookRefreshPoller {
                 s.lastKnownVersion.set(initialKnownVersion);
             }
             s.hooks.add(hook);
-            ledger.setHookRegistered(projectId, secretName, true);
+            ledger.recordHookAdded(projectId, secretName);
             return s;
         });
         log.debug("Registered refresh hook for secretRef:{} (totalHooks:{}, initialKnownVersion:{})",
