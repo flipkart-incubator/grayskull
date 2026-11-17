@@ -315,7 +315,6 @@ final class HookRefreshPoller {
                 ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion());
             } catch (Exception e) {
                 success = false;
-                ledger.recordHookFailed(state.projectId, state.secretName, e);
                 log.error("Consumer hook failed for {}", secretRef, e);
             } finally {
                 long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);

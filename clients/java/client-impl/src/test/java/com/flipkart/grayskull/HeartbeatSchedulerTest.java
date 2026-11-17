@@ -36,7 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HeartbeatSchedulerTest {
 
-    private static final String SDK_VERSION = "0.3.0-test";
 
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -85,13 +84,13 @@ class HeartbeatSchedulerTest {
     private static List<HeartbeatRequest.HeldSecret> entries(int n) {
         List<HeartbeatRequest.HeldSecret> out = new ArrayList<>();
         for (int i = 0; i < n; i++) {
-            out.add(new HeartbeatRequest.HeldSecret("p", "s" + i, i + 1, i % 2 == 0, 0, 0, 0, 0, 0, 0, null));
+            out.add(new HeartbeatRequest.HeldSecret("p", "s" + i, i + 1, i % 2 == 0 ? i : null));
         }
         return out;
     }
 
     private HeartbeatScheduler newScheduler(int intervalSeconds, Supplier<List<HeartbeatRequest.HeldSecret>> held) {
-        return new HeartbeatScheduler(httpClient, objectMapper, baseUrl, intervalSeconds, SDK_VERSION, held);
+        return new HeartbeatScheduler(httpClient, objectMapper, baseUrl, intervalSeconds, held);
     }
 
     /** {@code beatOnce()} and its {@code Outcome} enum are private; returns the outcome's name. */
@@ -161,8 +160,8 @@ class HeartbeatSchedulerTest {
         assertEquals(3, secrets.size());
         assertEquals("s0", secrets.get(0).get("secretName").asText());
         assertEquals(1, secrets.get(0).get("version").asInt());
-        assertTrue(secrets.get(0).get("refreshHook").asBoolean());
-        assertFalse(secrets.get(1).get("refreshHook").asBoolean());
+        assertEquals(0, secrets.get(0).get("refreshHookAppliedVersion").asInt());
+        assertFalse(secrets.get(1).has("refreshHookAppliedVersion"), "no hook: field is absent");
         assertFalse(secrets.get(0).has("lastKnownVersion"));
     }
 
@@ -300,7 +299,7 @@ class HeartbeatSchedulerTest {
                     }
                 });
         ObjectMapper failingMapper = new ObjectMapper().registerModule(failing);
-        scheduler = new HeartbeatScheduler(httpClient, failingMapper, baseUrl, 60, SDK_VERSION, () -> entries(1));
+        scheduler = new HeartbeatScheduler(httpClient, failingMapper, baseUrl, 60, () -> entries(1));
 
         assertEquals("FAILED", beatOnce(scheduler));
         assertEquals(0, server.getRequestCount());
@@ -346,23 +345,18 @@ class HeartbeatSchedulerTest {
     @Test
     void constructor_invalidBaseUrl_throws() {
         assertThrows(IllegalStateException.class,
-                () -> new HeartbeatScheduler(httpClient, objectMapper, "not a url", 60, SDK_VERSION, Collections::emptyList));
+                () -> new HeartbeatScheduler(httpClient, objectMapper, "not a url", 60, Collections::emptyList));
     }
 
     @Test
-    void beatOnce_postsV2Envelope() throws Exception {
-        scheduler = newScheduler(60, () -> entries(60));
+    void beatOnce_bodyHoldsOnlySecrets() throws Exception {
+        scheduler = newScheduler(60, () -> entries(2));
         assertEquals("SENT", beatOnce(scheduler));
-        JsonNode first = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
-        JsonNode second = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
-        for (JsonNode body : new JsonNode[]{first, second}) {
-            assertEquals(1, body.get("schemaVersion").asInt());
-            assertEquals("PERIODIC", body.get("trigger").asText());
-            assertEquals("java", body.get("sdk").get("language").asText());
-            assertEquals(SDK_VERSION, body.get("sdk").get("version").asText());
-            assertTrue(body.get("sentAt").asLong() > 0);
-        }
-        assertEquals(first.get("sentAt").asLong(), second.get("sentAt").asLong(), "chunks of one beat share sentAt");
+        JsonNode body = objectMapper.readTree(server.takeRequest().getBody().readUtf8());
+        assertEquals(1, body.size(), "body is just {secrets: [...]}");
+        JsonNode first = body.get("secrets").get(0);
+        assertEquals(4, first.size(), "projectId, secretName, version, refreshHookAppliedVersion");
+        assertEquals(3, body.get("secrets").get(1).size(), "no hook: three fields");
     }
 
     @Test

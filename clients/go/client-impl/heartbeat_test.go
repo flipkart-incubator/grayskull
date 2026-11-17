@@ -38,12 +38,12 @@ func entryFor(t *testing.T, c *GrayskullClientImpl, secretName string) heartbeat
 
 func TestRegisterRefreshHook_SeedsFromLedgerAndCountsHook(t *testing.T) {
 	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), &MockGrayskullHTTPClient{}, nil)
-	c.ledger.RecordGet("proj", "db-password", 7, true)
+	c.ledger.RecordFetch("proj", "db-password", 7)
 
 	ref, err := c.RegisterRefreshHook(context.Background(), "proj:db-password", noopHook)
 	require.NoError(t, err)
 	assert.EqualValues(t, 7, c.registry.Get("proj:db-password").LastKnownVersion.Load(), "seeded from the ledger")
-	assert.True(t, entryFor(t, c, "db-password").RefreshHook)
+	assert.NotNil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion)
 	assert.Equal(t, "proj:db-password", ref.GetSecretRef())
 	assert.True(t, ref.IsActive())
 
@@ -51,7 +51,7 @@ func TestRegisterRefreshHook_SeedsFromLedgerAndCountsHook(t *testing.T) {
 	ref.Unregister() // idempotent: must not drive the count below zero
 	assert.False(t, ref.IsActive())
 	assert.Nil(t, c.registry.Get("proj:db-password"))
-	assert.False(t, entryFor(t, c, "db-password").RefreshHook, "the ledger entry is kept, without a hook")
+	assert.Nil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion, "the ledger entry is kept, without a hook")
 }
 
 func TestRegisterRefreshHook_HookOnlySecretIsInLedger(t *testing.T) {
@@ -61,12 +61,12 @@ func TestRegisterRefreshHook_HookOnlySecretIsInLedger(t *testing.T) {
 
 	e := entryFor(t, c, "api:key")
 	assert.Equal(t, "proj", e.ProjectID)
-	assert.True(t, e.RefreshHook)
-	assert.Zero(t, e.GetCount)
+	require.NotNil(t, e.RefreshHookAppliedVersion)
+	assert.Zero(t, *e.RefreshHookAppliedVersion, "hook registered, not yet applied")
 	assert.Zero(t, e.Version)
 }
 
-func TestGetSecret_FailureIsRecordedAndReturnedUnchanged(t *testing.T) {
+func TestGetSecret_FailureIsReturnedUnchangedAndNotRecorded(t *testing.T) {
 	httpClient := &MockGrayskullHTTPClient{}
 	httpClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).Return(404, errors.New("not found"))
 	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), httpClient,
@@ -75,11 +75,7 @@ func TestGetSecret_FailureIsRecordedAndReturnedUnchanged(t *testing.T) {
 	_, err := c.GetSecret(context.Background(), "proj:missing")
 	require.Error(t, err)
 
-	e := entryFor(t, c, "missing")
-	assert.Zero(t, e.GetCount)
-	assert.EqualValues(t, 1, e.ErrorCount)
-	assert.Zero(t, e.Version)
-	assert.Positive(t, e.LastAccessAt)
+	assert.Empty(t, c.ledger.Snapshot(), "only successful fetches are recorded")
 }
 
 func TestGetSecret_MalformedRefCreatesNoEntry(t *testing.T) {
@@ -177,24 +173,17 @@ func TestHeartbeat_EndToEnd_ReportsFetchedHookedAndFailedSecrets(t *testing.T) {
 
 	require.Eventually(t, func() bool { return len(srv.received()) > 0 }, 5*time.Second, 20*time.Millisecond)
 	body := srv.received()[0]
-	assert.Equal(t, 1, body.SchemaVersion)
-	assert.Equal(t, "PERIODIC", body.Trigger)
-	assert.Equal(t, "go", body.SDK.Language)
-	assert.Equal(t, GetVersion(), body.SDK.Version)
 
 	bySecret := map[string]heartbeat.HeldSecret{}
 	for _, s := range body.Secrets {
 		bySecret[s.SecretName] = s
 	}
-	require.Len(t, bySecret, 3)
-	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "db-password", Version: 7, RefreshHook: true,
-		GetCount: 1, FirstAccessAt: bySecret["db-password"].FirstAccessAt, LastAccessAt: bySecret["db-password"].LastAccessAt},
-		bySecret["db-password"])
-	assert.Positive(t, bySecret["db-password"].FirstAccessAt)
-	assert.True(t, bySecret["hook-only"].RefreshHook)
-	assert.Zero(t, bySecret["hook-only"].GetCount)
-	assert.EqualValues(t, 1, bySecret["missing"].ErrorCount)
-	assert.False(t, bySecret["missing"].RefreshHook)
+	require.Len(t, bySecret, 2, "a failed fetch adds no entry")
+	zero := 0
+	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "db-password", Version: 7,
+		RefreshHookAppliedVersion: &zero}, bySecret["db-password"])
+	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "hook-only",
+		RefreshHookAppliedVersion: &zero}, bySecret["hook-only"])
 }
 
 func TestHeartbeat_EndToEnd_UnsupportedServerNeverReachesCaller(t *testing.T) {

@@ -342,20 +342,14 @@ func (p *Poller) resubmitIfPending(secretRef string, state *hooks.SecretState, r
 func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiHooks.SecretRefreshHook, value apiModels.SecretValue) {
 	startTime := time.Now()
 	success := true
-	failure := ""
 	defer func() {
 		if r := recover(); r != nil {
 			success = false
-			failure = fmt.Sprintf("panic: %v", r)
 			p.logger.Error("consumer hook panicked",
 				"secretRef", secretRef, "panic", r, "stack", string(debug.Stack()))
 		}
-		if projectID, secretName, ok := strings.Cut(secretRef, ":"); ok {
-			if success {
-				p.ledger.RecordHookApplied(projectID, secretName, value.DataVersion)
-			} else {
-				p.ledger.RecordHookFailed(projectID, secretName, failure)
-			}
+		if projectID, secretName, ok := strings.Cut(secretRef, ":"); ok && success {
+			p.ledger.RecordHookApplied(projectID, secretName, value.DataVersion)
 		}
 		if p.metricsRecorder != nil {
 			code := http.StatusOK
@@ -369,7 +363,6 @@ func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiH
 	}()
 	if err := hook(ctx, value); err != nil {
 		success = false
-		failure = err.Error()
 		p.logger.Error("consumer hook returned error", "secretRef", secretRef, "err", err)
 	}
 }

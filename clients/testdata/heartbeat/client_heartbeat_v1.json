@@ -1,34 +1,7 @@
 {
-  "schemaVersion": 1,
-  "trigger": "PERIODIC",
-  "sdk": { "language": "java", "version": "0.3.0" },
-  "sentAt": 1790000000000,
   "secrets": [
-    {
-      "projectId": "p",
-      "secretName": "s",
-      "version": 5,
-      "refreshHook": true,
-      "getCount": 120,
-      "errorCount": 2,
-      "firstAccessAt": 1789990000000,
-      "lastAccessAt": 1789999990000,
-      "hookAppliedVersion": 5,
-      "hookFailureCount": 0,
-      "lastHookError": null
-    },
-    {
-      "projectId": "p",
-      "secretName": "hook-only",
-      "version": 0,
-      "refreshHook": true,
-      "getCount": 0,
-      "errorCount": 0,
-      "firstAccessAt": 0,
-      "lastAccessAt": 0,
-      "hookAppliedVersion": 0,
-      "hookFailureCount": 1,
-      "lastHookError": "java.lang.IllegalStateException: cannot reload pool"
-    }
+    { "projectId": "p", "secretName": "s", "version": 5, "refreshHookAppliedVersion": 5 },
+    { "projectId": "p", "secretName": "hook-pending", "version": 3, "refreshHookAppliedVersion": 0 },
+    { "projectId": "p", "secretName": "no-hook", "version": 2 }
   ]
 }

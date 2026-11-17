@@ -128,7 +128,6 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 			BaseURL:         config.Host,
 			HTTPClient:      poster,
 			Interval:        time.Duration(config.HeartbeatIntervalSeconds) * time.Second,
-			SDKVersion:      GetVersion(),
 			HeldSecrets:     client.ledger.Snapshot,
 			MetricsRecorder: metricsRecorder,
 			Logger:          logger.With("subcomponent", "heartbeat"),
@@ -192,10 +191,6 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 		return nil, errors.NewGrayskullError(http.StatusBadRequest, fmt.Sprintf("projectId and secretName cannot be empty in secretRef: %s", secretRef))
 	}
 
-	// Record every validated call, success or failure.
-	fetchedVersion, fetched := 0, false
-	defer func() { g.ledger.RecordGet(projectID, secretName, fetchedVersion, fetched) }()
-
 	encodedProjectID := url.PathEscape(projectID)
 	encodedSecretName := url.PathEscape(secretName)
 	getSecretUrl := fmt.Sprintf("%s/v1/projects/%s/secrets/%s/data", g.baseURL, encodedProjectID, encodedSecretName)
@@ -217,7 +212,7 @@ func (g *GrayskullClientImpl) GetSecret(ctx context.Context, secretRef string) (
 	g.metricsRecorder.RecordRequest("get_secret", statusCode, time.Since(startTime))
 
 	// Lets a later RegisterRefreshHook skip versions already seen.
-	fetchedVersion, fetched = data.DataVersion, true
+	g.ledger.RecordFetch(projectID, secretName, data.DataVersion)
 
 	return &data, nil
 }

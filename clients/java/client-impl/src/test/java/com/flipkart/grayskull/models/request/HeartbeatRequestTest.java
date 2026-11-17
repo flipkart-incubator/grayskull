@@ -10,10 +10,11 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The v2 heartbeat body must match the shared fixture in {@code clients/testdata/heartbeat},
+ * The heartbeat body must match the shared fixture in {@code clients/testdata/heartbeat},
  * which the Go SDK validates too, so both SDKs send an identical payload.
  */
 class HeartbeatRequestTest {
@@ -27,19 +28,21 @@ class HeartbeatRequestTest {
     void serializesToSharedFixture() throws Exception {
         assertTrue(Files.exists(FIXTURE), "shared fixture missing: " + FIXTURE.toAbsolutePath());
 
-        HeartbeatRequest request = new HeartbeatRequest(
-                HeartbeatRequest.SCHEMA_VERSION,
-                HeartbeatRequest.TRIGGER_PERIODIC,
-                new HeartbeatRequest.Sdk("java", "0.3.0"),
-                1790000000000L,
-                Arrays.asList(
-                        new HeartbeatRequest.HeldSecret("p", "s", 5, true, 120, 2,
-                                1789990000000L, 1789999990000L, 5, 0, null),
-                        new HeartbeatRequest.HeldSecret("p", "hook-only", 0, true, 0, 0,
-                                0, 0, 0, 1, "java.lang.IllegalStateException: cannot reload pool")));
+        HeartbeatRequest request = new HeartbeatRequest(Arrays.asList(
+                new HeartbeatRequest.HeldSecret("p", "s", 5, 5),
+                new HeartbeatRequest.HeldSecret("p", "hook-pending", 3, 0),
+                new HeartbeatRequest.HeldSecret("p", "no-hook", 2, null)));
 
         JsonNode expected = objectMapper.readTree(FIXTURE.toFile());
         JsonNode actual = objectMapper.readTree(objectMapper.writeValueAsString(request));
         assertEquals(expected, actual);
+    }
+
+    @Test
+    void noHook_omitsRefreshHookAppliedVersion() throws Exception {
+        JsonNode node = objectMapper.readTree(objectMapper.writeValueAsString(
+                new HeartbeatRequest.HeldSecret("p", "s", 1, null)));
+        assertFalse(node.has("refreshHookAppliedVersion"));
+        assertEquals(3, node.size());
     }
 }

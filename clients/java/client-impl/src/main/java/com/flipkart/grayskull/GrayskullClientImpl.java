@@ -91,7 +91,6 @@ public final class GrayskullClientImpl implements GrayskullClient {
             this.heartbeatScheduler = new HeartbeatScheduler(
                     httpClient, objectMapper, baseUrl,
                     grayskullClientConfiguration.getHeartbeatIntervalSeconds(),
-                    sdkVersion,
                     ledger::snapshot);
             this.heartbeatScheduler.start();
         } else {
@@ -118,9 +117,6 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
         long startTime = System.nanoTime();
         int statusCode = 0;
-        String projectId = null;
-        String secretName = null;
-        Integer fetchedVersion = null;
 
         try {
             if (secretRef == null || secretRef.isEmpty()) {
@@ -128,8 +124,8 @@ public final class GrayskullClientImpl implements GrayskullClient {
             }
 
             String[] parts = parseSecretRef(secretRef);
-            projectId = parts[0];
-            secretName = parts[1];
+            String projectId = parts[0];
+            String secretName = parts[1];
 
             MDC.put(MDCKeys.PROJECT_ID, projectId);
             MDC.put(MDCKeys.SECRET_NAME, secretName);
@@ -145,7 +141,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             if (secretValue == null) {
                 throw new GrayskullException(500, "No data in response");
             }
-            fetchedVersion = secretValue.getDataVersion();
+            ledger.recordFetch(projectId, secretName, secretValue.getDataVersion());
             return secretValue;
         } catch (JsonProcessingException e) {
             throw new GrayskullException("Failed to parse response: ", e);
@@ -153,10 +149,6 @@ public final class GrayskullClientImpl implements GrayskullClient {
             statusCode = e.getStatusCode();
             throw e;
         } finally {
-            // Record every validated call, success or failure.
-            if (projectId != null) {
-                ledger.recordGet(projectId, secretName, fetchedVersion);
-            }
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
             MetricsPublisher.getInstance().recordRequest("getSecret." + secretRef, statusCode, durationMs);
             MDC.remove(MDCKeys.PROJECT_ID);

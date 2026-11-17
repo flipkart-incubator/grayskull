@@ -13,22 +13,17 @@ import (
 // fixture is shared with the Java SDK (clients/testdata/heartbeat), so both SDKs send an identical payload.
 var fixture = filepath.Join("..", "..", "..", "..", "..", "testdata", "heartbeat", "client_heartbeat_v1.json")
 
+func intPtr(v int) *int { return &v }
+
 func TestRequest_SerializesToSharedFixture(t *testing.T) {
 	want, err := os.ReadFile(fixture)
 	require.NoError(t, err, "shared fixture missing")
 
-	lastErr := "java.lang.IllegalStateException: cannot reload pool"
-	got, err := json.Marshal(Request{
-		SchemaVersion: SchemaVersion,
-		Trigger:       TriggerPeriodic,
-		SDK:           SDK{Language: "java", Version: "0.3.0"},
-		SentAt:        1790000000000,
-		Secrets: []HeldSecret{
-			{ProjectID: "p", SecretName: "s", Version: 5, RefreshHook: true, GetCount: 120, ErrorCount: 2,
-				FirstAccessAt: 1789990000000, LastAccessAt: 1789999990000, HookAppliedVersion: 5},
-			{ProjectID: "p", SecretName: "hook-only", RefreshHook: true, HookFailureCount: 1, LastHookError: &lastErr},
-		},
-	})
+	got, err := json.Marshal(Request{Secrets: []HeldSecret{
+		{ProjectID: "p", SecretName: "s", Version: 5, RefreshHookAppliedVersion: intPtr(5)},
+		{ProjectID: "p", SecretName: "hook-pending", Version: 3, RefreshHookAppliedVersion: intPtr(0)},
+		{ProjectID: "p", SecretName: "no-hook", Version: 2},
+	}})
 	require.NoError(t, err)
 	assert.JSONEq(t, string(want), string(got))
 }
@@ -42,4 +37,10 @@ func TestRequest_FixtureRoundTrips(t *testing.T) {
 	got, err := json.Marshal(req)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(want), string(got), "every fixture field maps to a Request field")
+}
+
+func TestHeldSecret_NoHookOmitsField(t *testing.T) {
+	got, err := json.Marshal(HeldSecret{ProjectID: "p", SecretName: "s", Version: 1})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"projectId":"p","secretName":"s","version":1}`, string(got))
 }

@@ -19,6 +19,7 @@ type heartbeatCall struct {
 	url       string
 	requestID any
 	body      heartbeat.Request
+	raw       []byte
 	at        time.Time
 }
 
@@ -37,7 +38,7 @@ func (c *recordingClient) DoPost(ctx context.Context, url string, body []byte) (
 		return 0, err
 	}
 	c.mu.Lock()
-	c.calls = append(c.calls, heartbeatCall{url: url, requestID: ctx.Value(constants.GrayskullRequestID), body: req, at: time.Now()})
+	c.calls = append(c.calls, heartbeatCall{url: url, requestID: ctx.Value(constants.GrayskullRequestID), body: req, raw: body, at: time.Now()})
 	fail := len(c.calls) <= c.failFirst
 	status := c.failStatus
 	c.mu.Unlock()
@@ -64,14 +65,18 @@ func held(n int) func() []heartbeat.HeldSecret {
 	return func() []heartbeat.HeldSecret {
 		out := make([]heartbeat.HeldSecret, n)
 		for i := range out {
-			out[i] = heartbeat.HeldSecret{ProjectID: "p", SecretName: fmt.Sprintf("s%d", i), Version: i + 1, RefreshHook: i%2 == 0}
+			out[i] = heartbeat.HeldSecret{ProjectID: "p", SecretName: fmt.Sprintf("s%d", i), Version: i + 1}
+			if i%2 == 0 {
+				applied := i
+				out[i].RefreshHookAppliedVersion = &applied
+			}
 		}
 		return out
 	}
 }
 
 func newTestHeartbeat(client HeartbeatPoster, interval time.Duration, secrets func() []heartbeat.HeldSecret) *Heartbeat {
-	return NewHeartbeat(HeartbeatConfig{BaseURL: "http://gs", HTTPClient: client, Interval: interval, SDKVersion: "0.3.0", HeldSecrets: secrets})
+	return NewHeartbeat(HeartbeatConfig{BaseURL: "http://gs", HTTPClient: client, Interval: interval, HeldSecrets: secrets})
 }
 
 func TestHeartbeatBeat_NothingHeld_SendsNothing(t *testing.T) {
@@ -80,7 +85,7 @@ func TestHeartbeatBeat_NothingHeld_SendsNothing(t *testing.T) {
 	assert.Empty(t, c.snapshot())
 }
 
-func TestHeartbeatBeat_PostsV2Payload(t *testing.T) {
+func TestHeartbeatBeat_PostsSecretsOnly(t *testing.T) {
 	c := &recordingClient{}
 	require.Equal(t, beatSent, newTestHeartbeat(c, time.Hour, held(2)).beat(context.Background()))
 
@@ -89,14 +94,13 @@ func TestHeartbeatBeat_PostsV2Payload(t *testing.T) {
 	assert.Equal(t, "http://gs/v1/client/heartbeat", calls[0].url)
 	assert.NotEmpty(t, calls[0].requestID)
 	body := calls[0].body
-	assert.Equal(t, 1, body.SchemaVersion)
-	assert.Equal(t, "PERIODIC", body.Trigger)
-	assert.Equal(t, heartbeat.SDK{Language: "go", Version: "0.3.0"}, body.SDK)
-	assert.Positive(t, body.SentAt)
+	zero := 0
 	assert.Equal(t, []heartbeat.HeldSecret{
-		{ProjectID: "p", SecretName: "s0", Version: 1, RefreshHook: true},
-		{ProjectID: "p", SecretName: "s1", Version: 2, RefreshHook: false},
+		{ProjectID: "p", SecretName: "s0", Version: 1, RefreshHookAppliedVersion: &zero},
+		{ProjectID: "p", SecretName: "s1", Version: 2},
 	}, body.Secrets)
+	assert.JSONEq(t, `{"secrets":[{"projectId":"p","secretName":"s0","version":1,"refreshHookAppliedVersion":0},`+
+		`{"projectId":"p","secretName":"s1","version":2}]}`, string(calls[0].raw), "no envelope, no hook field without a hook")
 }
 
 func TestHeartbeatBeat_ChunksAtBatchSizeAndReportsFailure(t *testing.T) {
@@ -109,7 +113,6 @@ func TestHeartbeatBeat_ChunksAtBatchSizeAndReportsFailure(t *testing.T) {
 	for i, want := range []int{50, 50, 20} {
 		assert.Len(t, calls[i].body.Secrets, want)
 	}
-	assert.Equal(t, calls[0].body.SentAt, calls[2].body.SentAt, "chunks of one beat share sentAt")
 }
 
 func TestHeartbeatBeat_UnsupportedStatusStopsTheRound(t *testing.T) {

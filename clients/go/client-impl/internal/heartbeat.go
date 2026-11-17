@@ -18,7 +18,6 @@ import (
 
 const (
 	heartbeatPath        = "/v1/client/heartbeat"
-	heartbeatSDKLanguage = "go"
 	heartbeatBackoffBase = 5 * time.Minute
 	heartbeatBackoffCap  = time.Hour
 )
@@ -43,7 +42,6 @@ type HeartbeatPoster interface {
 type Heartbeat struct {
 	httpClient      HeartbeatPoster
 	url             string
-	sdk             heartbeat.SDK
 	interval        time.Duration
 	heldSecrets     func() []heartbeat.HeldSecret
 	metricsRecorder metrics.MetricsRecorder
@@ -62,7 +60,6 @@ type HeartbeatConfig struct {
 	BaseURL         string
 	HTTPClient      HeartbeatPoster
 	Interval        time.Duration
-	SDKVersion      string
 	HeldSecrets     func() []heartbeat.HeldSecret
 	MetricsRecorder metrics.MetricsRecorder
 	Logger          *slog.Logger
@@ -82,7 +79,6 @@ func NewHeartbeat(cfg HeartbeatConfig) *Heartbeat {
 	return &Heartbeat{
 		httpClient:      cfg.HTTPClient,
 		url:             cfg.BaseURL + heartbeatPath,
-		sdk:             heartbeat.SDK{Language: heartbeatSDKLanguage, Version: cfg.SDKVersion},
 		interval:        interval,
 		heldSecrets:     cfg.HeldSecrets,
 		metricsRecorder: cfg.MetricsRecorder,
@@ -142,11 +138,10 @@ func (h *Heartbeat) beat(ctx context.Context) beatOutcome {
 	if len(held) == 0 {
 		return beatSent
 	}
-	sentAt := time.Now().UnixMilli()
 	result := beatSent
 	for from := 0; from < len(held); from += maxBatchSize {
 		to := min(from+maxBatchSize, len(held))
-		switch h.send(ctx, held[from:to], sentAt) {
+		switch h.send(ctx, held[from:to]) {
 		case beatUnsupported:
 			return beatUnsupported
 		case beatFailed:
@@ -156,7 +151,7 @@ func (h *Heartbeat) beat(ctx context.Context) beatOutcome {
 	return result
 }
 
-func (h *Heartbeat) send(ctx context.Context, chunk []heartbeat.HeldSecret, sentAt int64) beatOutcome {
+func (h *Heartbeat) send(ctx context.Context, chunk []heartbeat.HeldSecret) beatOutcome {
 	start := time.Now()
 	status := http.StatusInternalServerError
 	defer func() {
@@ -166,13 +161,7 @@ func (h *Heartbeat) send(ctx context.Context, chunk []heartbeat.HeldSecret, sent
 	}()
 
 	// Marshal cannot fail for this type.
-	body, _ := json.Marshal(heartbeat.Request{
-		SchemaVersion: heartbeat.SchemaVersion,
-		Trigger:       heartbeat.TriggerPeriodic,
-		SDK:           h.sdk,
-		SentAt:        sentAt,
-		Secrets:       chunk,
-	})
+	body, _ := json.Marshal(heartbeat.Request{Secrets: chunk})
 	ctx = context.WithValue(ctx, constants.GrayskullRequestID, uuid.NewString())
 	code, err := h.httpClient.DoPost(ctx, h.url, body)
 	if code != 0 {

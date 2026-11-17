@@ -29,7 +29,6 @@ final class HeartbeatScheduler {
     private static final Logger log = LoggerFactory.getLogger(HeartbeatScheduler.class);
 
     private static final String HEARTBEAT_PATH = "v1/client/heartbeat";
-    private static final String SDK_LANGUAGE = "java";
 
     private static final long BACKOFF_BASE_MILLIS = TimeUnit.MINUTES.toMillis(5);
     private static final long BACKOFF_CAP_MILLIS = TimeUnit.MINUTES.toMillis(60);
@@ -41,7 +40,6 @@ final class HeartbeatScheduler {
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String heartbeatUrl;
-    private final HeartbeatRequest.Sdk sdk;
     private final Supplier<List<HeartbeatRequest.HeldSecret>> heldSecrets;
     private final long intervalMillis;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -54,12 +52,11 @@ final class HeartbeatScheduler {
     private boolean unsupportedLogged;
 
     public HeartbeatScheduler(GrayskullHttpClient httpClient, ObjectMapper objectMapper, String baseUrl,
-                              int intervalSeconds, String sdkVersion,
+                              int intervalSeconds,
                               Supplier<List<HeartbeatRequest.HeldSecret>> heldSecrets) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.heartbeatUrl = buildHeartbeatUrl(baseUrl);
-        this.sdk = new HeartbeatRequest.Sdk(SDK_LANGUAGE, sdkVersion);
         this.heldSecrets = heldSecrets;
         this.intervalMillis = TimeUnit.SECONDS.toMillis(intervalSeconds);
     }
@@ -104,10 +101,9 @@ final class HeartbeatScheduler {
         if (held.isEmpty()) {
             return Outcome.SENT;
         }
-        long sentAt = System.currentTimeMillis();
         Outcome result = Outcome.SENT;
         for (int from = 0; from < held.size(); from += MAX_BATCH_SECRETS) {
-            Outcome chunk = send(held.subList(from, Math.min(from + MAX_BATCH_SECRETS, held.size())), sentAt);
+            Outcome chunk = send(held.subList(from, Math.min(from + MAX_BATCH_SECRETS, held.size())));
             if (chunk == Outcome.UNSUPPORTED) {
                 return Outcome.UNSUPPORTED;
             }
@@ -118,13 +114,12 @@ final class HeartbeatScheduler {
         return result;
     }
 
-    private Outcome send(List<HeartbeatRequest.HeldSecret> chunk, long sentAt) {
+    private Outcome send(List<HeartbeatRequest.HeldSecret> chunk) {
         MDC.put(MDCKeys.GRAYSKULL_REQUEST_ID, UUID.randomUUID().toString());
         long start = System.nanoTime();
         int status = 500;
         try {
-            String body = objectMapper.writeValueAsString(new HeartbeatRequest(
-                    HeartbeatRequest.SCHEMA_VERSION, HeartbeatRequest.TRIGGER_PERIODIC, sdk, sentAt, chunk));
+            String body = objectMapper.writeValueAsString(new HeartbeatRequest(chunk));
             status = httpClient.doPost(heartbeatUrl, body).getStatusCode();
             return Outcome.SENT;
         } catch (Exception e) {

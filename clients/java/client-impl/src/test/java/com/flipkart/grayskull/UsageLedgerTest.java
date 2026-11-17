@@ -8,17 +8,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UsageLedgerTest {
 
-    private final AtomicLong now = new AtomicLong(1_000);
-    private final UsageLedger ledger = ledgerWithClock(now::get);
+    private final UsageLedger ledger = new UsageLedger();
 
     private HeartbeatRequest.HeldSecret only() {
         List<HeartbeatRequest.HeldSecret> snapshot = ledger.snapshot();
@@ -33,92 +30,60 @@ class UsageLedgerTest {
     }
 
     @Test
-    void recordGet_countsSuccessAndFailureWithTimestamps() {
-        ledger.recordGet("p", "s", 3);
-        now.set(2_000);
-        ledger.recordGet("p", "s", null);
-        now.set(3_000);
-        ledger.recordGet("p", "s", 4);
+    void fetchedSecret_withoutHook_hasNoRefreshHookAppliedVersion() {
+        ledger.recordFetch("p", "s", 3);
 
         HeartbeatRequest.HeldSecret e = only();
         assertEquals("p", e.getProjectId());
         assertEquals("s", e.getSecretName());
-        assertEquals(2, e.getGetCount());
-        assertEquals(1, e.getErrorCount());
-        assertEquals(1_000, e.getFirstAccessAt());
-        assertEquals(3_000, e.getLastAccessAt());
-        assertEquals(4, e.getVersion());
-        assertFalse(e.isRefreshHook());
-    }
-
-    @Test
-    void failedGet_doesNotChangeVersion() {
-        ledger.recordGet("p", "s", null);
-        assertEquals(0, ledger.version("p", "s"));
-        assertEquals(1, only().getErrorCount());
+        assertEquals(3, e.getVersion());
+        assertNull(e.getRefreshHookAppliedVersion());
     }
 
     @Test
     void version_isNewestHeldFromFetchOrPoller() {
-        ledger.recordGet("p", "s", 5);
+        ledger.recordFetch("p", "s", 5);
         ledger.recordVersion("p", "s", 8);
-        ledger.recordGet("p", "s", 6); // a stale read never lowers the held version
+        ledger.recordFetch("p", "s", 6); // a stale read never lowers the held version
         assertEquals(8, ledger.version("p", "s"));
         assertEquals(8, only().getVersion());
     }
 
     @Test
-    void hookOnly_entryIsReportedWithRefreshHook() {
+    void registeredHook_reportsZeroUntilItSucceeds() {
         ledger.recordHookRegistered("p", "s");
         HeartbeatRequest.HeldSecret e = only();
-        assertTrue(e.isRefreshHook());
-        assertEquals(0, e.getGetCount());
-        assertEquals(0, e.getFirstAccessAt());
+        assertEquals(0, e.getVersion());
+        assertEquals(0, e.getRefreshHookAppliedVersion());
+    }
+
+    @Test
+    void hookApplied_advancesOnlyForward() {
+        ledger.recordHookRegistered("p", "s");
+        ledger.recordHookApplied("p", "s", 7);
+        ledger.recordHookApplied("p", "s", 6); // an older delivery never lowers it
+        assertEquals(7, only().getRefreshHookAppliedVersion());
     }
 
     @Test
     void hookCount_tracksRegisterAndUnregister_andEntryIsKept() {
         ledger.recordHookRegistered("p", "s");
         ledger.recordHookRegistered("p", "s");
+        ledger.recordHookApplied("p", "s", 4);
         ledger.recordHookUnregistered("p", "s");
-        assertTrue(only().isRefreshHook());
+        assertEquals(4, only().getRefreshHookAppliedVersion(), "one hook is still registered");
         ledger.recordHookUnregistered("p", "s");
         ledger.recordHookUnregistered("p", "s"); // never below zero
-        assertFalse(only().isRefreshHook());
+        assertNull(only().getRefreshHookAppliedVersion(), "no hook left: field is absent");
         ledger.recordHookRegistered("p", "s");
-        assertTrue(only().isRefreshHook());
-    }
-
-    @Test
-    void hookOutcome_recordsAppliedVersionAndFailures() {
-        ledger.recordHookApplied("p", "s", 7);
-        ledger.recordHookFailed("p", "s", new IllegalStateException("boom"));
-        ledger.recordHookApplied("p", "s", 6); // older delivery never lowers it
-
-        HeartbeatRequest.HeldSecret e = only();
-        assertEquals(7, e.getHookAppliedVersion());
-        assertEquals(1, e.getHookFailureCount());
-        assertEquals("java.lang.IllegalStateException: boom", e.getLastHookError());
-    }
-
-    @Test
-    void describe_truncatesAndHandlesNullMessage() {
-        assertNull(describe(null));
-        assertEquals("java.lang.RuntimeException", describe(new RuntimeException()));
-        StringBuilder longMessage = new StringBuilder();
-        for (int i = 0; i < 1_000; i++) {
-            longMessage.append('x');
-        }
-        String described = describe(new RuntimeException(longMessage.toString()));
-        assertEquals(maxErrorLength(), described.length());
-        assertTrue(described.startsWith("java.lang.RuntimeException: xxx"));
+        assertEquals(4, only().getRefreshHookAppliedVersion());
     }
 
     @Test
     void secretsAreKeptApart() {
-        ledger.recordGet("p", "a", 1);
+        ledger.recordFetch("p", "a", 1);
         ledger.recordHookRegistered("p", "b");
-        ledger.recordGet("q", "a", 9);
+        ledger.recordFetch("q", "a", 9);
         assertEquals(3, ledger.snapshot().size());
         assertEquals(1, ledger.version("p", "a"));
         assertEquals(0, ledger.version("p", "b"));
@@ -126,18 +91,18 @@ class UsageLedgerTest {
     }
 
     @Test
-    void concurrentRecording_losesNoCounts() throws Exception {
+    void concurrentRecording_keepsNewestVersion() throws Exception {
         int threads = 8;
         int perThread = 2_000;
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         CountDownLatch start = new CountDownLatch(1);
         try {
             for (int t = 0; t < threads; t++) {
-                final int id = t;
                 pool.submit(() -> {
                     start.await();
                     for (int i = 0; i < perThread; i++) {
-                        ledger.recordGet("p", "s", id % 2 == 0 ? Integer.valueOf(i) : null);
+                        ledger.recordFetch("p", "s", i);
+                        ledger.recordHookApplied("p", "s", i);
                         ledger.snapshot();
                     }
                     return null;
@@ -148,59 +113,9 @@ class UsageLedgerTest {
             pool.shutdown();
             assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS));
         }
+        ledger.recordHookRegistered("p", "s");
         HeartbeatRequest.HeldSecret e = only();
-        assertEquals((long) threads / 2 * perThread, e.getGetCount());
-        assertEquals((long) threads / 2 * perThread, e.getErrorCount());
         assertEquals(perThread - 1, e.getVersion());
-    }
-
-    /** The clock-injecting constructor is private; build the ledger reflectively. */
-    private static UsageLedger ledgerWithClock(java.util.function.LongSupplier clock) {
-        try {
-            java.lang.reflect.Constructor<UsageLedger> c =
-                    UsageLedger.class.getDeclaredConstructor(java.util.function.LongSupplier.class);
-            c.setAccessible(true);
-            return c.newInstance(clock);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            throw new IllegalStateException(cause);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static String describe(Throwable error) {
-        try {
-            java.lang.reflect.Method m = UsageLedger.class.getDeclaredMethod("describe", Throwable.class);
-            m.setAccessible(true);
-            return (String) m.invoke(null, error);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            throw new IllegalStateException(cause);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static int maxErrorLength() {
-        try {
-            java.lang.reflect.Field f = UsageLedger.class.getDeclaredField("MAX_ERROR_LENGTH");
-            f.setAccessible(true);
-            return f.getInt(null);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
+        assertEquals(perThread - 1, e.getRefreshHookAppliedVersion());
     }
 }
