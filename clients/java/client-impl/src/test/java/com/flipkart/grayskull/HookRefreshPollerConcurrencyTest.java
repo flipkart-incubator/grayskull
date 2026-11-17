@@ -225,13 +225,13 @@ class HookRefreshPollerConcurrencyTest {
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
                         Collections.singletonList(new UpdatedSecret("acme", "fast", 3, "p", "q")))));
 
-        pollOnce(poller);
+        poller.pollOnce();
         assertTrue(hookEntered.await(5, TimeUnit.SECONDS), "first hook invocation must have started");
 
         // While the dispatcher thread is blocked inside the hook, stack two more updates.
         // pendingUpdate is overwritten each time -> only the latest survives.
-        pollOnce(poller);
-        pollOnce(poller);
+        poller.pollOnce();
+        poller.pollOnce();
 
         releaseFirstHook.countDown();
 
@@ -292,7 +292,7 @@ class HookRefreshPollerConcurrencyTest {
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
                         Collections.singletonList(new UpdatedSecret("acme", "wake", 1, "p", "q")))));
 
-        pollOnce(poller);
+        poller.pollOnce();
         assertTrue(firstReceived.await(5, TimeUnit.SECONDS));
 
         // Hook is currently blocked. Now stage a "late" update directly on SecretState.
@@ -349,9 +349,9 @@ class HookRefreshPollerConcurrencyTest {
 
         // Three back-to-back polls; without the isExecuting guard, three dispatcher
         // threads could enter the hook concurrently.
-        pollOnce(poller);
-        pollOnce(poller);
-        pollOnce(poller);
+        poller.pollOnce();
+        poller.pollOnce();
+        poller.pollOnce();
 
         // Wait for at least one delivery; coalescing may merge updates so we don't
         // wait for all three explicitly. The invariant is on maxInFlight.
@@ -394,7 +394,7 @@ class HookRefreshPollerConcurrencyTest {
         Thread.UncaughtExceptionHandler ueh = (t, e) -> errors.add(e);
         Thread.setDefaultUncaughtExceptionHandler(ueh);
 
-        pollOnce(poller);
+        poller.pollOnce();
         assertTrue(hookEntered.await(5, TimeUnit.SECONDS));
 
         // While dispatcher is mid-iteration over state.hooks, mutate the list.
@@ -484,7 +484,7 @@ class HookRefreshPollerConcurrencyTest {
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
                         Collections.singletonList(new UpdatedSecret("acme", "stale", 7, "p", "q")))));
 
-        pollOnce(poller);
+        poller.pollOnce();
 
         // Allow dispatcher a brief moment; the unknown-ref update must be dropped.
         Thread.sleep(100);
@@ -526,7 +526,7 @@ class HookRefreshPollerConcurrencyTest {
         // Empty registry path is already covered elsewhere; here we just verify
         // that with an empty registry pollOnce performs no HTTP work.
         registry.clear();
-        pollOnce(poller);
+        poller.pollOnce();
         org.mockito.Mockito.verify(mockHttpClient, org.mockito.Mockito.never())
                 .doPostWithRetry(eq(BATCH_URL), anyString());
     }
@@ -556,7 +556,7 @@ class HookRefreshPollerConcurrencyTest {
                 .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
                         Collections.singletonList(new UpdatedSecret("acme", "late", 1, "p", "q")))));
 
-        pollOnce(poller);
+        poller.pollOnce();
         assertTrue(firstDelivered.await(5, TimeUnit.SECONDS));
 
         // Now drive a tight loop that repeatedly invokes runHooksFor while
@@ -648,7 +648,7 @@ class HookRefreshPollerConcurrencyTest {
                     .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
                             Collections.singletonList(new UpdatedSecret("acme", "block", 1, "p", "q")))));
 
-            pollOnce(localPoller);
+            localPoller.pollOnce();
             assertTrue(entered.await(5, TimeUnit.SECONDS),
                     "blocking hook must have started before close()");
 
@@ -696,7 +696,7 @@ class HookRefreshPollerConcurrencyTest {
                     .thenReturn(wrapBatch(new BatchGetSecretsResponse(1,
                             Collections.singletonList(new UpdatedSecret("acme", "intr", 1, "p", "q")))));
 
-            pollOnce(localPoller);
+            localPoller.pollOnce();
             assertTrue(entered.await(5, TimeUnit.SECONDS));
 
             // Interrupt this thread BEFORE calling close() so awaitTermination
@@ -750,25 +750,5 @@ class HookRefreshPollerConcurrencyTest {
         Response<BatchGetSecretsResponse> response = new Response<>(data, "Success");
         String json = objectMapper.writeValueAsString(response);
         return new HttpResponse(200, json, "application/json", "http/1.1");
-    }
-
-    /** {@code HookRefreshPoller.pollOnce()} is private; invoke it reflectively. */
-    private static void pollOnce(HookRefreshPoller target) {
-        try {
-            java.lang.reflect.Method m = HookRefreshPoller.class.getDeclaredMethod("pollOnce");
-            m.setAccessible(true);
-            m.invoke(target);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            throw new IllegalStateException(cause);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
     }
 }

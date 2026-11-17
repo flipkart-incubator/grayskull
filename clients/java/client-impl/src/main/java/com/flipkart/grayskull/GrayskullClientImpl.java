@@ -249,7 +249,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
     /**
      * Reads {@code grayskull-client.properties} from the given class loader (Maven-filtered at build time).
      */
-    private static String resolveSdkVersion(ClassLoader classLoader) {
+    static String resolveSdkVersion(ClassLoader classLoader) {
         try (InputStream in = classLoader.getResourceAsStream("grayskull-client.properties")) {
             if (in == null) {
                 return "unknown";

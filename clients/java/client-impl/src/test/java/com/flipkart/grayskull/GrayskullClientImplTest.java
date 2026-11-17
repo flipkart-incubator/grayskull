@@ -89,7 +89,7 @@ class GrayskullClientImplTest {
     }
 
     private void pollOnce() {
-        invokePollOnce(refreshPoller);
+        refreshPoller.pollOnce();
     }
 
     @AfterEach
@@ -991,7 +991,7 @@ class GrayskullClientImplTest {
                 return super.getResourceAsStream(name);
             }
         };
-        assertEquals("unknown", resolveSdkVersion(cl));
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
     }
 
     @Test
@@ -1010,7 +1010,7 @@ class GrayskullClientImplTest {
                 return super.getResourceAsStream(name);
             }
         };
-        assertEquals("unknown", resolveSdkVersion(cl));
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
     }
 
     @Test
@@ -1025,12 +1025,12 @@ class GrayskullClientImplTest {
                 return super.getResourceAsStream(name);
             }
         };
-        assertEquals("unknown", resolveSdkVersion(cl));
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
     }
 
     @Test
     void testResolveSdkVersion_readsVersionFromClasspathWhenFiltered() {
-        String v = resolveSdkVersion(GrayskullClientImpl.class.getClassLoader());
+        String v = GrayskullClientImpl.resolveSdkVersion(GrayskullClientImpl.class.getClassLoader());
         assertNotEquals("unknown", v);
         assertFalse(v.startsWith("${"));
     }
@@ -1067,7 +1067,7 @@ class GrayskullClientImplTest {
                 return super.getResourceAsStream(name);
             }
         };
-        assertEquals("unknown", resolveSdkVersion(cl));
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
     }
 
     @Test
@@ -1082,7 +1082,7 @@ class GrayskullClientImplTest {
                 return super.getResourceAsStream(name);
             }
         };
-        assertEquals("unknown", resolveSdkVersion(cl));
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
     }
 
     @Test
@@ -1104,7 +1104,7 @@ class GrayskullClientImplTest {
                 return super.getResourceAsStream(name);
             }
         };
-        assertEquals("unknown", resolveSdkVersion(cl));
+        assertEquals("unknown", GrayskullClientImpl.resolveSdkVersion(cl));
     }
 
     private HttpResponse createHttpResponse(SecretValue secretValue) throws Exception {
@@ -1117,45 +1117,5 @@ class GrayskullClientImplTest {
         Response<BatchGetSecretsResponse> response = new Response<>(data, "Success");
         String json = objectMapper.writeValueAsString(response);
         return new HttpResponse(200, json, "application/json", "http/1.1");
-    }
-
-    /** {@code HookRefreshPoller.pollOnce()} is private; invoke it reflectively. */
-    private static void invokePollOnce(HookRefreshPoller target) {
-        try {
-            java.lang.reflect.Method m = HookRefreshPoller.class.getDeclaredMethod("pollOnce");
-            m.setAccessible(true);
-            m.invoke(target);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            throw new IllegalStateException(cause);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    /** {@code GrayskullClientImpl.resolveSdkVersion(ClassLoader)} is private; invoke it reflectively. */
-    private static String resolveSdkVersion(ClassLoader classLoader) {
-        try {
-            java.lang.reflect.Method m = GrayskullClientImpl.class.getDeclaredMethod("resolveSdkVersion", ClassLoader.class);
-            m.setAccessible(true);
-            return (String) m.invoke(null, classLoader);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            throw new IllegalStateException(cause);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
     }
 }
