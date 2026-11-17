@@ -248,12 +248,12 @@ public final class GrayskullClientConfiguration {
         this.pollingIntervalSeconds = pollingIntervalSeconds;
     }
 
-    /** @throws IllegalArgumentException if not positive */
+    /** Sets the heartbeat interval; zero means the 24-hour default. @throws IllegalArgumentException if negative */
     public void setHeartbeatIntervalSeconds(int heartbeatIntervalSeconds) {
-        if (heartbeatIntervalSeconds <= 0) {
+        if (heartbeatIntervalSeconds < 0) {
             throw new IllegalArgumentException(
-                    "Heartbeat interval must be positive, got: " + heartbeatIntervalSeconds);
+                    "Heartbeat interval cannot be negative, got: " + heartbeatIntervalSeconds);
         }
-        this.heartbeatIntervalSeconds = heartbeatIntervalSeconds;
+        this.heartbeatIntervalSeconds = heartbeatIntervalSeconds == 0 ? 86400 : heartbeatIntervalSeconds;
     }
 }

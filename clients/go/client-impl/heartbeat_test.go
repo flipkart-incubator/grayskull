@@ -95,7 +95,7 @@ func TestNewGrayskullClient_HeartbeatFollowsConfig(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		config := clientmodels.NewDefaultConfig()
 		config.Host = "http://localhost:1"
-		config.HeartbeatEnabled = enabled
+		config.SetHeartbeatEnabled(enabled)
 
 		client, err := NewGrayskullClient(&MockAuthProvider{}, config, metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
 		require.NoError(t, err)
@@ -197,4 +197,71 @@ func TestHeartbeat_EndToEnd_UnsupportedServerNeverReachesCaller(t *testing.T) {
 	v, err := c.GetSecret(context.Background(), "proj:db-password")
 	require.NoError(t, err)
 	assert.Equal(t, 7, v.DataVersion)
+}
+
+func TestGetSecret_FailureKeepsVersionAlreadyHeld(t *testing.T) {
+	httpClient := &MockGrayskullHTTPClient{}
+	httpClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).Return(403, errors.New("forbidden"))
+	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), httpClient,
+		metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
+	c.ledger.RecordFetch("proj", "db-password", 3)
+
+	_, err := c.GetSecret(context.Background(), "proj:db-password")
+	require.Error(t, err)
+	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "db-password", Version: 3},
+		entryFor(t, c, "db-password"), "a failed read neither erases nor changes the held version")
+}
+
+func TestGetSecret_FailureWithHookRegisteredReportsNothing(t *testing.T) {
+	httpClient := &MockGrayskullHTTPClient{}
+	httpClient.On("DoGetWithRetry", mock.Anything, mock.Anything, mock.Anything).Return(403, errors.New("forbidden"))
+	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), httpClient,
+		metrics.NewPrometheusRecorder(prometheus.NewRegistry()))
+	_, err := c.RegisterRefreshHook(context.Background(), "proj:db-password", noopHook)
+	require.NoError(t, err)
+
+	_, err = c.GetSecret(context.Background(), "proj:db-password")
+	require.Error(t, err)
+	assert.Empty(t, c.ledger.Snapshot())
+}
+
+func TestUnregisterOneOfTwoHooksKeepsAppliedVersion(t *testing.T) {
+	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), &MockGrayskullHTTPClient{}, nil)
+	c.ledger.RecordFetch("proj", "db-password", 7)
+	first, err := c.RegisterRefreshHook(context.Background(), "proj:db-password", noopHook)
+	require.NoError(t, err)
+	_, err = c.RegisterRefreshHook(context.Background(), "proj:db-password", noopHook)
+	require.NoError(t, err)
+	c.ledger.RecordHookApplied("proj", "db-password", 7)
+
+	first.Unregister()
+	e := entryFor(t, c, "db-password")
+	require.NotNil(t, e.RefreshHookAppliedVersion, "another hook is still registered")
+	assert.Equal(t, 7, *e.RefreshHookAppliedVersion)
+}
+
+func TestConcurrentRegisterAndUnregisterKeepsLedgerFlagConsistent(t *testing.T) {
+	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), &MockGrayskullHTTPClient{}, nil)
+	c.ledger.RecordFetch("proj", "db", 1)
+	keeper, err := c.RegisterRefreshHook(context.Background(), "proj:db", noopHook)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				ref, err := c.RegisterRefreshHook(context.Background(), "proj:db", noopHook)
+				if err == nil {
+					ref.Unregister()
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	c.ledger.RecordHookApplied("proj", "db", 1)
+	assert.NotNil(t, entryFor(t, c, "db").RefreshHookAppliedVersion, "the keeper hook is still registered")
+	keeper.Unregister()
+	assert.Nil(t, entryFor(t, c, "db").RefreshHookAppliedVersion)
 }

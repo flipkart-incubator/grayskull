@@ -13,10 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * The heartbeat body must match the shared fixture in {@code clients/testdata/heartbeat},
- * which the Go SDK validates too, so both SDKs send an identical payload.
- */
+/** The heartbeat body must match the shared fixture in {@code clients/testdata/heartbeat}. */
 class HeartbeatRequestTest {
 
     /** Maven runs tests from the module directory ({@code clients/java/client-impl}). */

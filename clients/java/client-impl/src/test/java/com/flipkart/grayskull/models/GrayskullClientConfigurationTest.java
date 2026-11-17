@@ -313,11 +313,27 @@ class GrayskullClientConfigurationTest {
     }
 
     @Test
-    void testSetHeartbeatIntervalSeconds_rejectsNonPositive() {
+    void testSetHeartbeatIntervalSeconds_zeroMeansDefaultAndNegativeIsRejected() {
         GrayskullClientConfiguration config = new GrayskullClientConfiguration();
 
-        assertThrows(IllegalArgumentException.class, () -> config.setHeartbeatIntervalSeconds(0));
+        config.setHeartbeatIntervalSeconds(0);
+        assertEquals(86400, config.getHeartbeatIntervalSeconds());
         assertThrows(IllegalArgumentException.class, () -> config.setHeartbeatIntervalSeconds(-1));
         assertDoesNotThrow(() -> config.setHeartbeatIntervalSeconds(60));
+    }
+
+    @Test
+    void testHeartbeatDefaults_whenOmittedFromJson() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+                .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        GrayskullClientConfiguration omitted = mapper.readValue("{\"host\":\"http://x\"}", GrayskullClientConfiguration.class);
+        assertTrue(omitted.isHeartbeatEnabled());
+        assertEquals(86400, omitted.getHeartbeatIntervalSeconds());
+
+        GrayskullClientConfiguration disabled = mapper.readValue(
+                "{\"host\":\"http://x\",\"heartbeatEnabled\":false,\"heartbeatIntervalSeconds\":0}",
+                GrayskullClientConfiguration.class);
+        assertFalse(disabled.isHeartbeatEnabled());
+        assertEquals(86400, disabled.getHeartbeatIntervalSeconds(), "zero falls back to the default");
     }
 }

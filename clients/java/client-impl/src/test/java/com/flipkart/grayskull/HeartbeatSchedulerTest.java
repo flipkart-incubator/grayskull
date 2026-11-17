@@ -411,4 +411,45 @@ class HeartbeatSchedulerTest {
         }
         assertTrue(arrivalNanos.size() >= count, "expected " + count + " heartbeats, got " + arrivalNanos.size());
     }
+
+    @Test
+    void beatOnce_failedMiddleChunkStillSendsTheRestAndFailsTheRound() throws Exception {
+        server.setDispatcher(new Dispatcher() {
+            private final AtomicInteger n = new AtomicInteger();
+
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                return new MockResponse().setResponseCode(n.incrementAndGet() == 2 ? 503 : 204);
+            }
+        });
+        scheduler = newScheduler(60, () -> entries(120));
+        assertEquals("FAILED", beatOnce(scheduler));
+        assertEquals(3, server.getRequestCount(), "every chunk is attempted; the next round resends all of them");
+    }
+
+    @Test
+    void beatOnce_unsupportedThenSupportedServer_recovers() throws Exception {
+        failFirst.set(1);
+        failStatus = 404;
+        scheduler = newScheduler(60, () -> entries(1));
+        assertEquals("UNSUPPORTED", beatOnce(scheduler));
+        assertEquals("SENT", beatOnce(scheduler), "once the server ships the endpoint, heartbeats go through");
+    }
+
+    @Test
+    void close_returnsPromptlyWhileARequestHangs() throws Exception {
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                arrivalNanos.add(System.nanoTime());
+                return new MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE);
+            }
+        });
+        HeartbeatScheduler s = newScheduler(1, () -> entries(1));
+        s.start();
+        waitForRequests(1, 5_000);
+        long start = System.nanoTime();
+        s.close();
+        assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start) <= 11, "close is bounded");
+    }
 }

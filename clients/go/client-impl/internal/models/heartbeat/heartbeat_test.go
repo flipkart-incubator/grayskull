@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fixture is shared with the Java SDK (clients/testdata/heartbeat), so both SDKs send an identical payload.
+// fixture is the shared heartbeat payload in clients/testdata/heartbeat.
 var fixture = filepath.Join("..", "..", "..", "..", "..", "testdata", "heartbeat", "client_heartbeat_v1.json")
 
 func intPtr(v int) *int { return &v }

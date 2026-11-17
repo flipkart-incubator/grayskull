@@ -92,7 +92,7 @@ func TestUsageLedger_HookRegistrationTogglesPresence(t *testing.T) {
 	l.SetHookRegistered("p", "s", false)
 	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion, "no hook: field is absent")
 	l.SetHookRegistered("p", "s", true)
-	assert.Equal(t, 4, applied(t, only(t, &l)), "applied version survives re-registration")
+	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion, "a new hook must apply a version itself")
 }
 
 func TestUsageLedger_SnapshotIsACopy(t *testing.T) {

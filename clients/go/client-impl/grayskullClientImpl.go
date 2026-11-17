@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,7 @@ type GrayskullClientImpl struct {
 	poller    *internal.Poller
 	heartbeat *internal.Heartbeat
 	ledger    internal.UsageLedger
+	hookMu    sync.Mutex // keeps registry changes and the ledger's hook flag in step
 	closed    atomic.Bool
 }
 
@@ -123,7 +125,7 @@ func NewGrayskullClient(authProvider auth.GrayskullAuthHeaderProvider, config *m
 	client.poller.Start()
 
 	// The heartbeat needs single-attempt POSTs.
-	if poster, ok := httpClient.(internal.HeartbeatPoster); ok && config.HeartbeatEnabled {
+	if poster, ok := httpClient.(internal.HeartbeatPoster); ok && config.IsHeartbeatEnabled() {
 		client.heartbeat = internal.NewHeartbeat(internal.HeartbeatConfig{
 			BaseURL:         config.Host,
 			HTTPClient:      poster,
@@ -143,6 +145,7 @@ type ledgerHandlerRef struct {
 	Client_API_Hooks.RefreshHandlerRef
 	ledger     *internal.UsageLedger
 	registry   *internalHooks.Registry
+	mu         *sync.Mutex
 	projectID  string
 	secretName string
 	active     atomic.Bool
@@ -151,6 +154,10 @@ type ledgerHandlerRef struct {
 func (r *ledgerHandlerRef) Unregister() {
 	if !r.active.CompareAndSwap(true, false) {
 		return
+	}
+	if r.mu != nil {
+		r.mu.Lock()
+		defer r.mu.Unlock()
 	}
 	r.RefreshHandlerRef.Unregister()
 	r.ledger.SetHookRegistered(r.projectID, r.secretName, r.registry.Get(r.projectID+":"+r.secretName) != nil)
@@ -236,10 +243,13 @@ func (c *GrayskullClientImpl) RegisterRefreshHook(ctx context.Context, secretRef
 			fmt.Sprintf("invalid secretRef format. Expected 'projectId:secretName', got: %s", secretRef))
 	}
 
+	c.hookMu.Lock()
 	seed := c.ledger.Version(parts[0], parts[1])
 	ref := c.registry.Register(parts[0], parts[1], hook, seed)
 	c.ledger.SetHookRegistered(parts[0], parts[1], true)
-	wrapped := &ledgerHandlerRef{RefreshHandlerRef: ref, ledger: &c.ledger, registry: c.registry, projectID: parts[0], secretName: parts[1]}
+	c.hookMu.Unlock()
+	wrapped := &ledgerHandlerRef{RefreshHandlerRef: ref, ledger: &c.ledger, registry: c.registry, mu: &c.hookMu,
+		projectID: parts[0], secretName: parts[1]}
 	wrapped.active.Store(true)
 	return wrapped, nil
 }

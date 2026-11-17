@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Owns the refresh-hook registry and the background poller/dispatcher pair that
- * drives server-driven hook delivery for the Java SDK.
+ * drives server-driven hook delivery.
  *
  * <h2>High-level flow</h2>
  * <ol>
@@ -132,37 +132,32 @@ final class HookRefreshPoller {
     RefreshHandlerRef register(String projectId, String secretName,
                                SecretRefreshHook hook, int initialKnownVersion) {
         String secretRef = projectId + ":" + secretName;
+        // The ledger flag is set inside compute so it never races a concurrent unregister of this secret.
         SecretState state = registry.compute(secretRef, (k, existing) -> {
-            if (existing != null) {
-                existing.hooks.add(hook);
-                return existing;
+            SecretState s = existing;
+            if (s == null) {
+                s = new SecretState(projectId, secretName);
+                s.lastKnownVersion.set(initialKnownVersion);
             }
-            SecretState s = new SecretState(projectId, secretName);
             s.hooks.add(hook);
-            s.lastKnownVersion.set(initialKnownVersion);
+            ledger.setHookRegistered(projectId, secretName, true);
             return s;
         });
-        ledger.setHookRegistered(projectId, secretName, true);
         log.debug("Registered refresh hook for secretRef:{} (totalHooks:{}, initialKnownVersion:{})",
                 secretRef, state.hooks.size(), initialKnownVersion);
         return new DefaultRefreshHandlerRef(secretRef, () -> unregister(secretRef, hook));
     }
 
     private void unregister(String secretRef, SecretRefreshHook hook) {
-        SecretState[] removedFrom = {null};
         registry.compute(secretRef, (k, state) -> {
             if (state == null) {
                 return null;
             }
             if (state.hooks.remove(hook)) {
-                removedFrom[0] = state;
+                ledger.setHookRegistered(state.projectId, state.secretName, !state.hooks.isEmpty());
             }
             return state.hooks.isEmpty() ? null : state;
         });
-        if (removedFrom[0] != null) {
-            ledger.setHookRegistered(removedFrom[0].projectId, removedFrom[0].secretName,
-                    registry.containsKey(secretRef));
-        }
     }
 
     /**
@@ -308,13 +303,14 @@ final class HookRefreshPoller {
     }
 
     private void deliverToHooks(String secretRef, SecretState state, SecretValue value) {
+        boolean allSucceeded = !state.hooks.isEmpty();
         for (SecretRefreshHook hook : state.hooks) {
             long startTime = System.nanoTime();
             boolean success = true;
             try {
                 hook.onUpdate(value);
-                ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion());
             } catch (Exception e) {
+                allSucceeded = false;
                 success = false;
                 log.error("Consumer hook failed for {}", secretRef, e);
             } finally {
@@ -322,6 +318,9 @@ final class HookRefreshPoller {
                 MetricsPublisher.getInstance().recordRequest(
                         "hook.execute." + secretRef, success ? 200 : 500, durationMs);
             }
+        }
+        if (allSucceeded) { // applied only when every registered hook succeeded for this version
+            ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion());
         }
     }
 

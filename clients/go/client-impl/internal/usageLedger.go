@@ -32,7 +32,12 @@ func (l *UsageLedger) RecordVersion(projectID, secretName string, version int) {
 
 // SetHookRegistered records whether any refresh hook is still registered for the secret.
 func (l *UsageLedger) SetHookRegistered(projectID, secretName string, registered bool) {
-	l.update(projectID, secretName, func(e *ledgerEntry) { e.hookRegistered = registered })
+	l.update(projectID, secretName, func(e *ledgerEntry) {
+		e.hookRegistered = registered
+		if !registered {
+			e.hookAppliedVersion = 0 // a hook registered later must apply a version itself
+		}
+	})
 }
 
 // RecordHookApplied records a successful hook run; failures are not recorded.

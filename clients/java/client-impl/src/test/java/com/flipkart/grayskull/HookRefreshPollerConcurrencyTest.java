@@ -753,4 +753,33 @@ class HookRefreshPollerConcurrencyTest {
         String json = objectMapper.writeValueAsString(response);
         return new HttpResponse(200, json, "application/json", "http/1.1");
     }
+
+    @Test
+    @Timeout(value = 20, unit = TimeUnit.SECONDS)
+    void concurrentRegisterAndUnregister_keepsTheLedgerHookFlagConsistent() throws Exception {
+        Field ledgerField = HookRefreshPoller.class.getDeclaredField("ledger");
+        ledgerField.setAccessible(true);
+        UsageLedger ledger = (UsageLedger) ledgerField.get(poller);
+        ledger.recordVersion("acme", "db", 1);
+        RefreshHandlerRef keeper = poller.register("acme", "db", v -> { }, 1);
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+        for (int t = 0; t < 8; t++) {
+            futures.add(pool.submit(() -> {
+                for (int i = 0; i < 300; i++) {
+                    poller.register("acme", "db", v -> { }, 1).unRegister();
+                }
+            }));
+        }
+        for (java.util.concurrent.Future<?> f : futures) {
+            f.get();
+        }
+        pool.shutdown();
+
+        ledger.recordHookApplied("acme", "db", 1);
+        assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() != null, "the keeper hook is still registered");
+        keeper.unRegister();
+        assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() == null, "no hook left");
+    }
 }

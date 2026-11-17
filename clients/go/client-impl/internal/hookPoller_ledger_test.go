@@ -27,36 +27,6 @@ func newLedgerPoller(client GrayskullHTTPClientInterface, registry *hooks.Regist
 	})
 }
 
-func TestInvokeHookSafe_RecordsOutcomeInLedger(t *testing.T) {
-	ledger := &UsageLedger{}
-	p := newLedgerPoller(&mockHTTPClient{}, hooks.NewRegistry(), ledger)
-	defer p.Close()
-
-	ok := func(context.Context, models.SecretValue) error { return nil }
-	fails := func(context.Context, models.SecretValue) error { return errors.New("cannot reload pool") }
-	panics := func(context.Context, models.SecretValue) error { panic("nil pool") }
-
-	ledger.RecordVersion("acme", "db", 6)
-	ledger.SetHookRegistered("acme", "db", true)
-	p.invokeHookSafe(context.Background(), "acme:db", ok, models.SecretValue{DataVersion: 4})
-	p.invokeHookSafe(context.Background(), "acme:db", fails, models.SecretValue{DataVersion: 5})
-	p.invokeHookSafe(context.Background(), "acme:db", panics, models.SecretValue{DataVersion: 6})
-
-	e := only(t, ledger)
-	require.NotNil(t, e.RefreshHookAppliedVersion)
-	assert.Equal(t, 4, *e.RefreshHookAppliedVersion, "failed and panicking runs do not advance it")
-}
-
-func TestInvokeHookSafe_MalformedSecretRefIsNotRecorded(t *testing.T) {
-	ledger := &UsageLedger{}
-	p := newLedgerPoller(&mockHTTPClient{}, hooks.NewRegistry(), ledger)
-	defer p.Close()
-
-	p.invokeHookSafe(context.Background(), "nocolon", func(context.Context, models.SecretValue) error { return nil },
-		models.SecretValue{DataVersion: 1})
-	assert.Empty(t, ledger.Snapshot())
-}
-
 func TestPollOnce_RecordsVersionSeenAndHookAppliedInLedger(t *testing.T) {
 	client := &mockHTTPClient{}
 	client.addPostResponse(200, response.Response[batch.BatchGetSecretsResponse]{
@@ -89,4 +59,53 @@ func TestPoller_WithoutLedgerStillDelivers(t *testing.T) {
 		p.invokeHookSafe(context.Background(), "acme:db", func(context.Context, models.SecretValue) error { return nil },
 			models.SecretValue{DataVersion: 1})
 	})
+}
+
+func runDelivery(t *testing.T, ledger *UsageLedger, version int, hookFns ...func(context.Context, models.SecretValue) error) {
+	t.Helper()
+	registry := hooks.NewRegistry()
+	for _, h := range hookFns {
+		registry.Register("acme", "db", h, 0)
+	}
+	ledger.SetHookRegistered("acme", "db", true)
+	p := newLedgerPoller(&mockHTTPClient{}, registry, ledger)
+	defer p.Close()
+	state := registry.Get("acme:db")
+	state.SetPending(&models.SecretValue{DataVersion: version})
+	p.runHooksFor("acme:db", state, "")
+}
+
+func TestRunHooksFor_AppliedOnlyWhenEveryHookSucceeds(t *testing.T) {
+	ok := func(context.Context, models.SecretValue) error { return nil }
+	fails := func(context.Context, models.SecretValue) error { return errors.New("boom") }
+	panics := func(context.Context, models.SecretValue) error { panic("nil pool") }
+
+	all := &UsageLedger{}
+	runDelivery(t, all, 5, ok, ok)
+	require.NotNil(t, only(t, all).RefreshHookAppliedVersion)
+	assert.Equal(t, 5, *only(t, all).RefreshHookAppliedVersion)
+
+	for _, bad := range []func(context.Context, models.SecretValue) error{fails, panics} {
+		mixed := &UsageLedger{}
+		runDelivery(t, mixed, 5, ok, bad)
+		e := only(t, mixed)
+		assert.Equal(t, 5, e.Version, "version advances before hooks run")
+		assert.Nil(t, e.RefreshHookAppliedVersion, "one failing hook means the version was not applied")
+	}
+}
+
+func TestRunHooksFor_LaterFailureKeepsLastFullySuccessfulVersion(t *testing.T) {
+	ledger := &UsageLedger{}
+	failFrom5 := func(_ context.Context, v models.SecretValue) error {
+		if v.DataVersion >= 5 {
+			return errors.New("boom")
+		}
+		return nil
+	}
+	runDelivery(t, ledger, 4, failFrom5)
+	runDelivery(t, ledger, 5, failFrom5)
+	e := only(t, ledger)
+	assert.Equal(t, 5, e.Version)
+	require.NotNil(t, e.RefreshHookAppliedVersion)
+	assert.Equal(t, 4, *e.RefreshHookAppliedVersion)
 }

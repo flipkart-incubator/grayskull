@@ -83,7 +83,7 @@ class UsageLedgerTest {
         ledger.setHookRegistered("p", "s", false);
         assertNull(only().getRefreshHookAppliedVersion(), "no hook: field is absent");
         ledger.setHookRegistered("p", "s", true);
-        assertEquals(4, only().getRefreshHookAppliedVersion(), "applied version survives re-registration");
+        assertNull(only().getRefreshHookAppliedVersion(), "a new hook must apply a version itself");
     }
 
     @Test

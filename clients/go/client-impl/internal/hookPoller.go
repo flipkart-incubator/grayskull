@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,9 +21,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Poller is the background batch-refresh loop (one per client). Mirrors
-// HookRefreshPoller in the Java SDK: a single fetcher (pollLoop) and a
-// fixed dispatcher pool so a slow hook on one secret can't stall others.
+// Poller is the per-client batch-refresh loop; a fixed dispatcher pool keeps a slow hook from stalling others.
 type Poller struct {
 	registry        *hooks.Registry
 	httpClient      GrayskullHTTPClientInterface
@@ -316,8 +313,15 @@ func (p *Poller) runHooksFor(secretRef string, state *hooks.SecretState, request
 		}
 		state.LastKnownVersion.Store(int32(value.DataVersion))
 		p.ledger.RecordVersion(state.ProjectID, state.SecretName, value.DataVersion)
-		for _, hook := range state.SnapshotHooks() {
-			p.invokeHookSafe(ctx, secretRef, hook, *value)
+		hookList := state.SnapshotHooks()
+		allOK := len(hookList) > 0
+		for _, hook := range hookList {
+			if !p.invokeHookSafe(ctx, secretRef, hook, *value) {
+				allOK = false
+			}
+		}
+		if allOK { // applied only when every registered hook succeeded for this version
+			p.ledger.RecordHookApplied(state.ProjectID, state.SecretName, value.DataVersion)
 		}
 	}
 }
@@ -339,25 +343,21 @@ func (p *Poller) resubmitIfPending(secretRef string, state *hooks.SecretState, r
 
 // invokeHookSafe runs one consumer hook under recover() so one broken hook
 // doesn't block delivery to the others.
-func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiHooks.SecretRefreshHook, value apiModels.SecretValue) {
+func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiHooks.SecretRefreshHook, value apiModels.SecretValue) (success bool) {
 	startTime := time.Now()
-	success := true
+	success = true
 	defer func() {
 		if r := recover(); r != nil {
 			success = false
 			p.logger.Error("consumer hook panicked",
 				"secretRef", secretRef, "panic", r, "stack", string(debug.Stack()))
 		}
-		if projectID, secretName, ok := strings.Cut(secretRef, ":"); ok && success {
-			p.ledger.RecordHookApplied(projectID, secretName, value.DataVersion)
-		}
 		if p.metricsRecorder != nil {
 			code := http.StatusOK
 			if !success {
 				code = http.StatusInternalServerError
 			}
-			// TODO(metrics-cardinality): embeds secretRef for Java SDK
-			// parity; fix in both SDKs together.
+			// TODO(metrics-cardinality): the metric name embeds secretRef.
 			p.metricsRecorder.RecordRequest("hook.execute."+secretRef, code, time.Since(startTime))
 		}
 	}()
@@ -365,4 +365,5 @@ func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiH
 		success = false
 		p.logger.Error("consumer hook returned error", "secretRef", secretRef, "err", err)
 	}
+	return success
 }

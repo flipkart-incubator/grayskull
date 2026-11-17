@@ -29,6 +29,9 @@ final class UsageLedger {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
             e.hookRegistered = registered;
+            if (!registered) {
+                e.hookAppliedVersion = 0; // a hook registered later must apply a version itself
+            }
         }
     }
 

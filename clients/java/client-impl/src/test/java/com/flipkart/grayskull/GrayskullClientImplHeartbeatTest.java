@@ -306,4 +306,30 @@ class GrayskullClientImplHeartbeatTest {
         pollerLedger.setAccessible(true);
         assertSame(ledger, pollerLedger.get(pollerField.get(client)));
     }
+
+    @Test
+    void getSecret_failureWithHookRegisteredReportsNothing() throws Exception {
+        client = newClient(config());
+        client.registerRefreshHook("proj:missing", secret -> { });
+        assertThrows(GrayskullException.class, () -> client.getSecret("proj:missing"));
+        assertTrue(ledgerOf(client).snapshot().isEmpty(), "a hook plus a failed read holds no version");
+    }
+
+    @Test
+    void heartbeat_oneFailingHookBlocksTheAppliedVersion() throws Exception {
+        pollVersion = 8;
+        GrayskullClientConfiguration config = config();
+        config.setPollingIntervalSeconds(1);
+        config.setHeartbeatIntervalSeconds(2);
+        client = newClient(config);
+        client.getSecret("proj:db-password"); // v7
+        client.registerRefreshHook("proj:db-password", secret -> {
+            throw new IllegalStateException("cannot reload pool");
+        });
+        client.registerRefreshHook("proj:db-password", secret -> { });
+
+        JsonNode entry = awaitEntryAtVersion("db-password", 8);
+        assertNotNull(entry);
+        assertFalse(entry.has("refreshHookAppliedVersion"), "one consumer failed, so v8 was not applied");
+    }
 }

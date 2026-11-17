@@ -264,3 +264,10 @@ func TestHeartbeatSend_RecordsFailureStatusInMetric(t *testing.T) {
 	assert.Equal(t, beatFailed, h.beat(context.Background()))
 	assert.Equal(t, []string{"heartbeat:503"}, spy.snapshot())
 }
+
+func TestHeartbeatBeat_UnsupportedThenSupportedServerRecovers(t *testing.T) {
+	c := &recordingClient{failFirst: 1, failStatus: 404}
+	h := newTestHeartbeat(c, time.Hour, held(1))
+	assert.Equal(t, beatUnsupported, h.beat(context.Background()))
+	assert.Equal(t, beatSent, h.beat(context.Background()), "once the server ships the endpoint, heartbeats go through")
+}
