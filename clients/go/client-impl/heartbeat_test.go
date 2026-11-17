@@ -43,6 +43,8 @@ func TestRegisterRefreshHook_SeedsFromLedgerAndCountsHook(t *testing.T) {
 	ref, err := c.RegisterRefreshHook(context.Background(), "proj:db-password", noopHook)
 	require.NoError(t, err)
 	assert.EqualValues(t, 7, c.registry.Get("proj:db-password").LastKnownVersion.Load(), "seeded from the ledger")
+	assert.Nil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion, "absent until a hook succeeds")
+	c.ledger.RecordHookApplied("proj", "db-password", 7)
 	assert.NotNil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion)
 	assert.Equal(t, "proj:db-password", ref.GetSecretRef())
 	assert.True(t, ref.IsActive())
@@ -54,16 +56,17 @@ func TestRegisterRefreshHook_SeedsFromLedgerAndCountsHook(t *testing.T) {
 	assert.Nil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion, "the ledger entry is kept, without a hook")
 }
 
-func TestRegisterRefreshHook_HookOnlySecretIsInLedger(t *testing.T) {
+func TestRegisterRefreshHook_HookOnlySecretIsReportedOnceAVersionIsHeld(t *testing.T) {
 	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), &MockGrayskullHTTPClient{}, nil)
 	_, err := c.RegisterRefreshHook(context.Background(), "proj:api:key", noopHook) // secret name with a colon
 	require.NoError(t, err)
+	assert.Empty(t, c.ledger.Snapshot(), "a hook alone holds no version")
 
+	c.ledger.RecordVersion("proj", "api:key", 2) // the poller delivered version 2
 	e := entryFor(t, c, "api:key")
 	assert.Equal(t, "proj", e.ProjectID)
-	require.NotNil(t, e.RefreshHookAppliedVersion)
-	assert.Zero(t, *e.RefreshHookAppliedVersion, "hook registered, not yet applied")
-	assert.Zero(t, e.Version)
+	assert.Equal(t, 2, e.Version)
+	assert.Nil(t, e.RefreshHookAppliedVersion, "absent until the hook succeeds")
 }
 
 func TestGetSecret_FailureIsReturnedUnchangedAndNotRecorded(t *testing.T) {
@@ -178,12 +181,9 @@ func TestHeartbeat_EndToEnd_ReportsFetchedHookedAndFailedSecrets(t *testing.T) {
 	for _, s := range body.Secrets {
 		bySecret[s.SecretName] = s
 	}
-	require.Len(t, bySecret, 2, "a failed fetch adds no entry")
-	zero := 0
-	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "db-password", Version: 7,
-		RefreshHookAppliedVersion: &zero}, bySecret["db-password"])
-	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "hook-only",
-		RefreshHookAppliedVersion: &zero}, bySecret["hook-only"])
+	require.Len(t, bySecret, 1, "a failed fetch and a hook that holds no version add no entry")
+	assert.Equal(t, heartbeat.HeldSecret{ProjectID: "proj", SecretName: "db-password", Version: 7},
+		bySecret["db-password"], "no hook has succeeded yet, so no applied version")
 }
 
 func TestHeartbeat_EndToEnd_UnsupportedServerNeverReachesCaller(t *testing.T) {

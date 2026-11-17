@@ -36,6 +36,7 @@ func TestInvokeHookSafe_RecordsOutcomeInLedger(t *testing.T) {
 	fails := func(context.Context, models.SecretValue) error { return errors.New("cannot reload pool") }
 	panics := func(context.Context, models.SecretValue) error { panic("nil pool") }
 
+	ledger.RecordVersion("acme", "db", 6)
 	ledger.SetHookRegistered("acme", "db", true)
 	p.invokeHookSafe(context.Background(), "acme:db", ok, models.SecretValue{DataVersion: 4})
 	p.invokeHookSafe(context.Background(), "acme:db", fails, models.SecretValue{DataVersion: 5})

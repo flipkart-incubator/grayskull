@@ -50,15 +50,24 @@ class UsageLedgerTest {
     }
 
     @Test
-    void registeredHook_reportsZeroUntilItSucceeds() {
+    void hookRegisteredBeforeAnyFetch_isNotReported() {
         ledger.setHookRegistered("p", "s", true);
-        HeartbeatRequest.HeldSecret e = only();
-        assertEquals(0, e.getVersion());
-        assertEquals(0, e.getRefreshHookAppliedVersion());
+        assertTrue(ledger.snapshot().isEmpty());
+        assertEquals(0, ledger.version("p", "s"));
+    }
+
+    @Test
+    void appliedVersion_isAbsentUntilAHookSucceeds() {
+        ledger.recordFetch("p", "s", 3);
+        ledger.setHookRegistered("p", "s", true);
+        assertNull(only().getRefreshHookAppliedVersion());
+        ledger.recordHookApplied("p", "s", 3);
+        assertEquals(3, only().getRefreshHookAppliedVersion());
     }
 
     @Test
     void hookApplied_advancesOnlyForward() {
+        ledger.recordVersion("p", "s", 7);
         ledger.setHookRegistered("p", "s", true);
         ledger.recordHookApplied("p", "s", 7);
         ledger.recordHookApplied("p", "s", 6); // an older delivery never lowers it
@@ -67,6 +76,7 @@ class UsageLedgerTest {
 
     @Test
     void hookRegistration_togglesPresenceAndKeepsAppliedVersion() {
+        ledger.recordVersion("p", "s", 4);
         ledger.setHookRegistered("p", "s", true);
         ledger.recordHookApplied("p", "s", 4);
         assertEquals(4, only().getRefreshHookAppliedVersion());
@@ -81,7 +91,7 @@ class UsageLedgerTest {
         ledger.recordFetch("p", "a", 1);
         ledger.setHookRegistered("p", "b", true);
         ledger.recordFetch("q", "a", 9);
-        assertEquals(3, ledger.snapshot().size());
+        assertEquals(2, ledger.snapshot().size(), "p:b has a hook but holds no version yet");
         assertEquals(1, ledger.version("p", "a"));
         assertEquals(0, ledger.version("p", "b"));
         assertEquals(9, ledger.version("q", "a"));

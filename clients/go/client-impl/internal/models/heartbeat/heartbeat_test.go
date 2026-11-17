@@ -21,7 +21,7 @@ func TestRequest_SerializesToSharedFixture(t *testing.T) {
 
 	got, err := json.Marshal(Request{Secrets: []HeldSecret{
 		{ProjectID: "p", SecretName: "s", Version: 5, RefreshHookAppliedVersion: intPtr(5)},
-		{ProjectID: "p", SecretName: "hook-pending", Version: 3, RefreshHookAppliedVersion: intPtr(0)},
+		{ProjectID: "p", SecretName: "hook-pending", Version: 3},
 		{ProjectID: "p", SecretName: "no-hook", Version: 2},
 	}})
 	require.NoError(t, err)

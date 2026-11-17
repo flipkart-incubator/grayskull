@@ -64,8 +64,11 @@ func (l *UsageLedger) Snapshot() []heartbeat.HeldSecret {
 	defer l.mu.Unlock()
 	out := make([]heartbeat.HeldSecret, 0, len(l.entries))
 	for _, e := range l.entries {
+		if e.version == 0 {
+			continue // holds no version yet
+		}
 		var applied *int
-		if e.hookRegistered {
+		if e.hookRegistered && e.hookAppliedVersion > 0 {
 			v := e.hookAppliedVersion
 			applied = &v
 		}

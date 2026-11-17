@@ -30,7 +30,7 @@ class HeartbeatRequestTest {
 
         HeartbeatRequest request = new HeartbeatRequest(Arrays.asList(
                 new HeartbeatRequest.HeldSecret("p", "s", 5, 5),
-                new HeartbeatRequest.HeldSecret("p", "hook-pending", 3, 0),
+                new HeartbeatRequest.HeldSecret("p", "hook-pending", 3, null),
                 new HeartbeatRequest.HeldSecret("p", "no-hook", 2, null)));
 
         JsonNode expected = objectMapper.readTree(FIXTURE.toFile());

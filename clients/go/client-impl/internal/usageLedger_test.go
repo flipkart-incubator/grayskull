@@ -58,16 +58,25 @@ func TestUsageLedger_VersionIsNewestHeldFromFetchOrPoller(t *testing.T) {
 	assert.Equal(t, 8, l.Version("p", "s"))
 }
 
-func TestUsageLedger_RegisteredHookReportsZeroUntilItSucceeds(t *testing.T) {
+func TestUsageLedger_HookRegisteredBeforeAnyFetchIsNotReported(t *testing.T) {
 	var l UsageLedger
 	l.SetHookRegistered("p", "s", true)
-	e := only(t, &l)
-	assert.Zero(t, e.Version)
-	assert.Equal(t, 0, applied(t, e))
+	assert.Empty(t, l.Snapshot())
+	assert.Equal(t, 0, l.Version("p", "s"))
+}
+
+func TestUsageLedger_AppliedVersionIsAbsentUntilAHookSucceeds(t *testing.T) {
+	var l UsageLedger
+	l.RecordFetch("p", "s", 3)
+	l.SetHookRegistered("p", "s", true)
+	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion)
+	l.RecordHookApplied("p", "s", 3)
+	assert.Equal(t, 3, applied(t, only(t, &l)))
 }
 
 func TestUsageLedger_HookAppliedAdvancesOnlyForward(t *testing.T) {
 	var l UsageLedger
+	l.RecordVersion("p", "s", 7)
 	l.SetHookRegistered("p", "s", true)
 	l.RecordHookApplied("p", "s", 7)
 	l.RecordHookApplied("p", "s", 6) // an older delivery never lowers it
@@ -76,6 +85,7 @@ func TestUsageLedger_HookAppliedAdvancesOnlyForward(t *testing.T) {
 
 func TestUsageLedger_HookRegistrationTogglesPresence(t *testing.T) {
 	var l UsageLedger
+	l.RecordVersion("p", "s", 4)
 	l.SetHookRegistered("p", "s", true)
 	l.RecordHookApplied("p", "s", 4)
 	assert.Equal(t, 4, applied(t, only(t, &l)))
@@ -87,6 +97,7 @@ func TestUsageLedger_HookRegistrationTogglesPresence(t *testing.T) {
 
 func TestUsageLedger_SnapshotIsACopy(t *testing.T) {
 	var l UsageLedger
+	l.RecordVersion("p", "s", 2)
 	l.SetHookRegistered("p", "s", true)
 	l.RecordHookApplied("p", "s", 2)
 	snap := l.Snapshot()
@@ -99,7 +110,7 @@ func TestUsageLedger_SecretsAreKeptApart(t *testing.T) {
 	l.RecordFetch("p", "a", 1)
 	l.SetHookRegistered("p", "b", true)
 	l.RecordFetch("q", "a", 9)
-	assert.Len(t, l.Snapshot(), 3)
+	assert.Len(t, l.Snapshot(), 2, "p:b has a hook but holds no version yet")
 	assert.Equal(t, 1, l.Version("p", "a"))
 	assert.Equal(t, 0, l.Version("p", "b"))
 	assert.Equal(t, 9, l.Version("q", "a"))

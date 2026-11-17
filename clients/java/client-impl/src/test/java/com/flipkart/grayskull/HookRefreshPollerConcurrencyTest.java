@@ -457,8 +457,10 @@ class HookRefreshPollerConcurrencyTest {
         Field ledgerField = HookRefreshPoller.class.getDeclaredField("ledger");
         ledgerField.setAccessible(true);
         UsageLedger ledger = (UsageLedger) ledgerField.get(poller);
+        ledger.recordVersion("acme", "shared", 1);
+        ledger.recordHookApplied("acme", "shared", 1);
         assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() != null,
-                "ledger hook count must not drop when no hook was actually removed");
+                "ledger hook flag must not drop when no hook was actually removed");
     }
 
     // ---------------------------------------------------------------------

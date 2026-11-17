@@ -51,13 +51,17 @@ final class UsageLedger {
         }
     }
 
-    /** Copy of all entries; {@code refreshHookAppliedVersion} is null when no hook is registered. */
+    /** Entries that hold a version; {@code refreshHookAppliedVersion} is null until a hook has succeeded. */
     public List<HeartbeatRequest.HeldSecret> snapshot() {
         List<HeartbeatRequest.HeldSecret> out = new ArrayList<>(entries.size());
         for (Entry e : entries.values()) {
             synchronized (e) {
+                if (e.version == 0) {
+                    continue;
+                }
+                boolean applied = e.hookRegistered && e.hookAppliedVersion > 0;
                 out.add(new HeartbeatRequest.HeldSecret(e.projectId, e.secretName, e.version,
-                        e.hookRegistered ? e.hookAppliedVersion : null));
+                        applied ? e.hookAppliedVersion : null));
             }
         }
         return out;

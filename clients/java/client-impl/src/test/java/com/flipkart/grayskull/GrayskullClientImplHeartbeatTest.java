@@ -157,20 +157,24 @@ class GrayskullClientImplHeartbeatTest {
     }
 
     @Test
-    void heartbeat_reportsHookRegisteredButNeverFetched() throws Exception {
-        client = newClient(config());
-        client.registerRefreshHook("proj:hook-only", secret -> { });
+    void heartbeat_hookOnlySecretIsReportedOnceThePollerDeliversAVersion() throws Exception {
+        pollVersion = 8;
+        GrayskullClientConfiguration config = config();
+        config.setPollingIntervalSeconds(1);
+        config.setHeartbeatIntervalSeconds(2);
+        client = newClient(config);
+        client.registerRefreshHook("proj:db-password", secret -> { }); // never fetched
 
-        waitForHeartbeats(1, 5_000);
-        JsonNode entry = latestEntry("hook-only");
-        assertNotNull(entry, "a hook-only secret must be reported");
-        assertEquals(0, entry.get("version").asInt());
-        assertEquals(0, entry.get("refreshHookAppliedVersion").asInt(), "hook registered, not yet applied");
+        JsonNode entry = awaitEntryAtVersion("db-password", 8);
+        assertNotNull(entry, "reported once the poller delivers a version");
+        assertEquals(8, entry.get("version").asInt());
+        assertEquals(8, entry.path("refreshHookAppliedVersion").asInt(), "the hook succeeded at version 8");
     }
 
     @Test
     void heartbeat_unregisteredHookIsReportedWithoutHook() throws Exception {
         client = newClient(config());
+        client.getSecret("proj:db-password"); // holds v7
         RefreshHandlerRef handle = client.registerRefreshHook("proj:db-password", secret -> { });
         handle.unRegister();
         handle.unRegister(); // idempotent: must not drive the count below zero
@@ -269,7 +273,7 @@ class GrayskullClientImplHeartbeatTest {
         JsonNode entry = awaitEntryAtVersion("db-password", 8);
         assertNotNull(entry);
         assertEquals(8, entry.get("version").asInt(), "version advances before the hook runs (at-most-once)");
-        assertEquals(0, entry.get("refreshHookAppliedVersion").asInt(), "only a successful hook run counts");
+        assertFalse(entry.has("refreshHookAppliedVersion"), "only a successful hook run counts");
     }
 
     @Test
