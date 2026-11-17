@@ -29,6 +29,7 @@ final class UsageLedger {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
             e.hookRegistered = registered;
+            e.hookGen++;
             if (!registered) {
                 e.hookAppliedVersion = 0; // a hook registered later must apply a version itself
             }
@@ -41,14 +42,31 @@ final class UsageLedger {
         synchronized (e) {
             e.hookRegistered = true;
             e.hookAppliedVersion = 0;
+            e.hookGen++;
         }
     }
 
-    /** Records a successful hook run; failures are not recorded. */
-    public void recordHookApplied(String projectId, String secretName, int version) {
+    /** Current hook generation; capture it before reading the hook list. */
+    public long hookGeneration(String projectId, String secretName) {
+        Entry e = entries.get(key(projectId, secretName));
+        if (e == null) {
+            return 0;
+        }
+        synchronized (e) {
+            return e.hookGen;
+        }
+    }
+
+    /**
+     * Records that every hook succeeded for {@code version}; ignored when hooks were added or
+     * removed since {@code hookGen} was captured. Failures are not recorded.
+     */
+    public void recordHookApplied(String projectId, String secretName, int version, long hookGen) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
-            e.hookAppliedVersion = Math.max(e.hookAppliedVersion, version);
+            if (e.hookGen == hookGen) {
+                e.hookAppliedVersion = Math.max(e.hookAppliedVersion, version);
+            }
         }
     }
 
@@ -93,6 +111,8 @@ final class UsageLedger {
         private int version;
         private boolean hookRegistered;
         private int hookAppliedVersion;
+        /** Changes whenever hooks are added or removed, so an older delivery cannot mark a version applied. */
+        private long hookGen;
 
         private Entry(String projectId, String secretName) {
             this.projectId = projectId;

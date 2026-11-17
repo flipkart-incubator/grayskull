@@ -313,6 +313,7 @@ func (p *Poller) runHooksFor(secretRef string, state *hooks.SecretState, request
 		}
 		state.LastKnownVersion.Store(int32(value.DataVersion))
 		p.ledger.RecordVersion(state.ProjectID, state.SecretName, value.DataVersion)
+		hookGen := p.ledger.HookGeneration(state.ProjectID, state.SecretName) // before the snapshot
 		hookList := state.SnapshotHooks()
 		allOK := len(hookList) > 0
 		for _, hook := range hookList {
@@ -321,7 +322,7 @@ func (p *Poller) runHooksFor(secretRef string, state *hooks.SecretState, request
 			}
 		}
 		if allOK { // applied only when every registered hook succeeded for this version
-			p.ledger.RecordHookApplied(state.ProjectID, state.SecretName, value.DataVersion)
+			p.ledger.RecordHookApplied(state.ProjectID, state.SecretName, value.DataVersion, hookGen)
 		}
 	}
 }

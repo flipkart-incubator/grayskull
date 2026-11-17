@@ -434,7 +434,7 @@ class HookRefreshPollerConcurrencyTest {
 
     // ---------------------------------------------------------------------
     // 7b. unregister() of a hook that is not registered on an existing state
-    //     must leave the state, its hooks and the ledger hook count untouched
+    //     must leave the state, its hooks and the ledger hook flag untouched
     //     (covers `state.hooks.remove(hook)` returning false).
     // ---------------------------------------------------------------------
     @Test
@@ -458,7 +458,7 @@ class HookRefreshPollerConcurrencyTest {
         ledgerField.setAccessible(true);
         UsageLedger ledger = (UsageLedger) ledgerField.get(poller);
         ledger.recordVersion("acme", "shared", 1);
-        ledger.recordHookApplied("acme", "shared", 1);
+        ledger.recordHookApplied("acme", "shared", 1, ledger.hookGeneration("acme", "shared"));
         assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() != null,
                 "ledger hook flag must not drop when no hook was actually removed");
     }
@@ -777,7 +777,7 @@ class HookRefreshPollerConcurrencyTest {
         }
         pool.shutdown();
 
-        ledger.recordHookApplied("acme", "db", 1);
+        ledger.recordHookApplied("acme", "db", 1, ledger.hookGeneration("acme", "db"));
         assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() != null, "the keeper hook is still registered");
         keeper.unRegister();
         assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() == null, "no hook left");

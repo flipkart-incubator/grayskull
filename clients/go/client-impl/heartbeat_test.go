@@ -36,7 +36,7 @@ func entryFor(t *testing.T, c *GrayskullClientImpl, secretName string) heartbeat
 	return heartbeat.HeldSecret{}
 }
 
-func TestRegisterRefreshHook_SeedsFromLedgerAndCountsHook(t *testing.T) {
+func TestRegisterRefreshHook_SeedsFromLedgerAndTracksHook(t *testing.T) {
 	c := NewGrayskullClientForTesting("http://gs", &MockAuthProvider{}, clientmodels.NewDefaultConfig(), &MockGrayskullHTTPClient{}, nil)
 	c.ledger.RecordFetch("proj", "db-password", 7)
 
@@ -44,13 +44,13 @@ func TestRegisterRefreshHook_SeedsFromLedgerAndCountsHook(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 7, c.registry.Get("proj:db-password").LastKnownVersion.Load(), "seeded from the ledger")
 	assert.Equal(t, 0, *entryFor(t, c, "db-password").RefreshHookAppliedVersion, "0 until a hook succeeds")
-	c.ledger.RecordHookApplied("proj", "db-password", 7)
+	c.ledger.RecordHookApplied("proj", "db-password", 7, c.ledger.HookGeneration("proj", "db-password"))
 	assert.NotNil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion)
 	assert.Equal(t, "proj:db-password", ref.GetSecretRef())
 	assert.True(t, ref.IsActive())
 
 	ref.Unregister()
-	ref.Unregister() // idempotent: must not drive the count below zero
+	ref.Unregister() // idempotent
 	assert.False(t, ref.IsActive())
 	assert.Nil(t, c.registry.Get("proj:db-password"))
 	assert.Nil(t, entryFor(t, c, "db-password").RefreshHookAppliedVersion, "the ledger entry is kept, without a hook")
@@ -234,7 +234,7 @@ func TestUnregisterOneOfTwoHooksKeepsAppliedVersion(t *testing.T) {
 	require.NoError(t, err)
 	_, err = c.RegisterRefreshHook(context.Background(), "proj:db-password", noopHook)
 	require.NoError(t, err)
-	c.ledger.RecordHookApplied("proj", "db-password", 7)
+	c.ledger.RecordHookApplied("proj", "db-password", 7, c.ledger.HookGeneration("proj", "db-password"))
 
 	first.Unregister()
 	e := entryFor(t, c, "db-password")
@@ -262,7 +262,7 @@ func TestConcurrentRegisterAndUnregisterKeepsLedgerFlagConsistent(t *testing.T) 
 		}()
 	}
 	wg.Wait()
-	c.ledger.RecordHookApplied("proj", "db", 1)
+	c.ledger.RecordHookApplied("proj", "db", 1, c.ledger.HookGeneration("proj", "db"))
 	assert.NotNil(t, entryFor(t, c, "db").RefreshHookAppliedVersion, "the keeper hook is still registered")
 	keeper.Unregister()
 	assert.Nil(t, entryFor(t, c, "db").RefreshHookAppliedVersion)

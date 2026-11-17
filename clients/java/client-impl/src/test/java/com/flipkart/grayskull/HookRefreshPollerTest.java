@@ -236,6 +236,35 @@ class HookRefreshPollerTest {
                 "Hook should be invoked exactly twice – once per update");
     }
 
+    @Test
+    void deliverToHooks_hookAddedMidDelivery_doesNotMarkVersionApplied() throws Exception {
+        GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
+        UsageLedger ledger = new UsageLedger();
+        poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
+                "http://localhost:9999", 60, ledger);
+
+        AtomicInteger lateCalls = new AtomicInteger();
+        poller.register("proj", "sec", value -> {
+            // Another thread registers a hook while this delivery is running.
+            poller.register("proj", "sec", v -> lateCalls.incrementAndGet(), 0);
+        }, 0);
+
+        Method handleUpdated = HookRefreshPoller.class.getDeclaredMethod(
+                "handleUpdatedSecret", BatchGetSecretsResponse.UpdatedSecret.class);
+        handleUpdated.setAccessible(true);
+        handleUpdated.invoke(poller, new BatchGetSecretsResponse.UpdatedSecret("proj", "sec", 5, "pub", "priv"));
+        Field dispatcherField = HookRefreshPoller.class.getDeclaredField("dispatcher");
+        dispatcherField.setAccessible(true);
+        ExecutorService dispatcher = (ExecutorService) dispatcherField.get(poller);
+        dispatcher.shutdown(); // let the queued delivery finish
+        assertTrue(dispatcher.awaitTermination(3, TimeUnit.SECONDS));
+
+        assertEquals(0, lateCalls.get(), "the late hook did not run v5");
+        assertEquals(5, ledger.snapshot().get(0).getVersion());
+        assertEquals(0, ledger.snapshot().get(0).getRefreshHookAppliedVersion(),
+                "v5 is not applied while a registered hook has not run it");
+    }
+
     /**
      * The post-drain {@code finally} path calls {@code scheduleFollowUpIfPending} (exercise the
      * private method directly). A same-thread {@link ExecutorService} makes

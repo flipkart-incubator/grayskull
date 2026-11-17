@@ -37,7 +37,7 @@ func TestUsageLedger_NilIsANoOp(t *testing.T) {
 		l.RecordVersion("p", "s", 2)
 		l.SetHookRegistered("p", "s", true)
 		l.SetHookRegistered("p", "s", false)
-		l.RecordHookApplied("p", "s", 2)
+		l.RecordHookApplied("p", "s", 2, l.HookGeneration("p", "s"))
 	})
 	assert.Nil(t, l.Snapshot())
 	assert.Equal(t, 0, l.Version("p", "s"))
@@ -70,7 +70,7 @@ func TestUsageLedger_AppliedVersionIsZeroUntilAHookSucceeds(t *testing.T) {
 	l.RecordFetch("p", "s", 3)
 	l.SetHookRegistered("p", "s", true)
 	assert.Equal(t, 0, applied(t, only(t, &l)), "present while a hook is registered")
-	l.RecordHookApplied("p", "s", 3)
+	l.RecordHookApplied("p", "s", 3, l.HookGeneration("p", "s"))
 	assert.Equal(t, 3, applied(t, only(t, &l)))
 }
 
@@ -78,8 +78,8 @@ func TestUsageLedger_HookAppliedAdvancesOnlyForward(t *testing.T) {
 	var l UsageLedger
 	l.RecordVersion("p", "s", 7)
 	l.SetHookRegistered("p", "s", true)
-	l.RecordHookApplied("p", "s", 7)
-	l.RecordHookApplied("p", "s", 6) // an older delivery never lowers it
+	l.RecordHookApplied("p", "s", 7, l.HookGeneration("p", "s"))
+	l.RecordHookApplied("p", "s", 6, l.HookGeneration("p", "s")) // an older delivery never lowers it
 	assert.Equal(t, 7, applied(t, only(t, &l)))
 }
 
@@ -87,7 +87,7 @@ func TestUsageLedger_HookRegistrationTogglesPresence(t *testing.T) {
 	var l UsageLedger
 	l.RecordVersion("p", "s", 4)
 	l.SetHookRegistered("p", "s", true)
-	l.RecordHookApplied("p", "s", 4)
+	l.RecordHookApplied("p", "s", 4, l.HookGeneration("p", "s"))
 	assert.Equal(t, 4, applied(t, only(t, &l)))
 	l.SetHookRegistered("p", "s", false)
 	assert.Nil(t, only(t, &l).RefreshHookAppliedVersion, "no hook: field is absent")
@@ -99,7 +99,7 @@ func TestUsageLedger_SnapshotIsACopy(t *testing.T) {
 	var l UsageLedger
 	l.RecordVersion("p", "s", 2)
 	l.SetHookRegistered("p", "s", true)
-	l.RecordHookApplied("p", "s", 2)
+	l.RecordHookApplied("p", "s", 2, l.HookGeneration("p", "s"))
 	snap := l.Snapshot()
 	*snap[0].RefreshHookAppliedVersion = 99
 	assert.Equal(t, 2, applied(t, only(t, &l)))
@@ -126,7 +126,7 @@ func TestUsageLedger_ConcurrentRecordingKeepsNewestVersion(t *testing.T) {
 			defer wg.Done()
 			for i := range perWorker {
 				l.RecordFetch("p", "s", i)
-				l.RecordHookApplied("p", "s", i)
+				l.RecordHookApplied("p", "s", i, l.HookGeneration("p", "s"))
 				l.Snapshot()
 			}
 		}()
@@ -142,7 +142,7 @@ func TestUsageLedger_AddingAHookClearsTheAppliedVersionUntilItRuns(t *testing.T)
 	var l UsageLedger
 	l.RecordVersion("p", "s", 7)
 	l.RecordHookAdded("p", "s")
-	l.RecordHookApplied("p", "s", 7)
+	l.RecordHookApplied("p", "s", 7, l.HookGeneration("p", "s"))
 	assert.Equal(t, 7, applied(t, only(t, &l)))
 	l.RecordHookAdded("p", "s")
 	assert.Equal(t, 0, applied(t, only(t, &l)), "the new hook has not applied v7")

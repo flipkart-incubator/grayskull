@@ -20,10 +20,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-/**
- * Sends the usage-ledger snapshot to {@code POST /v1/client/heartbeat} every interval (± 1/24).
- * Failures back off 5 to 60 min (± 10%); 404/405/501 wait the full interval.
- */
+/** Sends the usage-ledger snapshot to {@code POST /v1/client/heartbeat} on an interval, with backoff on failure. */
 final class HeartbeatScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatScheduler.class);

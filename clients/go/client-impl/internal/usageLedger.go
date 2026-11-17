@@ -18,6 +18,9 @@ type ledgerEntry struct {
 	version            int
 	hookRegistered     bool
 	hookAppliedVersion int
+	// hookGen changes whenever the set of registered hooks changes, so a delivery
+	// that started before a hook was added cannot mark a version as applied.
+	hookGen uint64
 }
 
 // RecordFetch records a successful GetSecret.
@@ -34,6 +37,7 @@ func (l *UsageLedger) RecordVersion(projectID, secretName string, version int) {
 func (l *UsageLedger) SetHookRegistered(projectID, secretName string, registered bool) {
 	l.update(projectID, secretName, func(e *ledgerEntry) {
 		e.hookRegistered = registered
+		e.hookGen++
 		if !registered {
 			e.hookAppliedVersion = 0 // a hook registered later must apply a version itself
 		}
@@ -45,13 +49,30 @@ func (l *UsageLedger) RecordHookAdded(projectID, secretName string) {
 	l.update(projectID, secretName, func(e *ledgerEntry) {
 		e.hookRegistered = true
 		e.hookAppliedVersion = 0
+		e.hookGen++
 	})
 }
 
-// RecordHookApplied records a successful hook run; failures are not recorded.
-func (l *UsageLedger) RecordHookApplied(projectID, secretName string, version int) {
+// HookGeneration returns the current hook generation; capture it before snapshotting hooks.
+func (l *UsageLedger) HookGeneration(projectID, secretName string) uint64 {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if e, ok := l.entries[projectID+":"+secretName]; ok {
+		return e.hookGen
+	}
+	return 0
+}
+
+// RecordHookApplied records that every hook succeeded for version; it is ignored when
+// hooks were added or removed since hookGen was captured. Failures are not recorded.
+func (l *UsageLedger) RecordHookApplied(projectID, secretName string, version int, hookGen uint64) {
 	l.update(projectID, secretName, func(e *ledgerEntry) {
-		e.hookAppliedVersion = max(e.hookAppliedVersion, version)
+		if e.hookGen == hookGen {
+			e.hookAppliedVersion = max(e.hookAppliedVersion, version)
+		}
 	})
 }
 

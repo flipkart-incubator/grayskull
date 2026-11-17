@@ -57,11 +57,11 @@ class UsageLedgerTest {
     }
 
     @Test
-    void appliedVersion_isAbsentUntilAHookSucceeds() {
+    void appliedVersion_isZeroUntilAHookSucceeds() {
         ledger.recordFetch("p", "s", 3);
         ledger.setHookRegistered("p", "s", true);
         assertEquals(0, only().getRefreshHookAppliedVersion(), "present while a hook is registered");
-        ledger.recordHookApplied("p", "s", 3);
+        ledger.recordHookApplied("p", "s", 3, ledger.hookGeneration("p", "s"));
         assertEquals(3, only().getRefreshHookAppliedVersion());
     }
 
@@ -69,16 +69,16 @@ class UsageLedgerTest {
     void hookApplied_advancesOnlyForward() {
         ledger.recordVersion("p", "s", 7);
         ledger.setHookRegistered("p", "s", true);
-        ledger.recordHookApplied("p", "s", 7);
-        ledger.recordHookApplied("p", "s", 6); // an older delivery never lowers it
+        ledger.recordHookApplied("p", "s", 7, ledger.hookGeneration("p", "s"));
+        ledger.recordHookApplied("p", "s", 6, ledger.hookGeneration("p", "s")); // an older delivery never lowers it
         assertEquals(7, only().getRefreshHookAppliedVersion());
     }
 
     @Test
-    void hookRegistration_togglesPresenceAndKeepsAppliedVersion() {
+    void hookRegistration_togglesPresenceAndResetsAppliedVersion() {
         ledger.recordVersion("p", "s", 4);
         ledger.setHookRegistered("p", "s", true);
-        ledger.recordHookApplied("p", "s", 4);
+        ledger.recordHookApplied("p", "s", 4, ledger.hookGeneration("p", "s"));
         assertEquals(4, only().getRefreshHookAppliedVersion());
         ledger.setHookRegistered("p", "s", false);
         assertNull(only().getRefreshHookAppliedVersion(), "no hook: field is absent");
@@ -109,7 +109,7 @@ class UsageLedgerTest {
                     start.await();
                     for (int i = 0; i < perThread; i++) {
                         ledger.recordFetch("p", "s", i);
-                        ledger.recordHookApplied("p", "s", i);
+                        ledger.recordHookApplied("p", "s", i, ledger.hookGeneration("p", "s"));
                         ledger.snapshot();
                     }
                     return null;
@@ -130,9 +130,21 @@ class UsageLedgerTest {
     void addingAHook_clearsTheAppliedVersionUntilItRuns() {
         ledger.recordVersion("p", "s", 7);
         ledger.recordHookAdded("p", "s");
-        ledger.recordHookApplied("p", "s", 7);
+        ledger.recordHookApplied("p", "s", 7, ledger.hookGeneration("p", "s"));
         assertEquals(7, only().getRefreshHookAppliedVersion());
         ledger.recordHookAdded("p", "s");
         assertEquals(0, only().getRefreshHookAppliedVersion(), "the new hook has not applied v7");
+    }
+
+    @Test
+    void hookAppliedFromAnOlderHookGeneration_isIgnored() {
+        ledger.recordVersion("p", "s", 5);
+        ledger.recordHookAdded("p", "s");
+        long before = ledger.hookGeneration("p", "s");
+        ledger.recordHookAdded("p", "s"); // added while a delivery of v5 was running
+        ledger.recordHookApplied("p", "s", 5, before);
+        assertEquals(0, only().getRefreshHookAppliedVersion());
+        ledger.recordHookApplied("p", "s", 5, ledger.hookGeneration("p", "s"));
+        assertEquals(5, only().getRefreshHookAppliedVersion());
     }
 }

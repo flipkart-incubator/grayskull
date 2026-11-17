@@ -303,6 +303,7 @@ final class HookRefreshPoller {
     }
 
     private void deliverToHooks(String secretRef, SecretState state, SecretValue value) {
+        long hookGen = ledger.hookGeneration(state.projectId, state.secretName); // before reading the hooks
         boolean allSucceeded = !state.hooks.isEmpty();
         for (SecretRefreshHook hook : state.hooks) {
             long startTime = System.nanoTime();
@@ -320,7 +321,7 @@ final class HookRefreshPoller {
             }
         }
         if (allSucceeded) { // applied only when every registered hook succeeded for this version
-            ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion());
+            ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion(), hookGen);
         }
     }
 

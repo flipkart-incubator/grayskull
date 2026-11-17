@@ -109,3 +109,24 @@ func TestRunHooksFor_LaterFailureKeepsLastFullySuccessfulVersion(t *testing.T) {
 	require.NotNil(t, e.RefreshHookAppliedVersion)
 	assert.Equal(t, 4, *e.RefreshHookAppliedVersion)
 }
+
+func TestRunHooksFor_HookAddedMidDeliveryKeepsAppliedVersionAtZero(t *testing.T) {
+	registry := hooks.NewRegistry()
+	ledger := &UsageLedger{}
+	late := func(context.Context, models.SecretValue) error { return nil }
+	registry.Register("acme", "db", func(context.Context, models.SecretValue) error {
+		// Another goroutine registers a hook while this delivery is running.
+		registry.Register("acme", "db", late, 0)
+		ledger.RecordHookAdded("acme", "db")
+		return nil
+	}, 0)
+	ledger.RecordHookAdded("acme", "db")
+	p := newLedgerPoller(&mockHTTPClient{}, registry, ledger)
+	defer p.Close()
+	state := registry.Get("acme:db")
+	state.SetPending(&models.SecretValue{DataVersion: 5})
+	p.runHooksFor("acme:db", state, "")
+	e := only(t, ledger)
+	assert.Equal(t, 5, e.Version)
+	assert.Equal(t, 0, applied(t, e), "the late hook never ran v5, so v5 is not applied")
+}

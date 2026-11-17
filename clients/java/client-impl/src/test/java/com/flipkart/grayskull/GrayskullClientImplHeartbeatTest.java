@@ -177,7 +177,7 @@ class GrayskullClientImplHeartbeatTest {
         client.getSecret("proj:db-password"); // holds v7
         RefreshHandlerRef handle = client.registerRefreshHook("proj:db-password", secret -> { });
         handle.unRegister();
-        handle.unRegister(); // idempotent: must not drive the count below zero
+        handle.unRegister(); // idempotent
 
         waitForHeartbeats(1, 5_000);
         JsonNode entry = latestEntry("db-password");
