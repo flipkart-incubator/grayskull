@@ -44,7 +44,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private final ObjectMapper objectMapper;
     private final HookRefreshPoller refreshPoller;
     private final HeartbeatScheduler heartbeatScheduler;
-    /** Per-secret usage reported by the heartbeat; also seeds hook registration. */
+    /** Feeds the heartbeat and seeds hook registration. */
     private final UsageLedger ledger = new UsageLedger();
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -153,7 +153,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             statusCode = e.getStatusCode();
             throw e;
         } finally {
-            // Success and failure both count; a malformed secretRef has no ledger entry.
+            // Record every validated call, success or failure.
             if (projectId != null) {
                 ledger.recordGet(projectId, secretName, fetchedVersion);
             }

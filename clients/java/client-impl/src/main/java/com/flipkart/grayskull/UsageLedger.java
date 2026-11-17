@@ -8,20 +8,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
 /**
- * Per-secret usage record that feeds the heartbeat.
- * <p>
- * One entry per {@code projectId:secretName}, created on the first fetch or on hook
- * registration and never removed. It never stores secret values or hashes. Counters are
- * cumulative, so every heartbeat is a full snapshot that the server can upsert idempotently.
- * </p>
- * <p>
- * Writers call it directly: {@link GrayskullClientImpl#getSecret} (fetch outcome),
- * {@link HookRefreshPoller} (hook register/unregister, versions seen, hook outcome).
- * </p>
+ * Per-secret usage reported by the heartbeat. One entry per secret, never removed;
+ * holds no secret values.
  */
 final class UsageLedger {
 
-    /** Max length of {@code lastHookError} (exception class plus message). */
+    /** Max length of {@code lastHookError}. */
     private static final int MAX_ERROR_LENGTH = 256;
 
     private final ConcurrentHashMap<String, Entry> entries = new ConcurrentHashMap<>();
@@ -35,11 +27,7 @@ final class UsageLedger {
         this.clock = clock;
     }
 
-    /**
-     * Records one {@code getSecret} call.
-     *
-     * @param version the fetched version, or {@code null} when the call failed
-     */
+    /** Records one {@code getSecret} call; {@code version} is null when it failed. */
     public void recordGet(String projectId, String secretName, Integer version) {
         long now = clock.getAsLong();
         Entry e = entry(projectId, secretName);
@@ -57,7 +45,7 @@ final class UsageLedger {
         }
     }
 
-    /** A newer version seen by the hook poller (recorded before the hooks run). */
+    /** Records a version seen by the poller. */
     public void recordVersion(String projectId, String secretName, int version) {
         Entry e = entry(projectId, secretName);
         synchronized (e) {
@@ -94,7 +82,7 @@ final class UsageLedger {
         }
     }
 
-    /** Newest version held for {@code projectId:secretName}, or 0. Used to seed hook registration. */
+    /** Newest version held, or 0. */
     public int version(String projectId, String secretName) {
         Entry e = entries.get(key(projectId, secretName));
         if (e == null) {
@@ -105,7 +93,7 @@ final class UsageLedger {
         }
     }
 
-    /** A consistent copy of every entry, in no particular order. */
+    /** Copy of all entries. */
     public List<HeartbeatRequest.HeldSecret> snapshot() {
         List<HeartbeatRequest.HeldSecret> out = new ArrayList<>(entries.size());
         for (Entry e : entries.values()) {
@@ -127,17 +115,18 @@ final class UsageLedger {
         return projectId + ":" + secretName;
     }
 
-    /** Exception class plus message, truncated. Diagnostics only. */
+    /** Exception class and message, truncated. */
     private static String describe(Throwable error) {
         if (error == null) {
             return null;
         }
         String message = error.getMessage();
-        String text = message == null ? error.getClass().getName() : error.getClass().getName() + ": " + message;
+        String name = error.getClass().getName();
+        String text = message == null ? name : name + ": " + message;
         return text.length() <= MAX_ERROR_LENGTH ? text : text.substring(0, MAX_ERROR_LENGTH);
     }
 
-    /** Mutable state for one secret; guarded by its own monitor. */
+    /** Guarded by its own monitor. */
     private static final class Entry {
         private final String projectId;
         private final String secretName;

@@ -21,14 +21,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * Sends the usage ledger snapshot to {@code POST /v1/client/heartbeat} every interval
- * (default 24h, ± 1/24 jitter). The first beat goes out one interval after start; there is
- * no boot-time beat.
- * <p>
- * One attempt per beat: failures back off 5 min doubling to 60 min (± 10%). A server that
- * answers 404, 405 or 501 does not support heartbeats yet; that is logged once at info and
- * the full interval is used, not the backoff.
- * </p>
+ * Sends the usage-ledger snapshot to {@code POST /v1/client/heartbeat} every interval (± 1/24).
+ * Failures back off 5 to 60 min (± 10%); 404/405/501 wait the full interval.
  */
 final class HeartbeatScheduler {
 
@@ -104,10 +98,7 @@ final class HeartbeatScheduler {
         }
     }
 
-    /**
-     * Sends one full snapshot in chunks of {@value #MAX_BATCH_SECRETS}. Sends nothing when the
-     * ledger is empty. Stops at the first chunk the server reports as unsupported.
-     */
+    /** Sends the snapshot in chunks of {@value #MAX_BATCH_SECRETS}; nothing when empty. */
     private Outcome beatOnce() {
         List<HeartbeatRequest.HeldSecret> held = heldSecrets.get();
         if (held.isEmpty()) {

@@ -96,10 +96,6 @@ final class HookRefreshPoller {
     private final String batchUrl;
     private final UsageLedger ledger;
 
-    /**
-     * @param ledger receives hook registrations, versions seen and hook outcomes; it only
-     *               records them and never changes delivery
-     */
     HookRefreshPoller(GrayskullHttpClient httpClient,
                       ObjectMapper objectMapper,
                       String baseUrl,
@@ -319,7 +315,6 @@ final class HookRefreshPoller {
                 ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion());
             } catch (Exception e) {
                 success = false;
-                // Diagnostics only: no retry, no rollback of lastKnownVersion.
                 ledger.recordHookFailed(state.projectId, state.secretName, e);
                 log.error("Consumer hook failed for {}", secretRef, e);
             } finally {
