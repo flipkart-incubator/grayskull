@@ -15,6 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -113,6 +116,22 @@ class GrayskullClientImplHeartbeatTest {
         assertEquals("db-password", secrets.get(0).get("secretName").asText());
         assertEquals(7, secrets.get(0).get("version").asInt());
         assertEquals(false, secrets.get(0).get("refreshHook").asBoolean());
+    }
+
+    @Test
+    void heartbeat_skipsMalformedHeldKeys() throws Exception {
+        client = new GrayskullClientImpl(() -> "Bearer test-token", config(workloadResolver()));
+        Field seen = GrayskullClientImpl.class.getDeclaredField("lastSeenVersions");
+        seen.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, Integer> versions = (Map<String, Integer>) seen.get(client);
+        versions.put("nocolon", 1);
+        versions.put(":name-only", 1);
+        versions.put("proj:", 1);
+        Method held = GrayskullClientImpl.class.getDeclaredMethod("heldSecrets");
+        held.setAccessible(true);
+
+        assertTrue(((List<?>) held.invoke(client)).isEmpty());
     }
 
     @Test

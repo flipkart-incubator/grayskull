@@ -127,7 +127,7 @@ final class HeartbeatScheduler {
                 ? intervalMillis
                 : Math.min(BACKOFF_BASE_MILLIS << Math.min(failures - 1, 20), Math.min(BACKOFF_CAP_MILLIS, intervalMillis));
         long spread = failures == 0 ? delay / 24 : delay / 10;
-        long jitter = spread > 0 ? ThreadLocalRandom.current().nextLong(-spread, spread + 1) : 0;
+        long jitter = ThreadLocalRandom.current().nextLong(-spread, spread + 1);
         return Math.max(1, delay + jitter);
     }
 

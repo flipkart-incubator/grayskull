@@ -311,4 +311,13 @@ class GrayskullClientConfigurationTest {
         assertEquals(100, config.getMinRetryDelay());
         assertFalse(config.isMetricsEnabled());
     }
+
+    @Test
+    void testSetHeartbeatIntervalSeconds_rejectsNonPositive() {
+        GrayskullClientConfiguration config = new GrayskullClientConfiguration();
+
+        assertThrows(IllegalArgumentException.class, () -> config.setHeartbeatIntervalSeconds(0));
+        assertThrows(IllegalArgumentException.class, () -> config.setHeartbeatIntervalSeconds(-1));
+        assertDoesNotThrow(() -> config.setHeartbeatIntervalSeconds(60));
+    }
 }

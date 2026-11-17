@@ -1,7 +1,11 @@
 package com.flipkart.grayskull;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.flipkart.grayskull.models.GrayskullClientConfiguration;
 import com.flipkart.grayskull.models.request.HeartbeatRequest;
 import okhttp3.mockwebserver.Dispatcher;
@@ -14,16 +18,19 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,6 +46,7 @@ class HeartbeatSchedulerTest {
     /** The first {@code failFirst} requests get 503. */
     private final List<Long> arrivalNanos = new CopyOnWriteArrayList<>();
     private final AtomicInteger failFirst = new AtomicInteger();
+    private volatile int failStatus = 503;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -48,7 +56,7 @@ class HeartbeatSchedulerTest {
             public MockResponse dispatch(RecordedRequest request) {
                 arrivalNanos.add(System.nanoTime());
                 if (failFirst.getAndDecrement() > 0) {
-                    return new MockResponse().setResponseCode(503).setBody("unavailable");
+                    return new MockResponse().setResponseCode(failStatus).setBody("failed");
                 }
                 return new MockResponse().setResponseCode(204);
             }
@@ -206,6 +214,104 @@ class HeartbeatSchedulerTest {
         int sent = arrivalNanos.size();
         Thread.sleep(1_500);
         assertEquals(sent, arrivalNanos.size(), "no heartbeat after close");
+    }
+
+    @Test
+    void close_interruptedWhileAwaitingTermination_restoresInterruptFlag() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        // The supplier ignores interrupts, so the executor cannot terminate until released.
+        scheduler = newScheduler(1, () -> {
+            entered.countDown();
+            awaitUninterruptibly(release);
+            return Collections.emptyList();
+        });
+        scheduler.start();
+        assertTrue(entered.await(5, TimeUnit.SECONDS), "a heartbeat should be in progress");
+
+        Thread.currentThread().interrupt();
+        try {
+            scheduler.close();
+            assertTrue(Thread.currentThread().isInterrupted(), "interrupt status must be restored");
+        } finally {
+            Thread.interrupted(); // clear so later tests are unaffected
+            release.countDown();
+        }
+    }
+
+    private static void awaitUninterruptibly(CountDownLatch latch) {
+        boolean interrupted = false;
+        while (true) {
+            try {
+                latch.await();
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    @Test
+    void beatOnce_serializationFailureReturnsFalseWithoutSending() throws Exception {
+        SimpleModule failing = new SimpleModule().addSerializer(HeartbeatRequest.class,
+                new JsonSerializer<HeartbeatRequest>() {
+                    @Override
+                    public void serialize(HeartbeatRequest value, JsonGenerator gen, SerializerProvider provider)
+                            throws IOException {
+                        throw new IOException("cannot serialize");
+                    }
+                });
+        ObjectMapper failingMapper = new ObjectMapper().registerModule(failing);
+        scheduler = new HeartbeatScheduler(httpClient, failingMapper, baseUrl, 60, () -> entries(1));
+
+        assertFalse(beatOnce(scheduler));
+        assertEquals(0, server.getRequestCount());
+    }
+
+    @Test
+    void start_afterClose_isIgnored() throws Exception {
+        scheduler = newScheduler(1, () -> entries(1));
+        scheduler.close();
+
+        scheduler.start(); // scheduling on a shut-down executor is swallowed, not thrown
+
+        Thread.sleep(1_200);
+        assertEquals(0, server.getRequestCount());
+    }
+
+    @Test
+    void run_unexpectedRuntimeException_countsFailureAndDoesNotPropagate() throws Exception {
+        scheduler = newScheduler(60, () -> {
+            throw new IllegalStateException("store unavailable");
+        });
+        Method run = HeartbeatScheduler.class.getDeclaredMethod("run");
+        run.setAccessible(true);
+
+        run.invoke(scheduler);
+
+        Field failures = HeartbeatScheduler.class.getDeclaredField("failures");
+        failures.setAccessible(true);
+        assertEquals(1, failures.getInt(scheduler));
+        assertEquals(0, server.getRequestCount());
+    }
+
+    @Test
+    void beatOnce_clientErrorReturnsFalseAndIsNotRetried() throws Exception {
+        failFirst.set(1);
+        failStatus = 400;
+        scheduler = newScheduler(60, () -> entries(1));
+
+        assertFalse(beatOnce(scheduler));
+        assertEquals(1, server.getRequestCount());
+    }
+
+    @Test
+    void constructor_invalidBaseUrl_throws() {
+        assertThrows(IllegalStateException.class,
+                () -> new HeartbeatScheduler(httpClient, objectMapper, "not a url", 60, Collections::emptyList));
     }
 
     private void waitForRequests(int count, long timeoutMillis) throws InterruptedException {
