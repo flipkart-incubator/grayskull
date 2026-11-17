@@ -30,11 +30,14 @@ public class HeartbeatServiceImpl implements HeartbeatService {
         String userId = authnUtil.getCurrentUsername();
         String sdk = truncate(sdkVersion, MAX_SDK_VERSION_LENGTH);
 
-        // One record per secret version: if the same version is listed twice, report a hook if either has one.
+        // One record per secret version; duplicates keep the highest applied hook version.
         Map<String, HeldSecret> unique = new LinkedHashMap<>();
         for (HeldSecret secret : secrets) {
             unique.merge(secret.getProjectId() + ":" + secret.getSecretName() + ":" + secret.getVersion(), secret,
-                    (a, b) -> a.isRefreshHook() ? a : b);
+                    (a, b) -> {
+                        a.setRefreshHookAppliedVersion(maxApplied(a.getRefreshHookAppliedVersion(), b.getRefreshHookAppliedVersion()));
+                        return a;
+                    });
         }
 
         List<WorkloadHeartbeat> records = unique.values().stream()
@@ -43,7 +46,7 @@ public class HeartbeatServiceImpl implements HeartbeatService {
                         .projectId(secret.getProjectId())
                         .secretName(secret.getSecretName())
                         .secretVersion(secret.getVersion())
-                        .refreshHook(secret.isRefreshHook())
+                        .refreshHookAppliedVersion(secret.getRefreshHookAppliedVersion())
                         .sdkVersion(sdk)
                         .userId(userId)
                         .lastSeen(now)
@@ -51,6 +54,10 @@ public class HeartbeatServiceImpl implements HeartbeatService {
                 .toList();
 
         heartbeatRepository.upsertAll(records);
+    }
+
+    private static Integer maxApplied(Integer a, Integer b) {
+        return a == null ? b : b == null ? a : Math.max(a, b);
     }
 
     private static String truncate(String value, int max) {

@@ -23,7 +23,7 @@ class HeartbeatControllerTest {
     @Test
     @DisplayName("Records the heartbeat and returns 204 with no body")
     void recordHeartbeat_returnsNoContent() {
-        List<HeldSecret> secrets = List.of(new HeldSecret("payments", "db-password", 7, true));
+        List<HeldSecret> secrets = List.of(new HeldSecret("payments", "db-password", 7, 7));
 
         var response = controller.recordHeartbeat(WORKLOAD, "grayskull-java/0.3.0", new HeartbeatRequest(secrets));
 

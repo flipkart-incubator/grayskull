@@ -4,19 +4,14 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * A secret held by the calling workload, reported in a heartbeat (one SDK usage-ledger entry).
- * <p>
- * The first four fields are the original contract. The rest come from the v2 payload
- * ({@code POST /v1/client/heartbeat}) and are optional, so older SDKs that send only the
- * first four still validate.
- * </p>
- */
+/** One secret in a heartbeat: the version held and its refresh hook's applied version. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 public class HeldSecret {
 
     @NotBlank
@@ -27,48 +22,12 @@ public class HeldSecret {
     @Size(max = 255)
     private String secretName;
 
-    /**
-     * The newest version of the secret the reporting instance holds. 0 when the secret has a refresh hook
-     * but was never fetched and no update has been delivered yet.
-     */
+    /** Newest version held; 0 for a hook-only secret not yet fetched. */
     @NotNull
     @Min(0)
     private Integer version;
 
-    /**
-     * Whether the reporting instance has a refresh hook registered for this secret. Defaults to false.
-     */
-    private boolean refreshHook;
-
-    /** Cumulative successful / failed {@code getSecret} calls. */
+    /** Newest version a refresh hook succeeded for; null when no hook is registered. */
     @Min(0)
-    private Long getCount;
-
-    @Min(0)
-    private Long errorCount;
-
-    /** Epoch millis of the first / last {@code getSecret} call; 0 when never fetched. */
-    @Min(0)
-    private Long firstAccessAt;
-
-    @Min(0)
-    private Long lastAccessAt;
-
-    /** Newest version a refresh hook ran successfully for; 0 if none. */
-    @Min(0)
-    private Integer hookAppliedVersion;
-
-    @Min(0)
-    private Long hookFailureCount;
-
-    /** Exception class and message of the last hook failure (truncated by the SDK); null if none. */
-    @Size(max = 512)
-    private String lastHookError;
-
-    public HeldSecret(String projectId, String secretName, Integer version, boolean refreshHook) {
-        this.projectId = projectId;
-        this.secretName = secretName;
-        this.version = version;
-        this.refreshHook = refreshHook;
-    }
+    private Integer refreshHookAppliedVersion;
 }

@@ -330,8 +330,8 @@ class GrayskullSecurityTest {
         when(authorizationProvider.bulkAuthorize(captor.capture(), eq("secrets.read.value"))).thenReturn(true);
 
         List<HeldSecret> secrets = List.of(
-                new HeldSecret("proj-a", "secret-1", 1, true),
-                new HeldSecret("proj-b", "secret-2", 2, false));
+                new HeldSecret("proj-a", "secret-1", 1, 1),
+                new HeldSecret("proj-b", "secret-2", 2, null));
 
         assertTrue(grayskullSecurity.hasPermissionForHeldSecrets(secrets, "secrets.read.value"));
 
@@ -351,6 +351,6 @@ class GrayskullSecurityTest {
         when(authorizationProvider.bulkAuthorize(any(), eq("secrets.read.value"))).thenReturn(false);
 
         assertFalse(grayskullSecurity.hasPermissionForHeldSecrets(
-                List.of(new HeldSecret("proj-a", "s1", 1, false)), "secrets.read.value"));
+                List.of(new HeldSecret("proj-a", "s1", 1, null)), "secrets.read.value"));
     }
 }

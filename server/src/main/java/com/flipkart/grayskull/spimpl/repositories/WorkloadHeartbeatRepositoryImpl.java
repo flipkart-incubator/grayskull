@@ -13,9 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-/**
- * MongoDB implementation of {@link WorkloadHeartbeatRepository}: one unordered bulk of upserts per call.
- */
+/** Upserts heartbeat records in one unordered bulk. */
 @Repository
 @RequiredArgsConstructor
 public class WorkloadHeartbeatRepositoryImpl implements WorkloadHeartbeatRepository {
@@ -43,7 +41,7 @@ public class WorkloadHeartbeatRepositoryImpl implements WorkloadHeartbeatReposit
 
     private static Update updateOf(WorkloadHeartbeat heartbeat) {
         return new Update()
-                .set("refreshHook", heartbeat.getRefreshHook())
+                .set("refreshHookAppliedVersion", heartbeat.getRefreshHookAppliedVersion())
                 .set("sdkVersion", heartbeat.getSdkVersion())
                 .set("userId", heartbeat.getUserId())
                 .set("lastSeen", heartbeat.getLastSeen())

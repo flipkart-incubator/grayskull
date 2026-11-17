@@ -35,8 +35,8 @@ class HeartbeatServiceImplTest {
         Instant before = Instant.now();
 
         service.recordHeartbeat("wl", "grayskull-java/0.3.0", List.of(
-                new HeldSecret("payments", "db-password", 7, true),
-                new HeldSecret("payments", "api-key", 3, false)));
+                new HeldSecret("payments", "db-password", 7, 7),
+                new HeldSecret("payments", "api-key", 3, null)));
 
         List<WorkloadHeartbeat> records = captureUpsert();
         assertThat(records).hasSize(2);
@@ -45,12 +45,12 @@ class HeartbeatServiceImplTest {
         assertThat(first.getProjectId()).isEqualTo("payments");
         assertThat(first.getSecretName()).isEqualTo("db-password");
         assertThat(first.getSecretVersion()).isEqualTo(7);
-        assertThat(first.getRefreshHook()).isTrue();
+        assertThat(first.getRefreshHookAppliedVersion()).isEqualTo(7);
         assertThat(first.getSdkVersion()).isEqualTo("grayskull-java/0.3.0");
         assertThat(first.getUserId()).isEqualTo("service:payment-api");
         assertThat(first.getLastSeen()).isBetween(before, Instant.now());
         assertThat(records.get(1).getSecretName()).isEqualTo("api-key");
-        assertThat(records.get(1).getRefreshHook()).isFalse();
+        assertThat(records.get(1).getRefreshHookAppliedVersion()).isNull();
         assertThat(records.get(1).getLastSeen()).isEqualTo(first.getLastSeen());
     }
 
@@ -58,14 +58,14 @@ class HeartbeatServiceImplTest {
     @DisplayName("One record per secret version: duplicates merge, different versions stay separate")
     void recordHeartbeat_oneRecordPerSecretVersion() {
         service.recordHeartbeat("wl", null, List.of(
-                new HeldSecret("p", "s", 4, false),
-                new HeldSecret("p", "s", 4, true),
-                new HeldSecret("p", "s", 5, false)));
+                new HeldSecret("p", "s", 4, null),
+                new HeldSecret("p", "s", 4, 4),
+                new HeldSecret("p", "s", 5, null)));
 
         List<WorkloadHeartbeat> records = captureUpsert();
         assertThat(records).hasSize(2);
         assertThat(records.get(0).getSecretVersion()).isEqualTo(4);
-        assertThat(records.get(0).getRefreshHook()).isTrue();
+        assertThat(records.get(0).getRefreshHookAppliedVersion()).isEqualTo(4);
         assertThat(records.get(1).getSecretVersion()).isEqualTo(5);
     }
 
@@ -73,7 +73,7 @@ class HeartbeatServiceImplTest {
     @DisplayName("SDK version is truncated to 64 characters")
     void recordHeartbeat_truncatesSdkVersion() {
         service.recordHeartbeat("wl", "x".repeat(100),
-                List.of(new HeldSecret("p", "s", 1, false)));
+                List.of(new HeldSecret("p", "s", 1, null)));
 
         assertThat(captureUpsert().get(0).getSdkVersion()).hasSize(HeartbeatServiceImpl.MAX_SDK_VERSION_LENGTH);
     }

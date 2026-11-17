@@ -9,18 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 
-/**
- * MongoDB mapping for {@link com.flipkart.grayskull.spi.models.WorkloadHeartbeat}.
- * Declares the collection and its indexes; records are written by upsert in
- * {@link com.flipkart.grayskull.spimpl.repositories.WorkloadHeartbeatRepositoryImpl}.
- * <ul>
- *   <li>Unique key {@code (workload, projectId, secretName, secretVersion)}: one record per secret version a
- *       workload holds; a workload mid-rotation has one record per version.</li>
- *   <li>{@code (projectId, secretName)}: which workloads hold a secret, and at which version.</li>
- *   <li>TTL on {@code lastSeen}: a version no instance reports any more expires after 3 days
- *       (heartbeats are daily, so one missed heartbeat does not drop a record).</li>
- * </ul>
- */
+/** MongoDB mapping for WorkloadHeartbeat; records are written by upsert. */
 @Getter
 @NoArgsConstructor
 @Document(collection = WorkloadHeartbeatEntity.COLLECTION)
@@ -37,7 +26,7 @@ public class WorkloadHeartbeatEntity {
     private String projectId;
     private String secretName;
     private Integer secretVersion;
-    private Boolean refreshHook;
+    private Integer refreshHookAppliedVersion;
     private String sdkVersion;
     private String userId;
     private Instant firstSeen;

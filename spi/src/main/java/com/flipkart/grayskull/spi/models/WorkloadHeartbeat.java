@@ -7,13 +7,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.time.Instant;
 
-/**
- * One version of a secret held by a workload, as last reported by its SDK heartbeats.
- * Unique per {@code (workload, projectId, secretName, secretVersion)}: all instances of a workload on the same
- * version refresh one record, and a workload with instances on two versions has two records.
- * <p>
- * This is a plain POJO contract that the server module will implement with framework-specific annotations.
- */
+/** A secret version held by a workload, from its latest SDK heartbeats. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -30,8 +24,8 @@ public class WorkloadHeartbeat {
     /** A version of the secret the workload holds. */
     private Integer secretVersion;
 
-    /** Whether the reporting instance has a refresh hook registered for the secret. */
-    private Boolean refreshHook;
+    /** Newest version a refresh hook succeeded for; null when no hook is registered. */
+    private Integer refreshHookAppliedVersion;
 
     /** SDK name and version from the {@code User-Agent} header. */
     private String sdkVersion;

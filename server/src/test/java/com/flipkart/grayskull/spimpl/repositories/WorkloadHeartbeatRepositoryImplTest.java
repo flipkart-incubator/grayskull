@@ -32,7 +32,7 @@ class WorkloadHeartbeatRepositoryImplTest {
         Instant now = Instant.parse("2026-11-12T10:15:00Z");
         WorkloadHeartbeat heartbeat = WorkloadHeartbeat.builder()
                 .workload("wl")
-                .projectId("payments").secretName("db-password").secretVersion(7).refreshHook(true)
+                .projectId("payments").secretName("db-password").secretVersion(7).refreshHookAppliedVersion(7)
                 .sdkVersion("grayskull-java/0.3.0").userId("service:payment-api").lastSeen(now)
                 .build();
 
@@ -48,7 +48,7 @@ class WorkloadHeartbeatRepositoryImplTest {
                 .append("secretName", "db-password").append("secretVersion", 7));
         assertThat(query.getAllValues().get(1).getQueryObject().get("secretVersion")).isEqualTo(6);
         Document set = (Document) update.getAllValues().get(0).getUpdateObject().get("$set");
-        assertThat(set).containsEntry("refreshHook", true)
+        assertThat(set).containsEntry("refreshHookAppliedVersion", 7)
                 .containsEntry("sdkVersion", "grayskull-java/0.3.0")
                 .containsEntry("userId", "service:payment-api")
                 .containsEntry("lastSeen", now);

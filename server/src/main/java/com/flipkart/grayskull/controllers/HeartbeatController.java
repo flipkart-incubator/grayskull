@@ -16,14 +16,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Lightweight presence API for SDK clients: records which secrets, at which versions, a workload holds.
- * Unlike {@code POST /v1/secrets/batch}, it reads no secret data, returns nothing and writes no audit entries.
- * <p>
- * {@code /v1/client/heartbeat} is the v2 path. {@code /v1/heartbeat} is kept only so SDK builds made before
- * the rename keep working on playground; remove it before release.
- * </p>
- */
+/** Records the secrets a workload holds; {@code /v1/heartbeat} is a legacy alias. */
 @RestController
 @RequestMapping({"/v1/client/heartbeat", "/v1/heartbeat"})
 @RequiredArgsConstructor
