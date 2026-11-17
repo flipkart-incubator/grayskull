@@ -4,7 +4,6 @@ import com.flipkart.grayskull.BaseIntegrationTest;
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.UserType;
 import com.flipkart.grayskull.audit.relay.AuditOutboxRelayer;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -51,8 +50,6 @@ class AuditControllerIntegrationTest extends BaseIntegrationTest {
         return result;
     }
 
-    // TODO re-enable once the db/audit Flyway migrations are pushed; until then the audit tables don't exist
-    @Disabled("needs the db/audit migrations")
     @Nested
     @DisplayName("Project-Specific Audit Tests")
     class ProjectAuditTests {
@@ -303,8 +300,6 @@ class AuditControllerIntegrationTest extends BaseIntegrationTest {
         }
     }
 
-    // TODO re-enable once the db/audit Flyway migrations are pushed; until then the audit tables don't exist
-    @Disabled("needs the db/audit migrations")
     @Nested
     @DisplayName("Global Audit Tests")
     class GlobalAuditTests {

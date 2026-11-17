@@ -7,7 +7,7 @@ import com.flipkart.grayskull.spi.models.AuditQuery;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -29,7 +29,7 @@ public class MysqlAuditEntryRepository implements AuditEntryRepository {
 
     @Override
     public List<AuditEntry> saveAll(Iterable<AuditEntry> entries) {
-        List<AuditEntry> list = new java.util.ArrayList<>();
+        List<AuditEntry> list = new ArrayList<>();
         entries.forEach(list::add);
         store.insertMissing(list);
         return list;

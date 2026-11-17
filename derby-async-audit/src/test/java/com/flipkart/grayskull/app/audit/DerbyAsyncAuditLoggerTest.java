@@ -42,21 +42,24 @@ class DerbyAsyncAuditLoggerTest {
     }
 
     @Test
-    void testInit_CreatesTable() throws SQLException {
+    void testInit_CreatesTable_AndResetsTheNodeCheckpoint() throws SQLException {
         when(connection.createStatement()).thenReturn(statement);
 
         logger.init();
 
         verify(statement).execute("CREATE TABLE audits (id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY(START WITH 1, INCREMENT BY 1), event LONG VARCHAR)");
+        // a new buffer numbers rows from 1 again, so an old checkpoint must not skip them
+        verify(auditFlushStore).deleteCheckpoint("test-node");
     }
 
     @Test
-    void testInit_TableAlreadyExists_DoesNotThrow() throws SQLException {
+    void testInit_TableAlreadyExists_KeepsTheCheckpoint() throws SQLException {
         when(connection.createStatement()).thenReturn(statement);
         SQLException e = new SQLException("Table exists", "X0Y32");
         doThrow(e).when(statement).execute(anyString());
 
         assertDoesNotThrow(() -> logger.init());
+        verify(auditFlushStore, never()).deleteCheckpoint(anyString());
     }
 
     @Test

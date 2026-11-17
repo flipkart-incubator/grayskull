@@ -59,8 +59,13 @@ public class AuditOutboxRelayer {
     private void drainPending() {
         Instant deadline = Instant.now().plus(properties.getMaxRuntime());
         long synced = 0;
-        while (Instant.now().isBefore(deadline)) {
-            List<AuditOutboxEntity> batch = outboxRepository.findPending(properties.getBatchSize());
+        List<AuditOutboxEntity> batch;
+        do {
+            if (!Instant.now().isBefore(deadline)) {
+                log.info("Audit outbox relayer hit max runtime {}; the rest is left for the next run", properties.getMaxRuntime());
+                break;
+            }
+            batch = outboxRepository.findPending(properties.getBatchSize());
             if (batch.isEmpty()) {
                 break;
             }
@@ -68,13 +73,7 @@ public class AuditOutboxRelayer {
             long marked = outboxRepository.markSynced(batch.stream().map(AuditOutboxEntity::getId).toList(), Instant.now());
             synced += marked;
             meterRegistry.counter("audit.relayer.synced").increment(marked);
-            if (batch.size() < properties.getBatchSize()) {
-                break;
-            }
-        }
-        if (!Instant.now().isBefore(deadline)) {
-            log.info("Audit outbox relayer hit max runtime {}; the rest is left for the next run", properties.getMaxRuntime());
-        }
+        } while (batch.size() == properties.getBatchSize());
         if (synced > 0) {
             log.info("Audit outbox relayer drain complete synced={}", synced);
         }
