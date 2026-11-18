@@ -147,3 +147,18 @@ func TestUsageLedger_AddingAHookClearsTheAppliedVersionUntilItRuns(t *testing.T)
 	l.RecordHookAdded("p", "s")
 	assert.Equal(t, 0, applied(t, only(t, &l)), "the new hook has not applied v7")
 }
+
+func TestUsageLedger_HookGenerationIsZeroForAnUnknownSecret(t *testing.T) {
+	var l UsageLedger
+	assert.Zero(t, l.HookGeneration("p", "unknown"))
+}
+
+func TestUsageLedger_HookAppliedIsIgnoredWhenHooksChangedSinceTheGenerationWasRead(t *testing.T) {
+	var l UsageLedger
+	l.RecordVersion("p", "s", 5)
+	l.RecordHookAdded("p", "s")
+	staleGen := l.HookGeneration("p", "s")
+	l.RecordHookAdded("p", "s") // a hook added while the delivery ran
+	l.RecordHookApplied("p", "s", 5, staleGen)
+	assert.Equal(t, 0, applied(t, only(t, &l)), "a stale delivery cannot mark v5 applied")
+}

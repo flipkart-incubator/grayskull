@@ -147,4 +147,19 @@ class UsageLedgerTest {
         ledger.recordHookApplied("p", "s", 5, ledger.hookGeneration("p", "s"));
         assertEquals(5, only().getRefreshHookAppliedVersion());
     }
+
+    @Test
+    void hookGeneration_isZeroForAnUnknownSecret() {
+        assertEquals(0, ledger.hookGeneration("p", "unknown"));
+    }
+
+    @Test
+    void hookApplied_isIgnoredWhenHooksChangedSinceTheGenerationWasRead() {
+        ledger.recordVersion("p", "s", 5);
+        ledger.recordHookAdded("p", "s");
+        long staleGen = ledger.hookGeneration("p", "s");
+        ledger.recordHookAdded("p", "s"); // a hook added while the delivery ran
+        ledger.recordHookApplied("p", "s", 5, staleGen);
+        assertEquals(0, only().getRefreshHookAppliedVersion(), "a stale delivery cannot mark v5 applied");
+    }
 }

@@ -354,4 +354,20 @@ class HookRefreshPollerTest {
         modifiers.setInt(f, f.getModifiers() & ~Modifier.FINAL);
         f.set(poller, value);
     }
+
+    @Test
+    void deliverToHooks_withNoHooksLeft_recordsNothingAsApplied() throws Exception {
+        UsageLedger ledger = new UsageLedger();
+        poller = new HookRefreshPoller(mock(GrayskullHttpClient.class), new ObjectMapper(),
+                "http://localhost:9999", 60, ledger);
+        ledger.recordVersion("proj", "sec", 3);
+        ledger.recordHookAdded("proj", "sec");
+
+        Method deliver = HookRefreshPoller.class.getDeclaredMethod(
+                "deliverToHooks", String.class, SecretState.class, SecretValue.class);
+        deliver.setAccessible(true);
+        deliver.invoke(poller, "proj:sec", new SecretState("proj", "sec"), new SecretValue(3, "a", "b"));
+
+        assertEquals(0, ledger.snapshot().get(0).getRefreshHookAppliedVersion(), "no hook ran, so nothing was applied");
+    }
 }
