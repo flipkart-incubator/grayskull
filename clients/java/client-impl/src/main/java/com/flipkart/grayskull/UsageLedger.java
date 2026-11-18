@@ -1,0 +1,122 @@
+package com.flipkart.grayskull;
+
+import com.flipkart.grayskull.models.request.HeartbeatRequest;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** Per-secret usage for the heartbeat; entries are never removed. */
+final class UsageLedger {
+
+    private final ConcurrentHashMap<String, Entry> entries = new ConcurrentHashMap<>();
+
+    /** Records a successful {@code getSecret}. */
+    public void recordFetch(String projectId, String secretName, int version) {
+        recordVersion(projectId, secretName, version);
+    }
+
+    /** Records a version seen by the poller. */
+    public void recordVersion(String projectId, String secretName, int version) {
+        Entry e = entry(projectId, secretName);
+        synchronized (e) {
+            e.version = Math.max(e.version, version);
+        }
+    }
+
+    /** Sets whether any refresh hook is still registered for the secret. */
+    public void setHookRegistered(String projectId, String secretName, boolean registered) {
+        Entry e = entry(projectId, secretName);
+        synchronized (e) {
+            e.hookRegistered = registered;
+            e.hookGen++;
+            if (!registered) {
+                e.hookAppliedVersion = 0; // a hook registered later must apply a version itself
+            }
+        }
+    }
+
+    /** Records a newly added hook; it has applied nothing yet, so the applied version is cleared. */
+    public void recordHookAdded(String projectId, String secretName) {
+        Entry e = entry(projectId, secretName);
+        synchronized (e) {
+            e.hookRegistered = true;
+            e.hookAppliedVersion = 0;
+            e.hookGen++;
+        }
+    }
+
+    /** Current hook generation; capture it before reading the hook list. */
+    public long hookGeneration(String projectId, String secretName) {
+        Entry e = entries.get(key(projectId, secretName));
+        if (e == null) {
+            return 0;
+        }
+        synchronized (e) {
+            return e.hookGen;
+        }
+    }
+
+    /**
+     * Records that every hook succeeded for {@code version}; ignored when hooks were added or
+     * removed since {@code hookGen} was captured. Failures are not recorded.
+     */
+    public void recordHookApplied(String projectId, String secretName, int version, long hookGen) {
+        Entry e = entry(projectId, secretName);
+        synchronized (e) {
+            if (e.hookGen == hookGen) {
+                e.hookAppliedVersion = Math.max(e.hookAppliedVersion, version);
+            }
+        }
+    }
+
+    /** Newest version held, or 0. */
+    public int version(String projectId, String secretName) {
+        Entry e = entries.get(key(projectId, secretName));
+        if (e == null) {
+            return 0;
+        }
+        synchronized (e) {
+            return e.version;
+        }
+    }
+
+    /** Entries that hold a version; {@code refreshHookAppliedVersion} is present while a hook is registered. */
+    public List<HeartbeatRequest.HeldSecret> snapshot() {
+        List<HeartbeatRequest.HeldSecret> out = new ArrayList<>(entries.size());
+        for (Entry e : entries.values()) {
+            synchronized (e) {
+                if (e.version == 0) {
+                    continue;
+                }
+                out.add(new HeartbeatRequest.HeldSecret(e.projectId, e.secretName, e.version,
+                        e.hookRegistered ? e.hookAppliedVersion : null));
+            }
+        }
+        return out;
+    }
+
+    private Entry entry(String projectId, String secretName) {
+        return entries.computeIfAbsent(key(projectId, secretName), k -> new Entry(projectId, secretName));
+    }
+
+    private static String key(String projectId, String secretName) {
+        return projectId + ":" + secretName;
+    }
+
+    /** Guarded by its own monitor. */
+    private static final class Entry {
+        private final String projectId;
+        private final String secretName;
+        private int version;
+        private boolean hookRegistered;
+        private int hookAppliedVersion;
+        /** Changes whenever hooks are added or removed, so an older delivery cannot mark a version applied. */
+        private long hookGen;
+
+        private Entry(String projectId, String secretName) {
+            this.projectId = projectId;
+            this.secretName = secretName;
+        }
+    }
+}

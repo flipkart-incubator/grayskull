@@ -97,6 +97,12 @@ func (c *GrayskullHTTPClient) DoPostWithRetry(ctx context.Context, url string, j
 	return c.doWithRetry(ctx, http.MethodPost, url, jsonBody, result)
 }
 
+// DoPost sends one POST without retries, ignoring the response body.
+func (c *GrayskullHTTPClient) DoPost(ctx context.Context, url string, jsonBody []byte) (int, error) {
+	_, status, err := c.doRequest(ctx, http.MethodPost, url, jsonBody)
+	return status, err
+}
+
 // doWithRetry is the shared retry+unmarshal wrapper. GET always unmarshals;
 // POST only when result != nil and body != "".
 func (c *GrayskullHTTPClient) doWithRetry(ctx context.Context, method, url string, body []byte, result any) (int, error) {
