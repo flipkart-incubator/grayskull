@@ -73,3 +73,36 @@ def test_body_is_the_wire_shape(server):
     new_scheduler(server.url, [HeldSecret("p", "s", 5, 4)])._beat_once()
     expected = json.loads(json.dumps({"secrets": [HeldSecret("p", "s", 5, 4).to_dict()]}))
     assert server.recorded("/v1/client/heartbeat")[0].body == expected
+
+
+def test_close_before_start_is_safe():
+    new_scheduler("http://x", []).close()
+
+
+def test_unexpected_error_does_not_stop_the_schedule():
+    calls = []
+
+    def broken_snapshot():
+        calls.append(1)
+        raise RuntimeError("ledger bug")
+
+    config = GrayskullClientConfiguration(host="http://x", min_retry_delay=50)
+    http_client = GrayskullHttpClient(BasicAuthHeaderProvider("u", "p"), config, NoopMetricsRecorder())
+    scheduler = HeartbeatScheduler(http_client, "http://x", 0.02, broken_snapshot, NoopMetricsRecorder())
+    scheduler._next_delay_seconds = lambda failures: 0.02  # keep retrying quickly despite the failure backoff
+    scheduler.start()
+    import time
+    deadline = time.monotonic() + 5
+    while len(calls) < 3 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    scheduler.close()
+    assert len(calls) >= 3
+
+
+def test_unsupported_status_is_logged_only_once(server, caplog):
+    server.heartbeat_status = 404
+    scheduler = new_scheduler(server.url, held(1))
+    with caplog.at_level("INFO"):
+        scheduler._beat_once()
+        scheduler._beat_once()
+    assert sum("does not support client heartbeats" in r.getMessage() for r in caplog.records) == 1

@@ -86,3 +86,23 @@ def test_auth_provider_failure_surfaces_as_grayskull_exception(server):
         new_http_client(server.url, auth=FailingAuthHeaderProvider()).do_post(
             f"{server.url}/v1/client/heartbeat", b"{}", "r")
     assert "Failed to obtain auth header" in str(info.value)
+
+
+def test_connection_failure_is_retryable_with_status_zero(server):
+    url = server.url
+    client = new_http_client(url)
+    closed_port_url = "http://127.0.0.1:1/v1/client/heartbeat"
+    with pytest.raises(RetryableException) as info:
+        client.do_post(closed_port_url, b"{}", "r")
+    assert info.value.status_code == 0
+
+
+class RejectingAuthHeaderProvider(GrayskullAuthHeaderProvider):
+    def get_auth_header(self) -> str:
+        raise GrayskullException(401, "token rejected")
+
+
+def test_grayskull_exception_from_the_auth_provider_is_raised_unchanged(server):
+    with pytest.raises(GrayskullException) as info:
+        new_http_client(server.url, auth=RejectingAuthHeaderProvider()).do_post(f"{server.url}/x", b"{}", "r")
+    assert info.value.status_code == 401 and str(info.value) == "token rejected"

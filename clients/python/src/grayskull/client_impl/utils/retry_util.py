@@ -2,7 +2,7 @@
 
 import random
 import time
-from typing import Callable, Optional, Tuple, TypeVar
+from typing import Callable, Tuple, TypeVar
 
 from ..models.exceptions.retryable_exception import RetryableException
 
@@ -15,20 +15,18 @@ class RetryUtil:
     """Runs a call up to max_attempts times, doubling the delay after each transient failure."""
 
     def __init__(self, max_attempts: int, initial_delay_ms: int) -> None:
-        self._max_attempts = max_attempts
+        self._max_attempts = max(1, max_attempts)
         self._initial_delay_seconds = initial_delay_ms / 1000.0
 
     def retry(self, task: Callable[[], T]) -> Tuple[T, int]:
         """Return the task result and the number of attempts; re-raises the last RetryableException."""
-        last: Optional[RetryableException] = None
-        for attempt in range(1, self._max_attempts + 1):
+        attempt = 1
+        while True:
             try:
                 return task(), attempt
-            except RetryableException as exc:
-                last = exc
-                if attempt == self._max_attempts:
-                    break
+            except RetryableException:
+                if attempt >= self._max_attempts:
+                    raise
                 delay = min(self._initial_delay_seconds * (2 ** (attempt - 1)), _MAX_BACKOFF_SECONDS)
                 time.sleep(delay * (1 + random.uniform(0, _BACKOFF_JITTER)))
-        assert last is not None
-        raise last
+                attempt += 1

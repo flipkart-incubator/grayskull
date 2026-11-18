@@ -55,3 +55,8 @@ def test_default_workload_identity_resolver_falls_back_to_unknown():
     assert DefaultWorkloadIdentityResolver(fails).resolve() == "UNKNOWN"
     assert DefaultWorkloadIdentityResolver(lambda: "  ").resolve() == "UNKNOWN"
     assert DefaultWorkloadIdentityResolver(lambda: "pod-1").resolve() == "pod-1"
+
+
+def test_missing_workload_identity_resolver_falls_back_to_the_default():
+    config = GrayskullClientConfiguration(host="http://x", workload_identity_resolver=None)  # type: ignore[arg-type]
+    assert isinstance(config.workload_identity_resolver, DefaultWorkloadIdentityResolver)

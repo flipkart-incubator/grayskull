@@ -7,8 +7,8 @@ from typing import Callable, List
 import pytest
 from fake_grayskull_server import FakeGrayskullServer, RunningServer
 
-from grayskull import (BasicAuthHeaderProvider, GrayskullClientConfiguration, GrayskullClientImpl, SecretValue,
-                       WorkloadIdentityResolver)
+from grayskull import (BasicAuthHeaderProvider, GrayskullClientConfiguration, GrayskullClientImpl,
+                       GrayskullException, SecretValue, WorkloadIdentityResolver)
 
 
 class StaticWorkloadIdentityResolver(WorkloadIdentityResolver):
@@ -194,3 +194,25 @@ def test_concurrent_gets_are_safe(make_client):
     for t in threads:
         t.join()
     assert errors == []
+
+
+def test_constructor_rejects_missing_arguments(grayskull):
+    _, running = grayskull
+    config = GrayskullClientConfiguration(host=running.url)
+    with pytest.raises(ValueError):
+        GrayskullClientImpl(None, config)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        GrayskullClientImpl(BasicAuthHeaderProvider("u", "p"), None)  # type: ignore[arg-type]
+
+
+def test_get_secret_with_unparseable_data_raises(grayskull, make_client):
+    fake, _ = grayskull
+    fake.raw_get_body = b'{"data": {"publicPart": "missing the version"}}'
+    with pytest.raises(GrayskullException, match="Failed to parse response") as info:
+        make_client(heartbeat_enabled=False).get_secret("grayskull:db")
+    assert info.value.status_code == 500
+
+
+def test_register_refresh_hook_rejects_a_non_callable_hook(make_client):
+    with pytest.raises(ValueError):
+        make_client(heartbeat_enabled=False).register_refresh_hook("grayskull:db", "not callable")  # type: ignore[arg-type]
