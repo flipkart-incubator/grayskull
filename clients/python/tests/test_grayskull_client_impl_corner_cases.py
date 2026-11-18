@@ -6,8 +6,8 @@ from typing import Callable, Dict, List, Optional
 import pytest
 from fake_grayskull_server import FakeGrayskullServer
 
-from grayskull import (BasicAuthHeaderProvider, GrayskullClientConfiguration, GrayskullClientImpl,
-                       GrayskullException, SecretValue, WorkloadIdentityResolver)
+from grayskull import (BasicAuthHeaderProvider, GrayskullClient, GrayskullClientConfiguration, GrayskullClientImpl,
+                       GrayskullException, SecretValue)
 from grayskull.client_impl.heartbeat_scheduler import HeartbeatOutcome
 
 REF = "grayskull:db"

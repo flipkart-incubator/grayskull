@@ -7,8 +7,8 @@ from typing import Callable, List
 import pytest
 from fake_grayskull_server import FakeGrayskullServer, RunningServer
 
-from grayskull import (BasicAuthHeaderProvider, GrayskullClientConfiguration, GrayskullClientImpl,
-                       GrayskullException, SecretValue, WorkloadIdentityResolver)
+from grayskull import (BasicAuthHeaderProvider, GrayskullClientConfiguration, GrayskullClientImpl, SecretValue,
+                       WorkloadIdentityResolver)
 
 
 class StaticWorkloadIdentityResolver(WorkloadIdentityResolver):

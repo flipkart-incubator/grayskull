@@ -3,7 +3,7 @@
 Python client for Grayskull: read secrets, receive refresh hooks when a secret changes, and send the
 client heartbeat that reports which secret versions a workload holds. Standard library only at runtime.
 
-Requires Python 3.9 or later.
+Requires Python 3.10 or later.
 
 ## Usage
 

@@ -7,7 +7,7 @@ name = "grayskull-client"
 version = "0.3.0"
 description = "Python client SDK for Grayskull secrets: reads, refresh hooks and heartbeats"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 dependencies = []
 
@@ -19,4 +19,5 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 addopts = "-ra --strict-markers"
