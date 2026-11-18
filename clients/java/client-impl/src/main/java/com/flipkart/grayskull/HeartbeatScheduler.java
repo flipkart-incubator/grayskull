@@ -20,15 +20,14 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-/** Sends the usage-ledger snapshot to {@code POST /v1/client/heartbeat} on an interval, with backoff on failure. */
+/** Sends the usage-ledger snapshot to {@code POST /v1/client/heartbeat} on an interval; a failed beat is retried once after about an hour. */
 final class HeartbeatScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatScheduler.class);
 
     private static final String HEARTBEAT_PATH = "v1/client/heartbeat";
 
-    private static final long BACKOFF_BASE_MILLIS = TimeUnit.MINUTES.toMillis(5);
-    private static final long BACKOFF_CAP_MILLIS = TimeUnit.MINUTES.toMillis(60);
+    private static final long RETRY_DELAY_MILLIS = TimeUnit.HOURS.toMillis(1);
     private static final int MAX_BATCH_SECRETS = 50;
 
     /** Result of one beat. */
@@ -83,9 +82,9 @@ final class HeartbeatScheduler {
 
     private void run() {
         try {
-            failures = beatOnce() == Outcome.FAILED ? failures + 1 : 0;
+            failures = beatOnce() == Outcome.FAILED ? nextFailures(failures) : 0;
         } catch (RuntimeException e) {
-            failures++;
+            failures = nextFailures(failures);
             log.warn("heartbeat failed", e);
         } finally {
             scheduleNext();
@@ -133,7 +132,7 @@ final class HeartbeatScheduler {
                 }
                 return Outcome.UNSUPPORTED;
             }
-            log.warn("heartbeat for {} secret(s) failed (status {}); retrying with backoff: {}",
+            log.warn("heartbeat for {} secret(s) failed (status {}); retrying once in about an hour: {}",
                     chunk.size(), status, e.getMessage());
             return Outcome.FAILED;
         } finally {
@@ -147,12 +146,16 @@ final class HeartbeatScheduler {
         return status == 404 || status == 405 || status == 501;
     }
 
-    /** Interval ± 1/24 on success; 5–60 min backoff ± 10% on failure. */
+    /** 1 after a failed beat (retry pending), 2 after the retry also failed (wait for the next interval). */
+    private static int nextFailures(int failures) {
+        return failures == 1 ? 2 : 1;
+    }
+
+    /** One retry after about an hour (± 10%) following a failure; otherwise the interval ± 1/24. */
     private long nextDelayMillis(int failures) {
-        long delay = failures == 0
-                ? intervalMillis
-                : Math.min(BACKOFF_BASE_MILLIS << Math.min(failures - 1, 20), Math.min(BACKOFF_CAP_MILLIS, intervalMillis));
-        long spread = failures == 0 ? delay / 24 : delay / 10;
+        boolean retry = failures == 1;
+        long delay = retry ? Math.min(RETRY_DELAY_MILLIS, intervalMillis) : intervalMillis;
+        long spread = retry ? delay / 10 : delay / 24;
         long jitter = ThreadLocalRandom.current().nextLong(-spread, spread + 1);
         return Math.max(1, delay + jitter);
     }

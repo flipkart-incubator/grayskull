@@ -201,29 +201,44 @@ class HeartbeatSchedulerTest {
     }
 
     @Test
-    void nextDelay_failureBacksOffExponentiallyToCap() throws Exception {
+    void nextDelay_afterAFailure_retriesOnceInAboutAnHourThenWaitsTheInterval() throws Exception {
         scheduler = newScheduler((int) TimeUnit.HOURS.toSeconds(24), Collections::emptyList);
+        long hour = TimeUnit.HOURS.toMillis(1);
 
-        long[] minutes = {5, 10, 20, 40, 60, 60};
-        for (int i = 0; i < minutes.length; i++) {
-            long base = TimeUnit.MINUTES.toMillis(minutes[i]);
-            long d = nextDelayMillis(scheduler, i + 1);
-            assertTrue(d >= base - base / 10 && d <= base + base / 10, "failure " + (i + 1) + " delay " + d);
+        for (int i = 0; i < 200; i++) {
+            long retry = nextDelayMillis(scheduler, 1);
+            assertTrue(retry >= hour - hour / 10 && retry <= hour + hour / 10, "retry delay " + retry);
+            long next = nextDelayMillis(scheduler, 2);
+            assertTrue(next >= TimeUnit.HOURS.toMillis(23) && next <= TimeUnit.HOURS.toMillis(25), "after retry " + next);
         }
     }
 
     @Test
-    void nextDelay_backoffNeverExceedsInterval() throws Exception {
+    void nextDelay_retryNeverExceedsInterval() throws Exception {
         scheduler = newScheduler(30, Collections::emptyList);
 
-        for (int failures = 1; failures <= 5; failures++) {
-            assertTrue(nextDelayMillis(scheduler, failures) <= 33_000);
+        assertTrue(nextDelayMillis(scheduler, 1) <= 33_000);
+    }
+
+    @Test
+    void run_failedBeatsAlternateBetweenOneRetryAndTheNextInterval() throws Exception {
+        failFirst.set(Integer.MAX_VALUE);
+        scheduler = newScheduler(60, () -> entries(1));
+        Method run = HeartbeatScheduler.class.getDeclaredMethod("run");
+        run.setAccessible(true);
+        Field failures = HeartbeatScheduler.class.getDeclaredField("failures");
+        failures.setAccessible(true);
+
+        int[] expected = {1, 2, 1, 2};
+        for (int want : expected) {
+            run.invoke(scheduler);
+            assertEquals(want, failures.getInt(scheduler), "1 means a retry is pending, 2 means the retry was used");
         }
     }
 
     @Test
     void schedule_keepsSendingAfterFailures() throws Exception {
-        // 1 s interval caps backoff at 1 s
+        // 1 s interval caps the retry delay at 1 s
         failFirst.set(2);
         scheduler = newScheduler(1, () -> entries(1));
 
@@ -387,7 +402,7 @@ class HeartbeatSchedulerTest {
 
         Field failures = HeartbeatScheduler.class.getDeclaredField("failures");
         failures.setAccessible(true);
-        assertEquals(0, failures.getInt(scheduler), "unsupported is not a failure: no 5-60 min backoff");
+        assertEquals(0, failures.getInt(scheduler), "unsupported is not a failure: no hourly retry");
         Field logged = HeartbeatScheduler.class.getDeclaredField("unsupportedLogged");
         logged.setAccessible(true);
         assertTrue(logged.getBoolean(scheduler));

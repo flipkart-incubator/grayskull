@@ -17,9 +17,8 @@ import (
 )
 
 const (
-	heartbeatPath        = "/v1/client/heartbeat"
-	heartbeatBackoffBase = 5 * time.Minute
-	heartbeatBackoffCap  = time.Hour
+	heartbeatPath       = "/v1/client/heartbeat"
+	heartbeatRetryDelay = time.Hour
 )
 
 // beatOutcome is the result of one heartbeat round.
@@ -111,7 +110,7 @@ func (h *Heartbeat) run() {
 		case <-timer.C:
 		}
 		if h.safeBeat() == beatFailed {
-			failures++
+			failures = nextFailures(failures)
 		} else {
 			failures = 0
 		}
@@ -176,7 +175,7 @@ func (h *Heartbeat) send(ctx context.Context, chunk []heartbeat.HeldSecret) beat
 		return beatUnsupported
 	}
 	if ctx.Err() == nil {
-		h.logger.Warn("heartbeat failed; retrying with backoff", "secrets", len(chunk), "status", status, "err", err)
+		h.logger.Warn("heartbeat failed; retrying once in about an hour", "secrets", len(chunk), "status", status, "err", err)
 	}
 	return beatFailed
 }
@@ -185,14 +184,21 @@ func isHeartbeatUnsupported(status int) bool {
 	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status == http.StatusNotImplemented
 }
 
-// nextDelay returns interval ± 1/24 when failures == 0, else capped exponential backoff ± 10%.
-func (h *Heartbeat) nextDelay(failures int) time.Duration {
-	if failures == 0 {
-		return jitter(h.interval, h.interval/24)
+// nextFailures is 1 after a failed beat (retry pending) and 2 after the retry also failed.
+func nextFailures(failures int) int {
+	if failures == 1 {
+		return 2
 	}
-	backoff := heartbeatBackoffBase << min(failures-1, 20)
-	backoff = min(backoff, heartbeatBackoffCap, h.interval)
-	return jitter(backoff, backoff/10)
+	return 1
+}
+
+// nextDelay returns one retry after about an hour (± 10%) following a failure, otherwise the interval ± 1/24.
+func (h *Heartbeat) nextDelay(failures int) time.Duration {
+	if failures == 1 {
+		retry := min(heartbeatRetryDelay, h.interval)
+		return jitter(retry, retry/10)
+	}
+	return jitter(h.interval, h.interval/24)
 }
 
 func jitter(d, spread time.Duration) time.Duration {

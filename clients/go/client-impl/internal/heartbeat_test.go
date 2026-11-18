@@ -145,12 +145,18 @@ func TestHeartbeatNextDelay(t *testing.T) {
 	for range 100 {
 		within(t, h.nextDelay(0), 24*time.Hour, time.Hour)
 	}
-	for i, minutes := range []time.Duration{5, 10, 20, 40, 60, 60, 60} {
-		want := minutes * time.Minute
-		within(t, h.nextDelay(i+1), want, want/10)
+	for range 100 {
+		within(t, h.nextDelay(1), time.Hour, 6*time.Minute)
+		within(t, h.nextDelay(2), 24*time.Hour, time.Hour)
 	}
-	assert.LessOrEqual(t, newTestHeartbeat(&recordingClient{}, 30*time.Second, held(0)).nextDelay(3), 33*time.Second,
-		"backoff never exceeds the interval")
+	assert.LessOrEqual(t, newTestHeartbeat(&recordingClient{}, 30*time.Second, held(0)).nextDelay(1), 33*time.Second,
+		"the retry never exceeds the interval")
+}
+
+func TestHeartbeatNextFailures_AlternatesBetweenOneRetryAndTheNextInterval(t *testing.T) {
+	assert.Equal(t, 1, nextFailures(0), "a failed beat gets one retry")
+	assert.Equal(t, 2, nextFailures(1), "a failed retry waits for the next interval")
+	assert.Equal(t, 1, nextFailures(2), "the next interval's failure gets its own retry")
 }
 
 func TestHeartbeatLoop_FirstBeatAfterIntervalAndKeepsGoingAfterFailures(t *testing.T) {
@@ -170,7 +176,7 @@ func TestHeartbeatLoop_FirstBeatAfterIntervalAndKeepsGoingAfterFailures(t *testi
 }
 
 func TestHeartbeatLoop_UnsupportedWaitsFullInterval(t *testing.T) {
-	// Unsupported (404) rounds wait the full interval, not the backoff.
+	// Unsupported (404) rounds wait the full interval, not the retry delay.
 	c := &recordingClient{failFirst: 1000, failStatus: 404}
 	h := newTestHeartbeat(c, 200*time.Millisecond, held(1))
 	h.Start()
