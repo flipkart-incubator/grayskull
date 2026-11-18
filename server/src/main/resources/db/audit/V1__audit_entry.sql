@@ -19,9 +19,6 @@ CREATE TABLE audit_entry (
   metadata         JSON         NULL,
   created_at       DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id, ts),
-  KEY idx_project   (project_id, ts, id),
-  KEY idx_secret    (project_id, resource_name, ts, id),
-  KEY idx_action    (project_id, action, ts, id),
-  KEY idx_user_type (project_id, user_type, ts, id),
+  KEY idx_secret  (project_id, resource_name, ts, id),
   KEY idx_global    (ts, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
