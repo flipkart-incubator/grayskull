@@ -2,7 +2,7 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "main", "custom-metrics" ]   # custom-metrics = branch with py code; remove once merged
+    branches: [ "main", "python-sdk-v2" ]   # custom-metrics = branch with py code; remove once merged
   pull_request:
     branches: [ "main" ]
   schedule:
