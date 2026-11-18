@@ -83,7 +83,7 @@ class HookRefreshPollerTest {
     void pollOnce_emptyRegistry_returnsWithoutMakingHttpCall() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         // Registry is empty – pollOnce() should return at the first isEmpty() guard
         poller.pollOnce();
@@ -100,7 +100,7 @@ class HookRefreshPollerTest {
     void pollOnce_afterAllHooksUnregistered_returnsWithoutMakingHttpCall() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         // Register a hook then immediately unregister it
         poller.register("proj", "sec", value -> {}, 0).unRegister();
@@ -124,7 +124,7 @@ class HookRefreshPollerTest {
     void pollOnce_nonEmptyRegistryButEmptyEntryList_returnsAtEntriesGuard() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         ConcurrentHashMap<String, SecretState> lyingRegistry = new RegistryNonEmptyButYieldsNoValues();
         setRegistryField(poller, lyingRegistry);
@@ -188,7 +188,7 @@ class HookRefreshPollerTest {
     void runHooksFor_secondUpdateArrivesWhileExecuting_bothUpdatesDelivered() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         CountDownLatch firstHookStarted    = new CountDownLatch(1);
         CountDownLatch allowFirstToFinish  = new CountDownLatch(1);
@@ -236,6 +236,35 @@ class HookRefreshPollerTest {
                 "Hook should be invoked exactly twice – once per update");
     }
 
+    @Test
+    void deliverToHooks_hookAddedMidDelivery_doesNotMarkVersionApplied() throws Exception {
+        GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
+        UsageLedger ledger = new UsageLedger();
+        poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
+                "http://localhost:9999", 60, ledger);
+
+        AtomicInteger lateCalls = new AtomicInteger();
+        poller.register("proj", "sec", value -> {
+            // Another thread registers a hook while this delivery is running.
+            poller.register("proj", "sec", v -> lateCalls.incrementAndGet(), 0);
+        }, 0);
+
+        Method handleUpdated = HookRefreshPoller.class.getDeclaredMethod(
+                "handleUpdatedSecret", BatchGetSecretsResponse.UpdatedSecret.class);
+        handleUpdated.setAccessible(true);
+        handleUpdated.invoke(poller, new BatchGetSecretsResponse.UpdatedSecret("proj", "sec", 5, "pub", "priv"));
+        Field dispatcherField = HookRefreshPoller.class.getDeclaredField("dispatcher");
+        dispatcherField.setAccessible(true);
+        ExecutorService dispatcher = (ExecutorService) dispatcherField.get(poller);
+        dispatcher.shutdown(); // let the queued delivery finish
+        assertTrue(dispatcher.awaitTermination(3, TimeUnit.SECONDS));
+
+        assertEquals(0, lateCalls.get(), "the late hook did not run v5");
+        assertEquals(5, ledger.snapshot().get(0).getVersion());
+        assertEquals(0, ledger.snapshot().get(0).getRefreshHookAppliedVersion(),
+                "v5 is not applied while a registered hook has not run it");
+    }
+
     /**
      * The post-drain {@code finally} path calls {@code scheduleFollowUpIfPending} (exercise the
      * private method directly). A same-thread {@link ExecutorService} makes
@@ -247,7 +276,7 @@ class HookRefreshPollerTest {
     void scheduleFollowUpIfPending_whenPending_submitsRunHooksFor() throws Exception {
         GrayskullHttpClient mockHttpClient = mock(GrayskullHttpClient.class);
         poller = new HookRefreshPoller(mockHttpClient, new ObjectMapper(),
-                "http://localhost:9999", 60);
+                "http://localhost:9999", 60, new UsageLedger());
 
         setFinalField(poller, "dispatcher", newSameThreadExecutor());
 
@@ -324,5 +353,21 @@ class HookRefreshPollerTest {
         modifiers.setAccessible(true);
         modifiers.setInt(f, f.getModifiers() & ~Modifier.FINAL);
         f.set(poller, value);
+    }
+
+    @Test
+    void deliverToHooks_withNoHooksLeft_recordsNothingAsApplied() throws Exception {
+        UsageLedger ledger = new UsageLedger();
+        poller = new HookRefreshPoller(mock(GrayskullHttpClient.class), new ObjectMapper(),
+                "http://localhost:9999", 60, ledger);
+        ledger.recordVersion("proj", "sec", 3);
+        ledger.recordHookAdded("proj", "sec");
+
+        Method deliver = HookRefreshPoller.class.getDeclaredMethod(
+                "deliverToHooks", String.class, SecretState.class, SecretValue.class);
+        deliver.setAccessible(true);
+        deliver.invoke(poller, "proj:sec", new SecretState("proj", "sec"), new SecretValue(3, "a", "b"));
+
+        assertEquals(0, ledger.snapshot().get(0).getRefreshHookAppliedVersion(), "no hook ran, so nothing was applied");
     }
 }

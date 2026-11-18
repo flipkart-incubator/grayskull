@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Owns the refresh-hook registry and the background poller/dispatcher pair that
- * drives server-driven hook delivery for the Java SDK.
+ * drives server-driven hook delivery.
  *
  * <h2>High-level flow</h2>
  * <ol>
@@ -94,14 +94,17 @@ final class HookRefreshPoller {
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String batchUrl;
+    private final UsageLedger ledger;
 
     HookRefreshPoller(GrayskullHttpClient httpClient,
                       ObjectMapper objectMapper,
                       String baseUrl,
-                      int intervalSeconds) {
+                      int intervalSeconds,
+                      UsageLedger ledger) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.batchUrl = buildBatchUrl(baseUrl);
+        this.ledger = ledger;
 
         this.scheduler = Executors.newSingleThreadScheduledExecutor(
                 daemonFactory("grayskull-poller-"));
@@ -129,14 +132,15 @@ final class HookRefreshPoller {
     RefreshHandlerRef register(String projectId, String secretName,
                                SecretRefreshHook hook, int initialKnownVersion) {
         String secretRef = projectId + ":" + secretName;
+        // The ledger flag is set inside compute so it never races a concurrent unregister of this secret.
         SecretState state = registry.compute(secretRef, (k, existing) -> {
-            if (existing != null) {
-                existing.hooks.add(hook);
-                return existing;
+            SecretState s = existing;
+            if (s == null) {
+                s = new SecretState(projectId, secretName);
+                s.lastKnownVersion.set(initialKnownVersion);
             }
-            SecretState s = new SecretState(projectId, secretName);
             s.hooks.add(hook);
-            s.lastKnownVersion.set(initialKnownVersion);
+            ledger.recordHookAdded(projectId, secretName);
             return s;
         });
         log.debug("Registered refresh hook for secretRef:{} (totalHooks:{}, initialKnownVersion:{})",
@@ -149,7 +153,9 @@ final class HookRefreshPoller {
             if (state == null) {
                 return null;
             }
-            state.hooks.remove(hook);
+            if (state.hooks.remove(hook)) {
+                ledger.setHookRegistered(state.projectId, state.secretName, !state.hooks.isEmpty());
+            }
             return state.hooks.isEmpty() ? null : state;
         });
     }
@@ -277,6 +283,7 @@ final class HookRefreshPoller {
             SecretValue value;
             while ((value = state.pendingUpdate.getAndSet(null)) != null) {
                 state.lastKnownVersion.set(value.getDataVersion());
+                ledger.recordVersion(state.projectId, state.secretName, value.getDataVersion());
                 deliverToHooks(secretRef, state, value);
             }
         } finally {
@@ -296,12 +303,15 @@ final class HookRefreshPoller {
     }
 
     private void deliverToHooks(String secretRef, SecretState state, SecretValue value) {
+        long hookGen = ledger.hookGeneration(state.projectId, state.secretName); // before reading the hooks
+        boolean allSucceeded = !state.hooks.isEmpty();
         for (SecretRefreshHook hook : state.hooks) {
             long startTime = System.nanoTime();
             boolean success = true;
             try {
                 hook.onUpdate(value);
             } catch (Exception e) {
+                allSucceeded = false;
                 success = false;
                 log.error("Consumer hook failed for {}", secretRef, e);
             } finally {
@@ -309,6 +319,9 @@ final class HookRefreshPoller {
                 MetricsPublisher.getInstance().recordRequest(
                         "hook.execute." + secretRef, success ? 200 : 500, durationMs);
             }
+        }
+        if (allSucceeded) { // applied only when every registered hook succeeded for this version
+            ledger.recordHookApplied(state.projectId, state.secretName, value.getDataVersion(), hookGen);
         }
     }
 

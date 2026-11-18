@@ -21,9 +21,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Poller is the background batch-refresh loop (one per client). Mirrors
-// HookRefreshPoller in the Java SDK: a single fetcher (pollLoop) and a
-// fixed dispatcher pool so a slow hook on one secret can't stall others.
+// Poller is the per-client batch-refresh loop; a fixed dispatcher pool keeps a slow hook from stalling others.
 type Poller struct {
 	registry        *hooks.Registry
 	httpClient      GrayskullHTTPClientInterface
@@ -33,6 +31,8 @@ type Poller struct {
 	metricsRecorder metrics.MetricsRecorder
 	logger          *slog.Logger
 	marshalRequest  func(v any) ([]byte, error)
+	// ledger records versions and hook outcomes; may be nil.
+	ledger *UsageLedger
 
 	dispatchCh chan dispatchJob
 
@@ -82,6 +82,9 @@ type PollerConfig struct {
 
 	// MarshalRequest defaults to json.Marshal. Test seam.
 	MarshalRequest func(v any) ([]byte, error)
+
+	// Ledger records versions and hook outcomes. Optional.
+	Ledger *UsageLedger
 }
 
 // NewPoller constructs a Poller. Call Start to begin polling, Close to stop.
@@ -113,6 +116,7 @@ func NewPoller(cfg PollerConfig) *Poller {
 		metricsRecorder: cfg.MetricsRecorder,
 		logger:          logger,
 		marshalRequest:  marshal,
+		ledger:          cfg.Ledger,
 		dispatchCh:      make(chan dispatchJob, dispatcherWorkers*4),
 		hookCtx:         hookCtx,
 		cancelHookCtx:   cancelHookCtx,
@@ -308,8 +312,17 @@ func (p *Poller) runHooksFor(secretRef string, state *hooks.SecretState, request
 			return
 		}
 		state.LastKnownVersion.Store(int32(value.DataVersion))
-		for _, hook := range state.SnapshotHooks() {
-			p.invokeHookSafe(ctx, secretRef, hook, *value)
+		p.ledger.RecordVersion(state.ProjectID, state.SecretName, value.DataVersion)
+		hookGen := p.ledger.HookGeneration(state.ProjectID, state.SecretName) // before the snapshot
+		hookList := state.SnapshotHooks()
+		allOK := len(hookList) > 0
+		for _, hook := range hookList {
+			if !p.invokeHookSafe(ctx, secretRef, hook, *value) {
+				allOK = false
+			}
+		}
+		if allOK { // applied only when every registered hook succeeded for this version
+			p.ledger.RecordHookApplied(state.ProjectID, state.SecretName, value.DataVersion, hookGen)
 		}
 	}
 }
@@ -331,9 +344,9 @@ func (p *Poller) resubmitIfPending(secretRef string, state *hooks.SecretState, r
 
 // invokeHookSafe runs one consumer hook under recover() so one broken hook
 // doesn't block delivery to the others.
-func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiHooks.SecretRefreshHook, value apiModels.SecretValue) {
+func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiHooks.SecretRefreshHook, value apiModels.SecretValue) (success bool) {
 	startTime := time.Now()
-	success := true
+	success = true
 	defer func() {
 		if r := recover(); r != nil {
 			success = false
@@ -345,8 +358,7 @@ func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiH
 			if !success {
 				code = http.StatusInternalServerError
 			}
-			// TODO(metrics-cardinality): embeds secretRef for Java SDK
-			// parity; fix in both SDKs together.
+			// TODO(metrics-cardinality): the metric name embeds secretRef.
 			p.metricsRecorder.RecordRequest("hook.execute."+secretRef, code, time.Since(startTime))
 		}
 	}()
@@ -354,4 +366,5 @@ func (p *Poller) invokeHookSafe(ctx context.Context, secretRef string, hook apiH
 		success = false
 		p.logger.Error("consumer hook returned error", "secretRef", secretRef, "err", err)
 	}
+	return success
 }

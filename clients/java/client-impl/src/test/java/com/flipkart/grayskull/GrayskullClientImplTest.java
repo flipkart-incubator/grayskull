@@ -360,7 +360,7 @@ class GrayskullClientImplTest {
     }
 
     // -------------------------------------------------------------------------
-    // lastSeenVersions seeding behaviour
+    // usage-ledger seeding behaviour
     // -------------------------------------------------------------------------
 
     @Test
@@ -431,7 +431,7 @@ class GrayskullClientImplTest {
     @Test
     void testRegisterHook_thenGetSecret_doesNotRetroactivelyUpdatePoller() throws Exception {
         // Critical race-safety property: getSecret called AFTER registerRefreshHook must NOT
-        // retroactively modify the poller's lastKnownVersion. lastSeenVersions is read only
+        // retroactively modify the poller's lastKnownVersion. The ledger version is read only
         // at registration time; the bulk poll is the sole owner of lastKnownVersion after that.
         String secretRef = "team:late-get";
         client.registerRefreshHook(secretRef, v -> {}); // no prior getSecret → seed=0
@@ -475,7 +475,7 @@ class GrayskullClientImplTest {
 
     @Test
     void testTwoHooksSameSecret_secondRegistrationLeavesVersionIntact() throws Exception {
-        // The first registration seeds lastKnownVersion from lastSeenVersions (v8).
+        // The first registration seeds lastKnownVersion from the ledger version (v8).
         // A second hook for the same secret reuses the existing SecretState unchanged —
         // lastKnownVersion stays at v8 and the bulk poll continues from there.
         String secretRef = "team:shared";
@@ -499,7 +499,7 @@ class GrayskullClientImplTest {
 
     @Test
     void testGetSecret_failedCall_doesNotRecordVersion() throws Exception {
-        // A failed getSecret call must not write anything to lastSeenVersions.
+        // A failed getSecret call must not record a version in the ledger.
         // A subsequent registerRefreshHook must therefore use seed=0.
         String secretRef = "team:flaky";
         when(mockHttpClient.doGetWithRetry(anyString()))
@@ -516,7 +516,7 @@ class GrayskullClientImplTest {
         verify(mockHttpClient).doPostWithRetry(eq(BATCH_URL), bodyCaptor.capture());
         JsonNode entry = objectMapper.readTree(bodyCaptor.getValue()).get("secrets").get(0);
         assertEquals(0, entry.get("lastKnownVersion").asInt(),
-                "a failed getSecret must not write to lastSeenVersions; seed must remain 0");
+                "a failed getSecret must not record a version; seed must remain 0");
     }
 
     // -------------------------------------------------------------------------
