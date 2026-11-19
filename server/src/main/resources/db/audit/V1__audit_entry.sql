@@ -1,0 +1,24 @@
+-- One row per audit event. Rows are only inserted.
+-- id is assigned by the application (derived from event_id), which makes inserts idempotent.
+-- Every index ends in (ts, id) so a page of the cursor API is one index range scan, with no sort.
+-- utf8mb4_bin keeps matching exact and case-sensitive, like MongoDB.
+
+CREATE TABLE audit_entry (
+  id               BINARY(16)   NOT NULL,
+  ts               DATETIME(6)  NOT NULL,
+  event_id         VARCHAR(255) NOT NULL,
+  project_id       VARCHAR(255) NULL,
+  resource_type    VARCHAR(255) NULL,
+  resource_name    VARCHAR(255) NULL,
+  resource_version INT          NULL,
+  action           VARCHAR(255) NULL,
+  user_id          VARCHAR(255) NULL,
+  user_type        VARCHAR(16)  NOT NULL,
+  actor_id         VARCHAR(255) NULL,
+  ips              JSON         NULL,
+  metadata         JSON         NULL,
+  created_at       DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id, ts),
+  KEY idx_secret  (project_id, resource_name, ts, id),
+  KEY idx_global    (ts, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;

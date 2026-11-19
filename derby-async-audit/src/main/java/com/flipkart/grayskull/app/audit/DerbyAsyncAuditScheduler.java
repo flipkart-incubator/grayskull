@@ -31,6 +31,10 @@ public class DerbyAsyncAuditScheduler {
         } catch (SQLException e) {
             log.error("Failed to connect to Derby", e);
             meterRegistry.counter(AUDIT_ERROR_METRIC, ACTION_TAG, "fetch-logs", EXCEPTION_TAG, "SQLException").increment();
+        } catch (RuntimeException e) {
+            // the audit store is unavailable; the entries stay in Derby and the next run retries from the checkpoint
+            log.error("Failed to flush audit entries to the audit store", e);
+            meterRegistry.counter(AUDIT_ERROR_METRIC, ACTION_TAG, "flush", EXCEPTION_TAG, e.getClass().getSimpleName()).increment();
         }
 
     }

@@ -2,9 +2,9 @@ package com.flipkart.grayskull.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
-import com.flipkart.grayskull.entities.AuditEntryEntity;
+import com.flipkart.grayskull.audit.outbox.OutboxWriteAuditRecorder;
+import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
-import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,16 +25,16 @@ import static org.mockito.Mockito.*;
 @DisplayName("AuditAspect Unit Tests")
 class AuditAspectTest {
 
-    private AuditEntryRepository auditEntryRepository;
+    private OutboxWriteAuditRecorder writeAuditRecorder;
     private RequestUtils requestUtils;
     private AuditAspect auditAspect;
     private SecurityContext securityContext;
 
     @BeforeEach
     void setUp() {
-        auditEntryRepository = mock(AuditEntryRepository.class);
+        writeAuditRecorder = mock(OutboxWriteAuditRecorder.class);
         requestUtils = mock(RequestUtils.class);
-        auditAspect = new AuditAspect(auditEntryRepository, requestUtils);
+        auditAspect = new AuditAspect(writeAuditRecorder, requestUtils);
 
         securityContext = mock(SecurityContext.class);
         SecurityContextHolder.setContext(securityContext);
@@ -45,7 +45,7 @@ class AuditAspectTest {
     }
 
     @Test
-    @DisplayName("auditSuccess should save AuditEntryEntity with additional metadata")
+    @DisplayName("auditSuccess should save AuditEntry with additional metadata")
     void auditSuccess_shouldSaveAuditEntry_withAdditionalMetadata() throws NoSuchMethodException {
         // Setup JoinPoint
         JoinPoint joinPoint = mock(JoinPoint.class);
@@ -74,10 +74,10 @@ class AuditAspectTest {
         auditAspect.auditSuccess(joinPoint, null);
 
         // Verify
-        ArgumentCaptor<AuditEntryEntity> captor = ArgumentCaptor.forClass(AuditEntryEntity.class);
-        verify(auditEntryRepository).save(captor.capture());
+        ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(writeAuditRecorder).record(captor.capture());
 
-        AuditEntryEntity savedEntity = captor.getValue();
+        AuditEntry savedEntity = captor.getValue();
         assertThat(savedEntity.getProjectId()).isEqualTo("project123");
         assertThat(savedEntity.getAction()).isEqualTo(AuditAction.READ_SECRET.name());
         assertThat(savedEntity.getUserId()).isEqualTo("user1");
@@ -86,7 +86,7 @@ class AuditAspectTest {
     }
 
     @Test
-    @DisplayName("auditSuccess should save AuditEntryEntity with default user and null actor when context is empty")
+    @DisplayName("auditSuccess should save AuditEntry with default user and null actor when context is empty")
     void auditSuccess_shouldSaveWithDefaultUser() throws NoSuchMethodException {
         // Setup JoinPoint
         JoinPoint joinPoint = mock(JoinPoint.class);
@@ -110,10 +110,10 @@ class AuditAspectTest {
         auditAspect.auditSuccess(joinPoint, null);
 
         // Verify
-        ArgumentCaptor<AuditEntryEntity> captor = ArgumentCaptor.forClass(AuditEntryEntity.class);
-        verify(auditEntryRepository).save(captor.capture());
+        ArgumentCaptor<AuditEntry> captor = ArgumentCaptor.forClass(AuditEntry.class);
+        verify(writeAuditRecorder).record(captor.capture());
 
-        AuditEntryEntity savedEntity = captor.getValue();
+        AuditEntry savedEntity = captor.getValue();
         assertThat(savedEntity.getUserId()).isEqualTo("system");
         assertThat(savedEntity.getActorId()).isNull();
     }

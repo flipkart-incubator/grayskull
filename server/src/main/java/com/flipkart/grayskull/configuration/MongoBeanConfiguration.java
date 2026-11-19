@@ -3,6 +3,7 @@ package com.flipkart.grayskull.configuration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.config.EnableMongoAuditing;
@@ -32,6 +33,7 @@ public class MongoBeanConfiguration {
      * @return Configured transaction manager for MongoDB operations
      */
     @Bean
+    @Primary // a second (MySQL audit) transaction manager may exist; plain @Transactional stays on MongoDB
     MongoTransactionManager transactionManager(MongoDatabaseFactory dbFactory) {
         return new MongoTransactionManager(dbFactory,
                 TransactionOptions.builder().readPreference(ReadPreference.primary()).build());

@@ -2,7 +2,11 @@ package com.flipkart.grayskull.service.impl;
 
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.UserType;
+import com.flipkart.grayskull.audit.AuditCursorCodec;
 import com.flipkart.grayskull.models.dto.response.AuditEntriesResponse;
+import com.flipkart.grayskull.models.dto.response.AuditPageResponse;
+import com.flipkart.grayskull.spi.models.AuditPage;
+import com.flipkart.grayskull.spi.models.AuditQuery;
 import com.flipkart.grayskull.service.interfaces.AuditService;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
@@ -35,5 +39,11 @@ public class AuditServiceImpl implements AuditService {
         long total = auditEntryRepository.countByFilters(projectId, resourceName, resourceType, actionString, userTypeString, afterTimestamp);
 
         return new AuditEntriesResponse(entries, total);
+    }
+
+    @Override
+    public AuditPageResponse getAuditPage(AuditQuery query, String cursor, int limit) {
+        AuditPage page = auditEntryRepository.findPage(query, AuditCursorCodec.decode(cursor), limit);
+        return new AuditPageResponse(page.entries(), AuditCursorCodec.encode(page.nextCursor()), page.hasMore());
     }
 }

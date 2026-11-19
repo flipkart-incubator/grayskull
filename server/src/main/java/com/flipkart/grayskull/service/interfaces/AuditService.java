@@ -3,6 +3,8 @@ package com.flipkart.grayskull.service.interfaces;
 import com.flipkart.grayskull.audit.AuditAction;
 import com.flipkart.grayskull.audit.UserType;
 import com.flipkart.grayskull.models.dto.response.AuditEntriesResponse;
+import com.flipkart.grayskull.models.dto.response.AuditPageResponse;
+import com.flipkart.grayskull.spi.models.AuditQuery;
 
 import java.util.Date;
 import java.util.Optional;
@@ -26,5 +28,15 @@ public interface AuditService {
      * @return AuditEntriesResponse containing filtered audit entries
      */
     AuditEntriesResponse getAuditEntries(Optional<String> projectId, Optional<String> resourceName, Optional<String> resourceType, Optional<AuditAction> action, Optional<UserType> userType, Optional<Date> afterTimestamp, int offset, int limit);
+
+    /**
+     * One page of audit entries, newest first. Audits reach MySQL asynchronously, so the newest minute or two may
+     * still be filling in (eventually consistent).
+     *
+     * @param query  filters
+     * @param cursor {@code nextCursor} of the previous page, or null for the first page
+     * @param limit  page size
+     */
+    AuditPageResponse getAuditPage(AuditQuery query, String cursor, int limit);
 }
 

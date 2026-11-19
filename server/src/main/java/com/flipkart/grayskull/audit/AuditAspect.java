@@ -1,13 +1,12 @@
 package com.flipkart.grayskull.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.flipkart.grayskull.audit.outbox.OutboxWriteAuditRecorder;
 import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.spi.authn.GrayskullAuthentication;
-import com.flipkart.grayskull.entities.AuditEntryEntity;
 import com.flipkart.grayskull.models.dto.response.SecretResponse;
 import com.flipkart.grayskull.models.dto.response.UpgradeSecretDataResponse;
 import com.flipkart.grayskull.spi.models.AuditEntry;
-import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -40,7 +39,7 @@ import static com.flipkart.grayskull.audit.utils.SanitizingObjectMapper.MASK_OBJ
 @RequiredArgsConstructor
 public class AuditAspect {
 
-    private final AuditEntryRepository auditEntryRepository;
+    private final OutboxWriteAuditRecorder outboxWriteAuditRecorder;
     private final RequestUtils requestUtils;
 
     /**
@@ -78,7 +77,7 @@ public class AuditAspect {
             Map<String, String> metadata = new HashMap<>(requestUtils.getAdditionalMetadata());
             metadata.putAll(buildMetadata(arguments, result));
 
-            AuditEntryEntity entry = AuditEntryEntity.builder()
+            AuditEntry entry = AuditEntry.builder()
                     .projectId(projectId)
                     .resourceType(RESOURCE_TYPE_SECRET)
                     .resourceName(resourceName)
@@ -90,7 +89,7 @@ public class AuditAspect {
                     .metadata(metadata)
                     .build();
 
-            auditEntryRepository.save(entry);
+            outboxWriteAuditRecorder.record(entry);
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Failed to serialize audit metadata", e);
         }
