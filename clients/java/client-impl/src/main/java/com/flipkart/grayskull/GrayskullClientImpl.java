@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -44,9 +43,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
     private final GrayskullHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final HookRefreshPoller refreshPoller;
-
-
-    private final ConcurrentHashMap<String, Integer> lastSeenVersions = new ConcurrentHashMap<>();
+    private final HeartbeatScheduler heartbeatScheduler;
+    /** Feeds the heartbeat and seeds hook registration. */
+    private final UsageLedger ledger = new UsageLedger();
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
@@ -85,7 +84,18 @@ public final class GrayskullClientImpl implements GrayskullClient {
 
         this.refreshPoller = new HookRefreshPoller(
                 httpClient, objectMapper, baseUrl,
-                grayskullClientConfiguration.getPollingIntervalSeconds());
+                grayskullClientConfiguration.getPollingIntervalSeconds(),
+                ledger);
+
+        if (grayskullClientConfiguration.isHeartbeatEnabled()) {
+            this.heartbeatScheduler = new HeartbeatScheduler(
+                    httpClient, objectMapper, baseUrl,
+                    grayskullClientConfiguration.getHeartbeatIntervalSeconds(),
+                    ledger::snapshot);
+            this.heartbeatScheduler.start();
+        } else {
+            this.heartbeatScheduler = null;
+        }
     }
 
     /**
@@ -131,7 +141,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             if (secretValue == null) {
                 throw new GrayskullException(500, "No data in response");
             }
-            lastSeenVersions.put(secretRef, secretValue.getDataVersion());
+            ledger.recordFetch(projectId, secretName, secretValue.getDataVersion());
             return secretValue;
         } catch (JsonProcessingException e) {
             throw new GrayskullException("Failed to parse response: ", e);
@@ -177,7 +187,7 @@ public final class GrayskullClientImpl implements GrayskullClient {
             throw new IllegalArgumentException("hook cannot be null");
         }
         String[] parts = parseSecretRef(secretRef);
-        int seed = lastSeenVersions.getOrDefault(secretRef, 0);
+        int seed = ledger.version(parts[0], parts[1]);
         return refreshPoller.register(parts[0], parts[1], hook, seed);
     }
 
@@ -194,6 +204,9 @@ public final class GrayskullClientImpl implements GrayskullClient {
             return;
         }
         log.info("Closing Grayskull client");
+        if (heartbeatScheduler != null) {
+            heartbeatScheduler.close();
+        }
         refreshPoller.close();
         if (httpClient != null) {
             httpClient.close();

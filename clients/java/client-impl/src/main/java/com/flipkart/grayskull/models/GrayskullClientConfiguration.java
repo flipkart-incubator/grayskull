@@ -113,6 +113,13 @@ public final class GrayskullClientConfiguration {
      */
     private int pollingIntervalSeconds = 60;
 
+    /** Send periodic heartbeats. Default: true. */
+    @Setter
+    private boolean heartbeatEnabled = true;
+
+    /** Seconds between heartbeats (± 1/24 jitter). Default: 86400. */
+    private int heartbeatIntervalSeconds = 86400;
+
     /**
      * Resolver for the workload identity advertised via the {@code Grayskull-Workload} header.
      * <p>
@@ -239,5 +246,14 @@ public final class GrayskullClientConfiguration {
                     "Polling interval must be positive, got: " + pollingIntervalSeconds);
         }
         this.pollingIntervalSeconds = pollingIntervalSeconds;
+    }
+
+    /** Sets the heartbeat interval; zero means the 24-hour default. @throws IllegalArgumentException if negative */
+    public void setHeartbeatIntervalSeconds(int heartbeatIntervalSeconds) {
+        if (heartbeatIntervalSeconds < 0) {
+            throw new IllegalArgumentException(
+                    "Heartbeat interval cannot be negative, got: " + heartbeatIntervalSeconds);
+        }
+        this.heartbeatIntervalSeconds = heartbeatIntervalSeconds == 0 ? 86400 : heartbeatIntervalSeconds;
     }
 }

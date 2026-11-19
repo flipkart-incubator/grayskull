@@ -75,7 +75,7 @@ class HookRefreshPollerConcurrencyTest {
         }
 
         poller = new HookRefreshPoller(
-                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS);
+                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS, new UsageLedger());
     }
 
     @AfterEach
@@ -433,6 +433,37 @@ class HookRefreshPollerConcurrencyTest {
     }
 
     // ---------------------------------------------------------------------
+    // 7b. unregister() of a hook that is not registered on an existing state
+    //     must leave the state, its hooks and the ledger hook flag untouched
+    //     (covers `state.hooks.remove(hook)` returning false).
+    // ---------------------------------------------------------------------
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void unregister_hookNotRegisteredOnExistingState_isNoOpForStateAndLedger() throws Exception {
+        SecretRefreshHook registered = v -> { /* no-op */ };
+        SecretRefreshHook stranger = v -> { /* never registered */ };
+        poller.register("acme", "shared", registered, 0);
+
+        // Not reachable through DefaultRefreshHandlerRef (each handle removes only its own hook,
+        // once), so call the private unregister(secretRef, hook) directly.
+        java.lang.reflect.Method unregister = HookRefreshPoller.class.getDeclaredMethod(
+                "unregister", String.class, SecretRefreshHook.class);
+        unregister.setAccessible(true);
+        unregister.invoke(poller, "acme:shared", stranger);
+
+        assertEquals(1, registryOf(poller).size(), "state must survive an unregister of an unknown hook");
+        assertEquals(1, registryOf(poller).get("acme:shared").hooks.size());
+
+        Field ledgerField = HookRefreshPoller.class.getDeclaredField("ledger");
+        ledgerField.setAccessible(true);
+        UsageLedger ledger = (UsageLedger) ledgerField.get(poller);
+        ledger.recordVersion("acme", "shared", 1);
+        ledger.recordHookApplied("acme", "shared", 1, ledger.hookGeneration("acme", "shared"));
+        assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() != null,
+                "ledger hook flag must not drop when no hook was actually removed");
+    }
+
+    // ---------------------------------------------------------------------
     // 8. handleUpdatedSecret() when the corresponding state was unregistered
     //    between poll dispatch and handling must drop the update silently
     //    (covers the `state == null` early-return in handleUpdatedSecret).
@@ -597,7 +628,7 @@ class HookRefreshPollerConcurrencyTest {
         // We use a SHORT-circuit by overriding SHUTDOWN_AWAIT_SECONDS via a
         // dedicated poller and a hook that blocks indefinitely.
         HookRefreshPoller localPoller = new HookRefreshPoller(
-                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS);
+                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS, new UsageLedger());
 
         try {
             CountDownLatch entered = new CountDownLatch(1);
@@ -649,7 +680,7 @@ class HookRefreshPollerConcurrencyTest {
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
     void close_whenInterrupted_propagatesInterruptAndShutsDown() throws Exception {
         HookRefreshPoller localPoller = new HookRefreshPoller(
-                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS);
+                mockHttpClient, objectMapper, "https://test.grayskull.com", LONG_INTERVAL_SECONDS, new UsageLedger());
 
         try {
             CountDownLatch entered = new CountDownLatch(1);
@@ -721,5 +752,34 @@ class HookRefreshPollerConcurrencyTest {
         Response<BatchGetSecretsResponse> response = new Response<>(data, "Success");
         String json = objectMapper.writeValueAsString(response);
         return new HttpResponse(200, json, "application/json", "http/1.1");
+    }
+
+    @Test
+    @Timeout(value = 20, unit = TimeUnit.SECONDS)
+    void concurrentRegisterAndUnregister_keepsTheLedgerHookFlagConsistent() throws Exception {
+        Field ledgerField = HookRefreshPoller.class.getDeclaredField("ledger");
+        ledgerField.setAccessible(true);
+        UsageLedger ledger = (UsageLedger) ledgerField.get(poller);
+        ledger.recordVersion("acme", "db", 1);
+        RefreshHandlerRef keeper = poller.register("acme", "db", v -> { }, 1);
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+        for (int t = 0; t < 8; t++) {
+            futures.add(pool.submit(() -> {
+                for (int i = 0; i < 300; i++) {
+                    poller.register("acme", "db", v -> { }, 1).unRegister();
+                }
+            }));
+        }
+        for (java.util.concurrent.Future<?> f : futures) {
+            f.get();
+        }
+        pool.shutdown();
+
+        ledger.recordHookApplied("acme", "db", 1, ledger.hookGeneration("acme", "db"));
+        assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() != null, "the keeper hook is still registered");
+        keeper.unRegister();
+        assertTrue(ledger.snapshot().get(0).getRefreshHookAppliedVersion() == null, "no hook left");
     }
 }
