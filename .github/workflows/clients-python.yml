@@ -1,0 +1,75 @@
+# Builds and tests the Grayskull Python Client SDK
+
+name: Python Client
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'clients/python/**'
+      - 'clients/testdata/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'clients/python/**'
+      - 'clients/testdata/**'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.10', '3.14' ]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+        cache-dependency-path: clients/python/pyproject.toml
+
+    - name: Install client and test dependencies
+      working-directory: clients/python
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e '.[test]' pytest-cov
+
+    - name: Run Tests with Coverage
+      working-directory: clients/python
+      run: |
+        pytest --junitxml=test-report-python-${{ matrix.python-version }}.xml \
+               --cov=grayskull --cov-report=xml:coverage-python-${{ matrix.python-version }}.xml
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v5
+      with:
+        name: Python Client Test Results (${{ matrix.python-version }})
+        path: clients/python/test-report-python-${{ matrix.python-version }}.xml
+
+    - name: Publish code coverage
+      if: matrix.python-version == '3.14'
+      uses: codecov/codecov-action@v5
+      with:
+        files: clients/python/coverage-python-${{ matrix.python-version }}.xml
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: python-client
+
+  event_file:
+    name: "Event File"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload
+        uses: actions/upload-artifact@v5
+        with:
+          name: Event File
+          path: ${{ github.event_path }}

@@ -1,0 +1,1 @@
+"""Responses returned by Grayskull."""
