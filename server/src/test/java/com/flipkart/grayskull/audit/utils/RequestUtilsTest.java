@@ -74,4 +74,21 @@ class RequestUtilsTest {
         assertEquals("val1", result.get("key1"));
         assertEquals("val2", result.get("key2"));
     }
+
+    @Test
+    void getClientAddress_usesFirstForwardedForHop() {
+        HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
+        when(request.getRemoteAddr()).thenReturn("192.168.1.1");
+        when(request.getHeader("X-Forwarded-For")).thenReturn(" 10.20.30.40 , 70.41.3.18");
+
+        assertEquals("10.20.30.40", new RequestUtils(request, List.of()).getClientAddress());
+    }
+
+    @Test
+    void getClientAddress_fallsBackToConnectionPeer() {
+        HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
+        when(request.getRemoteAddr()).thenReturn("192.168.1.1");
+
+        assertEquals("192.168.1.1", new RequestUtils(request, List.of()).getClientAddress());
+    }
 }
