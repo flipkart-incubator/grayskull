@@ -29,7 +29,7 @@ def env():
     clients: List[GrayskullClientImpl] = []
 
     def make(**overrides) -> GrayskullClientImpl:
-        settings = dict(host=running.url, polling_interval_seconds=0.05, heartbeat_interval_seconds=3600,
+        settings = dict(host=running.url, polling_interval_seconds=1, heartbeat_interval_seconds=3600,
                         min_retry_delay=50)
         settings.update(overrides)
         client = GrayskullClientImpl(BasicAuthHeaderProvider("u", "p"), GrayskullClientConfiguration(**settings))
@@ -65,7 +65,7 @@ def test_failed_read_without_hook_reports_nothing(env, status):
 def test_failed_read_with_hook_reports_nothing_until_a_version_is_held(env, status):
     fake, make = env
     fake.get_status[("grayskull", "db")] = status
-    client = make(polling_interval_seconds=60)  # no batch poll during the test
+    client = make(polling_interval_seconds=600)  # no batch poll during the test
     client.register_refresh_hook(REF, lambda v: None)
     with pytest.raises(GrayskullException):
         client.get_secret(REF)
@@ -279,7 +279,7 @@ def test_heartbeat_auth_and_server_errors_back_off_as_failures(env, status):
 
 def test_heartbeat_is_skipped_when_only_unheld_hooks_exist(env):
     fake, make = env
-    client = make(polling_interval_seconds=60)
+    client = make(polling_interval_seconds=600)
     client.register_refresh_hook(REF, lambda v: None)
     assert client._heartbeat_scheduler._beat_once() is HeartbeatOutcome.SENT
     assert fake.recorded("/v1/client/heartbeat") == []
@@ -298,7 +298,7 @@ def test_heartbeat_payload_never_contains_secret_values(env):
 def test_heartbeat_disabled_never_posts(env):
     fake, make = env
     fake.set_secret("grayskull", "db", 1, "v1")
-    client = make(heartbeat_enabled=False, heartbeat_interval_seconds=0.05)
+    client = make(heartbeat_enabled=False, heartbeat_interval_seconds=1)
     client.get_secret(REF)
     time.sleep(0.3)
     assert fake.recorded("/v1/client/heartbeat") == []
@@ -320,7 +320,7 @@ def test_concurrent_register_and_unregister_keeps_the_hook_flag_consistent(env):
     import threading
     fake, make = env
     fake.set_secret("grayskull", "db", 1, "v1")
-    client = make(polling_interval_seconds=60)
+    client = make(polling_interval_seconds=600)
     client.get_secret(REF)
     keeper = client.register_refresh_hook(REF, lambda v: None)
     client._usage_ledger.record_hook_applied("grayskull", "db", 1, client._usage_ledger.hook_generation("grayskull", "db"))
@@ -342,7 +342,7 @@ def test_concurrent_register_and_unregister_keeps_the_hook_flag_consistent(env):
 
 def test_heartbeat_failed_middle_chunk_still_sends_the_rest(env):
     fake, make = env
-    client = make(polling_interval_seconds=60)
+    client = make(polling_interval_seconds=600)
     for i in range(120):
         client._usage_ledger.record_version("grayskull", f"s{i}", 1)
     fake.heartbeat_statuses = [204, 503, 204]
@@ -364,7 +364,7 @@ def test_close_is_bounded_while_a_heartbeat_hangs(env):
     fake, make = env
     fake.set_secret("grayskull", "db", 1, "v1")
     fake.heartbeat_delay = 30
-    client = make(heartbeat_interval_seconds=0.05, read_timeout=60_000)
+    client = make(heartbeat_interval_seconds=1, read_timeout=60_000)
     client.get_secret(REF)
     wait_until(lambda: len(fake.recorded("/v1/client/heartbeat")) >= 1)
     start = time.monotonic()

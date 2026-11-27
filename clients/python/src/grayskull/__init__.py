@@ -10,6 +10,7 @@ from .client_impl.auth.basic_auth_header_provider import BasicAuthHeaderProvider
 from .client_impl.auth.grayskull_auth_header_provider import GrayskullAuthHeaderProvider
 from .client_impl.grayskull_client_impl import GrayskullClientImpl
 from .client_impl.metrics.metrics_recorder import MetricsRecorder, NoopMetricsRecorder
+from .client_impl.metrics.prometheus_metrics_recorder import PrometheusMetricsRecorder
 from .client_impl.models.exceptions.grayskull_exception import GrayskullException
 from .client_impl.models.grayskull_client_configuration import GrayskullClientConfiguration
 from .client_impl.workload.default_workload_identity_resolver import DefaultWorkloadIdentityResolver
@@ -26,6 +27,7 @@ __all__ = [
     "GrayskullHeaders",
     "MetricsRecorder",
     "NoopMetricsRecorder",
+    "PrometheusMetricsRecorder",
     "RefreshHandlerRef",
     "SecretRefreshHook",
     "SecretValue",

@@ -19,6 +19,11 @@ class SecretState:
         self._pending_update: Optional[SecretValue] = None
         self._executing = False
 
+    def reset_after_fork(self) -> None:
+        """In a forked child: recreate the lock and release a slot held by a worker that no longer exists."""
+        self._lock = threading.Lock()
+        self._executing = False
+
     def set_pending_update(self, value: SecretValue) -> None:
         """Stage an update; a newer value replaces one not yet delivered."""
         with self._lock:

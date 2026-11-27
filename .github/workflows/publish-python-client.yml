@@ -1,0 +1,73 @@
+# Publishes the Grayskull Python Client SDK to PyPI.
+# Uses PyPI trusted publishing (OIDC), so no API token is stored in the repository. Before the first run,
+# add this repository and workflow as a trusted publisher for the grayskull-client project on PyPI,
+# and create a "pypi" environment in the repository settings (optionally with required reviewers).
+
+name: Publish Python Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (must equal clients/python/src/grayskull/version.py, e.g. 0.3.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Check the requested version matches the source
+        working-directory: clients/python
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          SOURCE=$(python -c "import re; print(re.search(r'__version__ = \"(.+)\"', open('src/grayskull/version.py').read()).group(1))")
+          if [ "$REQUESTED" != "$SOURCE" ]; then
+            echo "Requested version $REQUESTED does not match version.py ($SOURCE)"
+            exit 1
+          fi
+
+      - name: Run tests
+        working-directory: clients/python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[test]'
+          pytest
+
+      - name: Build wheel and sdist
+        working-directory: clients/python
+        run: |
+          pip install build twine
+          python -m build
+          twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: python-client-dist
+          path: clients/python/dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-client-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

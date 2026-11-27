@@ -23,6 +23,10 @@ class UsageLedger:
         self._lock = threading.Lock()
         self._entries: Dict[Tuple[str, str], _Entry] = {}
 
+    def reset_after_fork(self) -> None:
+        """In a forked child: recreate the lock, which a parent thread may have held at fork time."""
+        self._lock = threading.Lock()
+
     def record_fetch(self, project_id: str, secret_name: str, version: int) -> None:
         """Record a successful get_secret."""
         self.record_version(project_id, secret_name, version)

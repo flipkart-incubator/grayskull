@@ -19,13 +19,17 @@ class RetryUtil:
         self._initial_delay_seconds = initial_delay_ms / 1000.0
 
     def retry(self, task: Callable[[], T]) -> Tuple[T, int]:
-        """Return the task result and the number of attempts; re-raises the last RetryableException."""
+        """Return the task result and the number of attempts.
+
+        When every attempt fails, re-raises the last RetryableException with its attempts attribute set.
+        """
         attempt = 1
         while True:
             try:
                 return task(), attempt
-            except RetryableException:
+            except RetryableException as exc:
                 if attempt >= self._max_attempts:
+                    exc.attempts = attempt
                     raise
                 delay = min(self._initial_delay_seconds * (2 ** (attempt - 1)), _MAX_BACKOFF_SECONDS)
                 time.sleep(delay * (1 + random.uniform(0, _BACKOFF_JITTER)))

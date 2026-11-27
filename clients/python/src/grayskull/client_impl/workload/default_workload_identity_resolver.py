@@ -19,7 +19,7 @@ class DefaultWorkloadIdentityResolver(WorkloadIdentityResolver):
             hostname = hostname_supplier()
             if hostname and hostname.strip():
                 identity = hostname
-        except OSError:
+        except Exception:  # any supplier failure falls back to UNKNOWN, as in Java
             _log.warning("Could not resolve local hostname for the workload identity", exc_info=True)
         self._resolved_identity = identity
 

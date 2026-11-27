@@ -14,6 +14,7 @@ class Recorded:
     path: str
     headers: Dict[str, str]
     body: Optional[Dict[str, Any]]
+    client_port: int = 0  # the client's TCP port: equal ports mean a reused keep-alive connection
 
 
 @dataclass
@@ -46,6 +47,8 @@ class FakeGrayskullServer:
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"  # keep-alive, like the real server
+
             def log_message(self, format: str, *args: Any) -> None:  # silence the default stderr log
                 return
 
@@ -65,7 +68,8 @@ class FakeGrayskullServer:
 
             def _record(self, body: Optional[Dict[str, Any]]) -> None:
                 with fake._lock:
-                    fake.requests.append(Recorded(self.command, self.path, dict(self.headers), body))
+                    fake.requests.append(
+                        Recorded(self.command, self.path, dict(self.headers), body, self.client_address[1]))
 
             def do_GET(self) -> None:  # noqa: N802
                 self._record(None)

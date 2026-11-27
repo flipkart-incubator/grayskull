@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grayskull-client"
-version = "0.3.0"
+dynamic = ["version"]
 description = "Python client SDK for Grayskull secrets: reads, refresh hooks and heartbeats"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,12 @@ license = { text = "Apache-2.0" }
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+prometheus = ["prometheus_client>=0.17"]
+test = ["pytest>=8", "prometheus_client>=0.17"]
+it = ["pytest>=8", "testcontainers>=4.8"]
+
+[tool.setuptools.dynamic]
+version = { attr = "grayskull.version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

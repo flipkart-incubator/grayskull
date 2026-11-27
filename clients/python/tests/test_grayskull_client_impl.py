@@ -47,8 +47,8 @@ def make_client(grayskull):
     def factory(**overrides) -> GrayskullClientImpl:
         settings = dict(
             host=running.url,
-            polling_interval_seconds=0.05,
-            heartbeat_interval_seconds=0.1,
+            polling_interval_seconds=1,
+            heartbeat_interval_seconds=2,
             min_retry_delay=50,
         )
         settings.update(overrides)

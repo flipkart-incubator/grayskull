@@ -5,7 +5,8 @@ import pytest
 
 from grayskull import BasicAuthHeaderProvider, GrayskullClientConfiguration, NoopMetricsRecorder
 from grayskull.client_impl.grayskull_http_client import GrayskullHttpClient
-from grayskull.client_impl.heartbeat_scheduler import MAX_BATCH_SECRETS, HeartbeatOutcome, HeartbeatScheduler
+from grayskull.client_impl.heartbeat_scheduler import (MAX_BATCH_SECRETS, HeartbeatOutcome, HeartbeatScheduler,
+                                                       next_failures)
 from grayskull.client_impl.models.request.heartbeat_request import HeldSecret
 
 
@@ -62,11 +63,31 @@ def test_recovers_when_the_server_starts_supporting_heartbeats(server):
     assert scheduler._beat_once() is HeartbeatOutcome.SENT
 
 
-def test_next_delay_is_the_interval_after_success_and_backs_off_after_failures():
+def test_next_delay_is_the_interval_after_success_and_one_hour_retry_after_a_failure():
     scheduler = new_scheduler("http://x", [], interval_seconds=86400)
     assert 86400 - 3600 <= scheduler._next_delay_seconds(0) <= 86400 + 3600
-    assert 300 * 0.9 <= scheduler._next_delay_seconds(1) <= 300 * 1.1
-    assert scheduler._next_delay_seconds(50) <= 3600 * 1.1, "capped at one hour"
+    assert 3600 * 0.9 <= scheduler._next_delay_seconds(1) <= 3600 * 1.1, "one retry after about an hour"
+    assert 86400 - 3600 <= scheduler._next_delay_seconds(2) <= 86400 + 3600, "then the full interval"
+
+
+def test_retry_delay_never_exceeds_a_short_interval():
+    scheduler = new_scheduler("http://x", [], interval_seconds=600)
+    assert 540 <= scheduler._next_delay_seconds(1) <= 660
+
+
+def test_failures_alternate_between_retry_pending_and_wait_for_interval():
+    # Java/Go state machine: fail -> retry once (1); retry fails -> full interval (2); next failure -> retry again (1)
+    assert [next_failures(f) for f in (0, 1, 2)] == [1, 2, 1]
+
+
+def test_backoff_does_not_grow_with_repeated_failures():
+    scheduler = new_scheduler("http://x", [], interval_seconds=86400)
+    failures, delays = 0, []
+    for _ in range(6):
+        failures = next_failures(failures)
+        delays.append(scheduler._next_delay_seconds(failures))
+    assert all(3600 * 0.9 <= d <= 3600 * 1.1 for d in delays[0::2])
+    assert all(86400 - 3600 <= d <= 86400 + 3600 for d in delays[1::2])
 
 
 def test_body_is_the_wire_shape(server):

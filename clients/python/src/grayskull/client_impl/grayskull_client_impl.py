@@ -1,9 +1,10 @@
 """Default GrayskullClient: secret reads, refresh hooks and the client heartbeat."""
 
-import logging
+import os
 import threading
 import time
 import uuid
+import weakref
 from typing import Optional, Tuple
 from urllib.parse import quote
 
@@ -19,10 +20,26 @@ from .heartbeat_scheduler import HeartbeatScheduler
 from .hook_refresh_poller import HookRefreshPoller
 from .metrics.metrics_recorder import MetricsRecorder, NoopMetricsRecorder
 from .models.exceptions.grayskull_exception import GrayskullException
+from .metrics.prometheus_metrics_recorder import PrometheusMetricsRecorder, prometheus_available
 from .models.grayskull_client_configuration import GrayskullClientConfiguration
+from .request_context import get_logger, request_id_scope
 from .usage_ledger import UsageLedger
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
+
+
+def _default_metrics_recorder() -> MetricsRecorder:
+    if prometheus_available():
+        return PrometheusMetricsRecorder()
+    _log.info("Metrics are enabled but prometheus_client is not installed; metrics are not recorded. "
+              "Install grayskull-client[prometheus] or pass a MetricsRecorder.")
+    return NoopMetricsRecorder()
+
+
+def _after_fork_in_child(client_ref: "weakref.ref[GrayskullClientImpl]") -> None:
+    client = client_ref()
+    if client is not None:
+        client._after_fork_in_child()
 
 
 class GrayskullClientImpl(GrayskullClient):
@@ -42,8 +59,10 @@ class GrayskullClientImpl(GrayskullClient):
         configuration.add_default_header(GrayskullHeaders.WORKLOAD, configuration.workload_identity_resolver.resolve())
         configuration.add_default_header(GrayskullHeaders.USER_AGENT, f"grayskull-python/{__version__}")
         self._base_url = configuration.host
-        self._metrics_recorder = (metrics_recorder or NoopMetricsRecorder()) if configuration.metrics_enabled \
-            else NoopMetricsRecorder()
+        if not configuration.metrics_enabled:
+            self._metrics_recorder: MetricsRecorder = NoopMetricsRecorder()
+        else:
+            self._metrics_recorder = metrics_recorder or _default_metrics_recorder()
         self._http_client = GrayskullHttpClient(auth_header_provider, configuration, self._metrics_recorder)
         self._usage_ledger = UsageLedger()
         self._closed = False
@@ -61,14 +80,21 @@ class GrayskullClientImpl(GrayskullClient):
                 self._usage_ledger.snapshot, self._metrics_recorder)
             self._heartbeat_scheduler.start()
 
+        # Threads do not survive os.fork(): restart them in the child (gunicorn/celery prefork workers).
+        if hasattr(os, "register_at_fork"):
+            client_ref = weakref.ref(self)
+            os.register_at_fork(after_in_child=lambda: _after_fork_in_child(client_ref))
+
     def get_secret(self, secret_ref: str) -> SecretValue:
         """Return the current value of the secret referenced as 'projectId:secretName'."""
         project_id, secret_name = _parse_secret_ref(secret_ref)
         url = f"{self._base_url}/v1/projects/{quote(project_id, safe='')}/secrets/{quote(secret_name, safe='')}/data"
         start = time.monotonic()
         status_code = 500
+        request_id = str(uuid.uuid4())
         try:
-            http_response = self._http_client.do_get_with_retry(url, str(uuid.uuid4()))
+            with request_id_scope(request_id):
+                http_response = self._http_client.do_get_with_retry(url, request_id)
             status_code = http_response.status_code
             data = http_response.json().get("data")
             if not isinstance(data, dict):
@@ -97,7 +123,10 @@ class GrayskullClientImpl(GrayskullClient):
         return self._refresh_poller.register(project_id, secret_name, hook, seed)
 
     def close(self) -> None:
-        """Stop the heartbeat and the poller; safe to call more than once."""
+        """Stop the heartbeat, then the poller and running hooks (up to 10s each), then close connections.
+
+        Safe to call more than once.
+        """
         with self._close_lock:
             if self._closed:
                 return
@@ -106,6 +135,19 @@ class GrayskullClientImpl(GrayskullClient):
         if self._heartbeat_scheduler is not None:
             self._heartbeat_scheduler.close()
         self._refresh_poller.close()
+        self._http_client.close()
+
+    def _after_fork_in_child(self) -> None:
+        """Runs in a forked child: drop the parent's sockets and restart the background threads."""
+        self._close_lock = threading.Lock()
+        if self._closed:
+            return
+        self._http_client.reset_after_fork()
+        self._usage_ledger.reset_after_fork()
+        self._refresh_poller.restart_after_fork()
+        if self._heartbeat_scheduler is not None:
+            self._heartbeat_scheduler.restart_after_fork()
+        _log.info("Restarted Grayskull client threads in forked process %d", os.getpid())
 
 
 def _parse_secret_ref(secret_ref: str) -> Tuple[str, str]:

@@ -1,7 +1,6 @@
-"""Sends the usage-ledger snapshot to POST /v1/client/heartbeat on an interval, with backoff on failure."""
+"""Sends the usage-ledger snapshot to POST /v1/client/heartbeat on an interval; a failed beat is retried once after about an hour."""
 
 import json
-import logging
 import random
 import threading
 import time
@@ -14,13 +13,13 @@ from .metrics.metrics_recorder import MetricsRecorder
 from .models.exceptions.grayskull_exception import GrayskullException
 from .models.exceptions.retryable_exception import RetryableException
 from .models.request.heartbeat_request import HeartbeatRequest, HeldSecret
+from .request_context import get_logger, request_id_scope
 
 HEARTBEAT_PATH = "/v1/client/heartbeat"
 MAX_BATCH_SECRETS = 50
-BACKOFF_BASE_SECONDS = 5 * 60.0
-BACKOFF_CAP_SECONDS = 60 * 60.0
+RETRY_DELAY_SECONDS = 60 * 60.0
 _UNSUPPORTED_STATUS_CODES = frozenset({404, 405, 501})
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 
 class HeartbeatOutcome(Enum):
@@ -29,6 +28,11 @@ class HeartbeatOutcome(Enum):
     SENT = "SENT"
     FAILED = "FAILED"
     UNSUPPORTED = "UNSUPPORTED"
+
+
+def next_failures(failures: int) -> int:
+    """1 after a failed beat (retry pending), 2 after the retry also failed (wait for the next interval)."""
+    return 2 if failures == 1 else 1
 
 
 class HeartbeatScheduler:
@@ -48,7 +52,7 @@ class HeartbeatScheduler:
         self._held_secrets = held_secrets
         self._metrics_recorder = metrics_recorder
         self._stopped = threading.Event()
-        self._scheduler = threading.Thread(target=self._run, name="grayskull-heartbeat", daemon=True)
+        self._scheduler = self._new_thread()
         self._unsupported_logged = False
 
     def start(self) -> None:
@@ -60,16 +64,30 @@ class HeartbeatScheduler:
         self._stopped.set()
         if self._scheduler.is_alive() and self._scheduler is not threading.current_thread():
             self._scheduler.join(timeout_seconds)
+            if self._scheduler.is_alive():
+                _log.warning("Heartbeat thread did not stop within %.0fs", timeout_seconds)
+
+    def restart_after_fork(self) -> None:
+        """In a forked child: the scheduler thread did not survive the fork, so start a new one."""
+        if self._stopped.is_set():
+            return
+        self._stopped = threading.Event()
+        self._scheduler = self._new_thread()
+        self._scheduler.start()
+
+    def _new_thread(self) -> threading.Thread:
+        return threading.Thread(target=self._run, name="grayskull-heartbeat", daemon=True)
 
     def _run(self) -> None:
+        stopped = self._stopped
         failures = 0
-        while not self._stopped.wait(self._next_delay_seconds(failures)):
+        while not stopped.wait(self._next_delay_seconds(failures)):
             try:
                 outcome = self._beat_once()
             except Exception:  # a broken round must not end the schedule
-                _log.exception("Heartbeat failed")
+                _log.warning("Heartbeat failed", exc_info=True)
                 outcome = HeartbeatOutcome.FAILED
-            failures = failures + 1 if outcome is HeartbeatOutcome.FAILED else 0
+            failures = next_failures(failures) if outcome is HeartbeatOutcome.FAILED else 0
 
     def _beat_once(self) -> HeartbeatOutcome:
         held = self._held_secrets()
@@ -85,31 +103,33 @@ class HeartbeatScheduler:
         return result
 
     def _send(self, chunk: List[HeldSecret]) -> HeartbeatOutcome:
-        body = json.dumps(HeartbeatRequest(chunk).to_dict()).encode("utf-8")
+        request_id = str(uuid.uuid4())
         start = time.monotonic()
         status_code = 500
-        try:
-            status_code = self._http_client.do_post(self._heartbeat_url, body, str(uuid.uuid4())).status_code
-            return HeartbeatOutcome.SENT
-        except (GrayskullException, RetryableException) as exc:
-            status_code = exc.status_code or status_code
-            if exc.status_code in _UNSUPPORTED_STATUS_CODES:
-                if not self._unsupported_logged:
-                    self._unsupported_logged = True
-                    _log.info("Grayskull server does not support client heartbeats yet (status %s); "
-                              "retrying after the full interval", exc.status_code)
-                return HeartbeatOutcome.UNSUPPORTED
-            _log.warning("Heartbeat for %d secret(s) failed (status %s); retrying with backoff",
-                         len(chunk), exc.status_code)
-            return HeartbeatOutcome.FAILED
-        finally:
-            self._metrics_recorder.record_request("heartbeat", status_code, int((time.monotonic() - start) * 1000))
+        with request_id_scope(request_id):
+            try:
+                body = json.dumps(HeartbeatRequest(chunk).to_dict()).encode("utf-8")
+                status_code = self._http_client.do_post(self._heartbeat_url, body, request_id).status_code
+                return HeartbeatOutcome.SENT
+            except Exception as exc:  # any failure only affects this chunk
+                if isinstance(exc, (GrayskullException, RetryableException)):
+                    status_code = exc.status_code
+                if status_code in _UNSUPPORTED_STATUS_CODES:
+                    if not self._unsupported_logged:
+                        self._unsupported_logged = True
+                        _log.info("Grayskull server does not support client heartbeats yet (status %s); "
+                                  "retrying after the full interval", status_code)
+                    return HeartbeatOutcome.UNSUPPORTED
+                _log.warning("Heartbeat for %d secret(s) failed (status %s); retrying once in about an hour: %s",
+                             len(chunk), status_code, exc)
+                return HeartbeatOutcome.FAILED
+            finally:
+                self._metrics_recorder.record_request(
+                    "heartbeat", status_code, int((time.monotonic() - start) * 1000))
 
     def _next_delay_seconds(self, failures: int) -> float:
-        """Interval ± 1/24 on success; 5–60 min backoff ± 10% on failure."""
-        if failures == 0:
-            delay, spread = self._interval_seconds, self._interval_seconds / 24
-        else:
-            delay = min(BACKOFF_BASE_SECONDS * (2 ** min(failures - 1, 20)), BACKOFF_CAP_SECONDS, self._interval_seconds)
-            spread = delay / 10
+        """One retry after about an hour (± 10%) following a failure; otherwise the interval ± 1/24."""
+        retry = failures == 1
+        delay = min(RETRY_DELAY_SECONDS, self._interval_seconds) if retry else self._interval_seconds
+        spread = delay / 10 if retry else delay / 24
         return max(delay + random.uniform(-spread, spread), 0.001)

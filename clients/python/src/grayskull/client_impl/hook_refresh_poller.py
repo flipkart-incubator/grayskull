@@ -1,12 +1,12 @@
 """Owns the refresh-hook registry and polls POST /v1/secrets/batch to deliver newer versions."""
 
+import contextvars
 import json
-import logging
+import queue
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..client_api.hooks.refresh_handler_ref import RefreshHandlerRef
 from ..client_api.hooks.secret_refresh_hook import SecretRefreshHook
@@ -15,14 +15,76 @@ from .grayskull_http_client import GrayskullHttpClient
 from .hooks.default_refresh_handler_ref import DefaultRefreshHandlerRef
 from .hooks.secret_state import SecretState
 from .metrics.metrics_recorder import MetricsRecorder
-from .models.exceptions.grayskull_exception import GrayskullException
 from .models.request.batch_get_secrets_request import BatchGetSecretsEntry, BatchGetSecretsRequest
 from .models.response.batch_get_secrets_response import BatchGetSecretsResponse
+from .request_context import get_logger, request_id_scope
 from .usage_ledger import UsageLedger
 
 MAX_BATCH_SECRETS = 50
 DISPATCHER_THREADS = 5
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
+
+
+class _HookDispatcher:
+    """Fixed pool of daemon threads running hook deliveries.
+
+    Not a ThreadPoolExecutor: its workers are joined at interpreter exit, so one slow hook would
+    block the process from exiting.
+    """
+
+    def __init__(self, threads: int, name_prefix: str) -> None:
+        self._thread_count = threads
+        self._name_prefix = name_prefix
+        self._shutdown = False
+        self._start_workers()
+
+    def _start_workers(self) -> None:
+        self._queue: "queue.SimpleQueue[Optional[tuple]]" = queue.SimpleQueue()
+        self._workers = [
+            threading.Thread(target=self._work, args=(self._queue,), name=f"{self._name_prefix}-{i}", daemon=True)
+            for i in range(self._thread_count)]
+        for worker in self._workers:
+            worker.start()
+
+    def submit(self, fn: Callable[..., Any], *args: Any) -> None:
+        """Queue fn(*args), run in a copy of the caller's context so log lines keep its request id."""
+        if self._shutdown:
+            raise RuntimeError("dispatcher is shut down")
+        self._queue.put((contextvars.copy_context(), fn, args))
+
+    def shutdown(self, timeout_seconds: float = 10.0) -> bool:
+        """Drop queued work, stop the workers and wait for running work; False if it is still running."""
+        self._shutdown = True
+        try:
+            while True:
+                self._queue.get_nowait()
+        except queue.Empty:
+            pass
+        for _ in self._workers:
+            self._queue.put(None)
+        deadline = time.monotonic() + timeout_seconds
+        current = threading.current_thread()
+        for worker in self._workers:
+            if worker is not current:
+                worker.join(max(0.0, deadline - time.monotonic()))
+        return not any(w.is_alive() for w in self._workers if w is not current)
+
+    def restart_after_fork(self) -> None:
+        """In a forked child: worker threads did not survive the fork, so start new ones."""
+        if not self._shutdown:
+            self._start_workers()
+
+    @staticmethod
+    def _work(work_queue: "queue.SimpleQueue[Optional[tuple]]") -> None:
+        while True:
+            item = work_queue.get()
+            if item is None:
+                return
+            context, fn, args = item
+            try:
+                context.run(fn, *args)
+            except Exception:  # never let a delivery kill the worker
+                _log.exception("Hook dispatch failed")
 
 
 class HookRefreshPoller:
@@ -45,7 +107,7 @@ class HookRefreshPoller:
         self._registry_lock = threading.Lock()
         self._stopped = threading.Event()
         self._scheduler: Optional[threading.Thread] = None
-        self._dispatcher = ThreadPoolExecutor(max_workers=DISPATCHER_THREADS, thread_name_prefix="grayskull-hook-dispatcher")
+        self._dispatcher = _HookDispatcher(DISPATCHER_THREADS, "grayskull-hook-dispatcher")
 
     def start(self) -> None:
         """Start polling; calling it again has no effect."""
@@ -68,21 +130,39 @@ class HookRefreshPoller:
         return DefaultRefreshHandlerRef(secret_ref, lambda: self._unregister(secret_ref, hook))
 
     def poll_once(self) -> None:
-        """Run one poll cycle over every secret with a hook."""
+        """Run one poll cycle over every secret with a hook; all chunks share one X-Request-Id."""
         with self._registry_lock:
             states = list(self._registry.values())
         if not states:
             return
         entries = [BatchGetSecretsEntry(s.project_id, s.secret_name, s.last_known_version) for s in states]
-        for start in range(0, len(entries), MAX_BATCH_SECRETS):
-            self._poll_chunk(entries[start:start + MAX_BATCH_SECRETS])
+        with request_id_scope(str(uuid.uuid4())) as request_id:
+            for start in range(0, len(entries), MAX_BATCH_SECRETS):
+                self._poll_chunk(entries[start:start + MAX_BATCH_SECRETS], request_id)
 
     def close(self, timeout_seconds: float = 10.0) -> None:
-        """Stop polling and dispatching; waits up to timeout_seconds for the poller thread."""
+        """Stop polling and dispatching; waits up to timeout_seconds in total for the poller and running hooks."""
+        deadline = time.monotonic() + timeout_seconds
         self._stopped.set()
-        self._dispatcher.shutdown(wait=False, cancel_futures=True)
-        if self._scheduler is not None and self._scheduler is not threading.current_thread():
-            self._scheduler.join(timeout_seconds)
+        scheduler = self._scheduler
+        if scheduler is not None and scheduler is not threading.current_thread():
+            scheduler.join(max(0.0, deadline - time.monotonic()))
+        stopped = self._dispatcher.shutdown(max(0.0, deadline - time.monotonic()))
+        if not stopped or (scheduler is not None and scheduler.is_alive()):
+            _log.warning("Refresh poller or a refresh hook did not stop within %.0fs", timeout_seconds)
+
+    def restart_after_fork(self) -> None:
+        """In a forked child: recreate locks a parent thread may have held and restart the threads."""
+        self._registry_lock = threading.Lock()
+        for state in self._registry.values():
+            state.reset_after_fork()
+        if self._stopped.is_set():
+            return
+        self._dispatcher.restart_after_fork()
+        if self._scheduler is not None:
+            self._stopped = threading.Event()
+            self._scheduler = threading.Thread(target=self._run, name="grayskull-poller", daemon=True)
+            self._scheduler.start()
 
     def _unregister(self, secret_ref: str, hook: SecretRefreshHook) -> None:
         with self._registry_lock:
@@ -94,28 +174,32 @@ class HookRefreshPoller:
             self._usage_ledger.set_hook_registered(state.project_id, state.secret_name, state.has_hooks())
 
     def _run(self) -> None:
-        while not self._stopped.wait(self._interval_seconds):
+        stopped = self._stopped
+        while not stopped.wait(self._interval_seconds):
             try:
                 self.poll_once()
             except Exception:  # keep polling; the next cycle retries
                 _log.exception("Poll cycle failed")
 
-    def _poll_chunk(self, chunk: List[BatchGetSecretsEntry]) -> None:
-        body = json.dumps(BatchGetSecretsRequest(chunk).to_dict()).encode("utf-8")
+    def _poll_chunk(self, chunk: List[BatchGetSecretsEntry], request_id: str) -> None:
         start = time.monotonic()
         status_code = 500
         try:
-            http_response = self._http_client.do_post_with_retry(self._batch_url, body, str(uuid.uuid4()))
+            body = json.dumps(BatchGetSecretsRequest(chunk).to_dict()).encode("utf-8")
+            http_response = self._http_client.do_post_with_retry(self._batch_url, body, request_id)
             status_code = http_response.status_code
             response = BatchGetSecretsResponse.from_response(http_response.json())
-        except GrayskullException as exc:
-            status_code = exc.status_code or status_code
-            _log.warning("Batch refresh failed for %d secret(s) (status %s): %s", len(chunk), exc.status_code, exc)
+        except Exception as exc:  # a failed chunk must not stop the rest of the cycle
+            status_code = getattr(exc, "status_code", 0) or status_code
+            _log.warning("Batch refresh failed for %d secret(s) (status %s): %r", len(chunk), status_code, exc)
             return
         finally:
             self._metrics_recorder.record_request("batchGetSecrets", status_code, int((time.monotonic() - start) * 1000))
         for updated in response.updated_secrets:
-            self._handle_updated_secret(updated.project_id, updated.secret_name, updated.value)
+            try:
+                self._handle_updated_secret(updated.project_id, updated.secret_name, updated.value)
+            except Exception:  # one bad entry must not drop the others
+                _log.exception("Could not stage the update for %s:%s", updated.project_id, updated.secret_name)
 
     def _handle_updated_secret(self, project_id: str, secret_name: str, value: SecretValue) -> None:
         with self._registry_lock:
