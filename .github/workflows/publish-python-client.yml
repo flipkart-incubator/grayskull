@@ -2,6 +2,8 @@
 # Uses PyPI trusted publishing (OIDC), so no API token is stored in the repository. Before the first run,
 # add this repository and workflow as a trusted publisher for the grayskull-client project on PyPI,
 # and create a "pypi" environment in the repository settings (optionally with required reviewers).
+# After the upload, the release job tags the built commit as clients/python/v<version> and creates a
+# GitHub Release, like the Go client's clients/go/<module>/v<version> tags.
 
 name: Publish Python Client
 
@@ -21,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # tags are needed for the check below
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,6 +39,15 @@ jobs:
           SOURCE=$(python -c "import re; print(re.search(r'__version__ = \"(.+)\"', open('src/grayskull/version.py').read()).group(1))")
           if [ "$REQUESTED" != "$SOURCE" ]; then
             echo "Requested version $REQUESTED does not match version.py ($SOURCE)"
+            exit 1
+          fi
+
+      - name: Check the release tag does not exist yet
+        env:
+          TAG: clients/python/v${{ inputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists; bump version.py before releasing again"
             exit 1
           fi
 
@@ -71,3 +84,50 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # create the tag and the GitHub Release
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-client-dist
+          path: dist/
+
+      - name: Tag the released commit and create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          TAG="clients/python/v$VERSION"
+          PRERELEASE=""
+          # PEP 440 pre-releases and dev builds, e.g. 0.3.0rc1, 0.4.0b2, 0.4.0.dev1
+          if [[ "$VERSION" =~ (a|b|rc|\.dev)[0-9]+$ ]]; then
+            PRERELEASE="--prerelease"
+          fi
+          cat > notes.md <<NOTES
+          ## Grayskull Python Client $VERSION
+
+          ### Installation
+
+          \`\`\`bash
+          pip install grayskull-client==$VERSION
+          \`\`\`
+
+          With Prometheus metrics:
+
+          \`\`\`bash
+          pip install 'grayskull-client[prometheus]==$VERSION'
+          \`\`\`
+
+          PyPI: https://pypi.org/project/grayskull-client/$VERSION/
+          NOTES
+          # --target creates the tag on the exact commit that was built and published
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Python Client $VERSION" \
+            --notes-file notes.md \
+            $PRERELEASE
