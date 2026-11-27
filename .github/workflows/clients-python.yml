@@ -1,0 +1,174 @@
+# Builds and tests the Grayskull Python Client SDK
+
+name: Python Client
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'clients/python/**'
+      - 'clients/testdata/**'
+      # the integration job runs the client against the real server, so server changes can break it
+      - 'server/**'
+      - 'spi/**'
+      - 'simple-app/**'
+      - '.github/workflows/clients-python.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'clients/python/**'
+      - 'clients/testdata/**'
+      # the integration job runs the client against the real server, so server changes can break it
+      - 'server/**'
+      - 'spi/**'
+      - 'simple-app/**'
+      - '.github/workflows/clients-python.yml'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.10', '3.14' ]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+        cache-dependency-path: clients/python/pyproject.toml
+
+    - name: Install client and test dependencies
+      working-directory: clients/python
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e '.[test]' pytest-cov
+
+    - name: Run Tests with Coverage
+      working-directory: clients/python
+      run: |
+        pytest --junitxml=test-report-python-${{ matrix.python-version }}.xml \
+               --cov=grayskull --cov-report=xml:coverage-python-${{ matrix.python-version }}.xml
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v5
+      with:
+        name: Python Client Test Results (${{ matrix.python-version }})
+        path: clients/python/test-report-python-${{ matrix.python-version }}.xml
+
+    - name: Publish code coverage
+      if: matrix.python-version == '3.14'
+      uses: codecov/codecov-action@v5
+      with:
+        files: clients/python/coverage-python-${{ matrix.python-version }}.xml
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: python-client
+
+  package:
+    name: Build and install wheel and sdist
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.10', '3.14' ]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Build wheel and sdist
+      working-directory: clients/python
+      run: |
+        python -m pip install --upgrade pip build twine
+        python -m build
+        twine check --strict dist/*
+
+    - name: Install each artifact in a clean venv and smoke test it
+      working-directory: clients/python
+      run: |
+        for artifact in dist/*.whl dist/*.tar.gz; do
+          rm -rf /tmp/smoke && python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --quiet "$artifact"
+          (cd /tmp && /tmp/smoke/bin/python -c "
+        from importlib.metadata import version
+        import grayskull
+        from grayskull import GrayskullClientConfiguration, GrayskullClientImpl, BasicAuthHeaderProvider
+        assert version('grayskull-client') == grayskull.__version__, (version('grayskull-client'), grayskull.__version__)
+        client = GrayskullClientImpl(BasicAuthHeaderProvider('u', 'p'), GrayskullClientConfiguration(host='http://127.0.0.1:1'))
+        client.close()
+        print('$artifact OK', grayskull.__version__)
+        ")
+        done
+
+  integration:
+    name: Integration tests against the real server
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.10', '3.14' ]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v5
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Build the server jar
+      run: mvn -B -pl simple-app -am package -DskipTests
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+        cache-dependency-path: clients/python/pyproject.toml
+
+    - name: Install client and integration test dependencies
+      working-directory: clients/python
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e '.[it]'
+
+    - name: Run integration tests (MongoDB and the server run in Testcontainers)
+      working-directory: clients/python
+      env:
+        GRAYSKULL_IT_REQUIRED: '1'
+      run: pytest it --junitxml=it-report-python-${{ matrix.python-version }}.xml
+
+    - name: Upload integration test results
+      if: always()
+      uses: actions/upload-artifact@v5
+      with:
+        name: Python Client Integration Results (${{ matrix.python-version }})
+        path: clients/python/it-report-python-${{ matrix.python-version }}.xml
+
+  event_file:
+    name: "Event File"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload
+        uses: actions/upload-artifact@v5
+        with:
+          name: Event File
+          path: ${{ github.event_path }}
