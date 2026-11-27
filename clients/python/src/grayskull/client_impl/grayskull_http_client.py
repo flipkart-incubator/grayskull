@@ -256,6 +256,10 @@ class GrayskullHttpClient:
         body = b"".join(chunks)
         if response.length:  # read1() returns b"" instead of raising when the peer closes early
             raise http.client.IncompleteRead(body, response.length)
+        # Before Python 3.12, read1() does not mark the response finished when the body is complete, and the
+        # connection then refuses its next request with ResponseNotReady. Closing the response releases it
+        # for reuse; the socket itself stays open.
+        response.close()
         return body
 
     def _build_headers(self, request_id: str, has_body: bool) -> Dict[str, str]:
